@@ -77,77 +77,75 @@ catkin_package(CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_
 # include_directories(include)
 include_directories(include SYSTEM ${catkin_INCLUDE_DIRS} ${Eigen_INCLUDE_DIRS})
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} -Wall -Wextra -Wconversion")
+set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -Wall -Wextra -Wconversion")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINKER_FLAGS}")
 
-add_executable(nomdp_contact_planning_node_debug
-            include/${PROJECT_NAME}/simple_pid_controller.hpp
-            include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-            include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-            src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-            src/nomdp_contact_planning_node.cpp)
+set(NOMDP_CORE_SOURCES
+    include/${PROJECT_NAME}/nomdp_planner_state.hpp
+    include/${PROJECT_NAME}/simple_pid_controller.hpp
+    include/${PROJECT_NAME}/simple_uncertainty_models.hpp
+    include/${PROJECT_NAME}/simple_particle_contact_simulator.hpp
+    include/${PROJECT_NAME}/nomdp_contact_planning.hpp
+    include/${PROJECT_NAME}/execution_policy.hpp
+    include/${PROJECT_NAME}/eigenvector3d_robot_helpers.hpp
+    include/${PROJECT_NAME}/eigenvectorxd_robot_helpers.hpp
+    include/${PROJECT_NAME}/simple6dof_robot_helpers.hpp
+    include/${PROJECT_NAME}/simplese2_robot_helpers.hpp)
+
+set(NOMDP_SOURCES ${NOMDP_CORE_SOURCES} src/nomdp_contact_planning_node.cpp)
+
+add_executable(se2_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+add_dependencies(se2_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(se2_simulator_test_node ${catkin_LIBRARIES} rt)
+set_target_properties(se2_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_SE2")
+
+add_executable(r3_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+add_dependencies(r3_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(r3_simulator_test_node ${catkin_LIBRARIES} rt)
+set_target_properties(r3_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_R3")
+
+add_executable(sixdof_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+add_dependencies(sixdof_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(sixdof_simulator_test_node ${catkin_LIBRARIES} rt)
+set_target_properties(sixdof_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_6DOF")
+
+add_executable(nomdp_contact_planning_node_no_ros_debug ${NOMDP_SOURCES})
+add_dependencies(nomdp_contact_planning_node_no_ros_debug ${catkin_EXPORTED_TARGETS})
+set_target_properties(nomdp_contact_planning_node_no_ros_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DDISABLE_ROS_INTERFACE -DFORCE_DEBUG")
+
+add_executable(nomdp_contact_planning_node_debug ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_debug ${catkin_LIBRARIES} rt)
-set_target_properties(nomdp_contact_planning_node_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+set_target_properties(nomdp_contact_planning_node_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DFORCE_DEBUG")
 
-add_executable(nomdp_contact_planning_node_parallel_debug
-            include/${PROJECT_NAME}/simple_pid_controller.hpp
-            include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-            include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-            src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-            src/nomdp_contact_planning_node.cpp)
+add_executable(nomdp_contact_planning_node_parallel_debug ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_parallel_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_parallel_debug ${catkin_LIBRARIES} rt)
-set_target_properties(nomdp_contact_planning_node_parallel_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DENABLE_PARALLEL")
+set_target_properties(nomdp_contact_planning_node_parallel_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DFORCE_DEBUG -DENABLE_PARALLEL")
 
-add_executable(nomdp_contact_planning_node
-            include/${PROJECT_NAME}/simple_pid_controller.hpp
-            include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-            include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-            src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-            src/nomdp_contact_planning_node.cpp)
+add_executable(nomdp_contact_planning_node ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node ${catkin_LIBRARIES} rt)
 set_target_properties(nomdp_contact_planning_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 
-add_executable(nomdp_contact_planning_node_parallel
-            include/${PROJECT_NAME}/simple_pid_controller.hpp
-            include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-            include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-            src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-            src/nomdp_contact_planning_node.cpp)
+add_executable(nomdp_contact_planning_node_parallel ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_parallel_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
 set_target_properties(nomdp_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DENABLE_PARALLEL")
 
-add_executable(nomdp_contact_planning_node_no_ros
-            include/${PROJECT_NAME}/simple_pid_controller.hpp
-            include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-            include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-            src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-            src/nomdp_contact_planning_node.cpp)
+add_executable(nomdp_contact_planning_node_no_ros ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros ${catkin_EXPORTED_TARGETS})
 set_target_properties(nomdp_contact_planning_node_no_ros PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DDISABLE_ROS_INTERFACE")
 
-add_executable(nomdp_contact_planning_node_no_ros_parallel
-            include/${PROJECT_NAME}/simple_pid_controller.hpp
-            include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-            include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-            src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-            src/nomdp_contact_planning_node.cpp)
+add_executable(nomdp_contact_planning_node_no_ros_parallel ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
 set_target_properties(nomdp_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DENABLE_PARALLEL -DDISABLE_ROS_INTERFACE")
 
 if(BUILD_XEON_PHI_NATIVE)
     message(STATUS "Building executable for Xeon Phi (Native mode)")
-    add_executable(nomdp_contact_planning_node_mic
-                include/${PROJECT_NAME}/simple_pid_controller.hpp
-                include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-                include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-                src/${PROJECT_NAME}/nomdp_contact_planning.cpp
-                src/nomdp_contact_planning_node.cpp)
+    add_executable(nomdp_contact_planning_node_mic ${NOMDP_SOURCES})
     add_dependencies(nomdp_contact_planning_node_mic ${catkin_EXPORTED_TARGETS})
     set_target_properties(nomdp_contact_planning_node_mic PROPERTIES COMPILE_FLAGS "-I/usr/include -I/usr/include/x86_64-linux-gnu -mmic -openmp -std=c++0x ${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -DENABLE_PARALLEL -DDISABLE_ROS_INTERFACE")
 else()

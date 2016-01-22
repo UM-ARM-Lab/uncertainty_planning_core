@@ -8,7 +8,8 @@
 #include <functional>
 #include <chrono>
 #include <random>
-#include "arc_utilities/eigen_helpers.hpp"
+#include <arc_utilities/arc_helpers.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 #include "nomdp_planning/simple_pid_controller.hpp"
 
 #ifndef SIMPLE_UNCERTAINTY_MODELS_HPP
@@ -21,20 +22,21 @@ namespace simple_uncertainty_models
     protected:
 
         bool initialized_;
-        mutable std::uniform_real_distribution<double> noise_distribution_;
+        mutable arc_helpers::TruncatedNormalDistribution noise_distribution_;
 
     public:
 
-        SimpleUncertainSensor(const double noise_lower_bound, const double noise_upper_bound) : initialized_(true), noise_distribution_(noise_lower_bound, noise_upper_bound) {}
+        SimpleUncertainSensor(const double noise_lower_bound, const double noise_upper_bound) : initialized_(true), noise_distribution_(0.0, std::max((fabs(noise_lower_bound) * 0.5), (fabs(noise_upper_bound) * 0.5)), noise_lower_bound, noise_upper_bound) {}
 
-        SimpleUncertainSensor() : initialized_(false), noise_distribution_(0.0, 0.0) {}
+        SimpleUncertainSensor() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0) {}
 
         inline bool IsInitialized() const
         {
             return initialized_;
         }
 
-        inline double GetSensorValue(const double process_value, std::mt19937_64& rng) const
+        template<typename RNG>
+        inline double GetSensorValue(const double process_value, RNG& rng) const
         {
             double noise = noise_distribution_(rng);
             return process_value + noise;
@@ -46,21 +48,22 @@ namespace simple_uncertainty_models
     protected:
 
         bool initialized_;
-        mutable std::uniform_real_distribution<double> noise_distribution_;
+        mutable arc_helpers::TruncatedNormalDistribution noise_distribution_;
         double actuator_limit_;
 
     public:
 
-        SimpleUncertainVelocityActuator(const double noise_lower_bound, const double noise_upper_bound, const double actuator_limit) : initialized_(true), noise_distribution_(noise_lower_bound, noise_upper_bound), actuator_limit_(fabs(actuator_limit)) {}
+        SimpleUncertainVelocityActuator(const double noise_lower_bound, const double noise_upper_bound, const double actuator_limit) : initialized_(true), noise_distribution_(0.0, std::max((fabs(noise_lower_bound) * 0.5), (fabs(noise_upper_bound) * 0.5)), noise_lower_bound, noise_upper_bound), actuator_limit_(fabs(actuator_limit)) {}
 
-        SimpleUncertainVelocityActuator() : initialized_(false), noise_distribution_(0.0, 0.0), actuator_limit_(0.0) {}
+        SimpleUncertainVelocityActuator() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0), actuator_limit_(0.0) {}
 
         inline bool IsInitialized() const
         {
             return initialized_;
         }
 
-        inline double GetControlValue(const double control_input, std::mt19937_64& rng) const
+        template<typename RNG>
+        inline double GetControlValue(const double control_input, RNG& rng) const
         {
             double real_control_input = std::min(actuator_limit_, control_input);
             real_control_input = std::max(-actuator_limit_, real_control_input);
@@ -118,12 +121,25 @@ namespace simple_uncertainty_models
             return position_;
         }
 
+        template<typename RNG>
+        inline Eigen::Vector3d GetSensedPosition(RNG& rng) const
+        {
+            // Get the real position
+            const Eigen::Vector3d current = GetPosition();
+            // Sense the current believed position
+            const double sensed_x = x_axis_sensor_.GetSensorValue(current.x(), rng);
+            const double sensed_y = y_axis_sensor_.GetSensorValue(current.y(), rng);
+            const double sensed_z = z_axis_sensor_.GetSensorValue(current.z(), rng);
+            return Eigen::Vector3d(sensed_x, sensed_y, sensed_z);
+        }
+
         inline void SetPosition(const Eigen::Vector3d& position)
         {
             position_ = position;
         }
 
-        inline std::pair<Eigen::Vector3d, bool> MoveTowardsTarget(const Eigen::Vector3d& target, const double step_size, std::function<std::pair<Eigen::Vector3d, bool>(const Eigen::Vector3d&, const Eigen::Vector3d&)>& forward_simulation_fn, std::mt19937_64& rng)
+        template<typename RNG>
+        inline std::pair<Eigen::Vector3d, bool> MoveTowardsTarget(const Eigen::Vector3d& target, const double step_size, std::function<std::pair<Eigen::Vector3d, bool>(const Eigen::Vector3d&, const Eigen::Vector3d&)>& forward_simulation_fn, RNG& rng)
         {
             Eigen::Vector3d start = GetPosition();
             double total_distance = (target - start).norm();

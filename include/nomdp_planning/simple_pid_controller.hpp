@@ -49,6 +49,12 @@ namespace simple_pid_controller
             return initialized_;
         }
 
+        inline void Zero()
+        {
+            last_error_ = 0.0;
+            error_integral_ = 0.0;
+        }
+
         inline void Initialize(const double kp, const double ki, const double kd, const double integral_clamp)
         {
             kp_ = fabs(kp);
@@ -64,6 +70,11 @@ namespace simple_pid_controller
         {
             // Get the current error
             double current_error = target_value - process_value;
+            return ComputeFeedbackTerm(current_error, timestep);
+        }
+
+        inline double ComputeFeedbackTerm(const double current_error, const double timestep)
+        {
             // Update the integral error
             error_integral_ += (((current_error * 0.5) + (last_error_ * 0.5)) * timestep);
             error_integral_ = std::min(integral_clamp_, error_integral_);
@@ -77,7 +88,6 @@ namespace simple_pid_controller
             return correction;
         }
     };
-
 }
 
 #endif // SIMPLE_PID_CONTROLLER_HPP
