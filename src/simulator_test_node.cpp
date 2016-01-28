@@ -105,8 +105,8 @@ int main(int argc, char** argv)
     ROS_INFO("Starting Simulator Test Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     // Get environment and robot types
-    int32_t env_code = 0;
-    int32_t robot_code = 0;
+    int32_t env_code = 5; //0;
+    int32_t robot_code = 4; //0;
     if (argc >= 2)
     {
         env_code = (int32_t)atoi(argv[1]);

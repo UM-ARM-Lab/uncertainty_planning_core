@@ -9,6 +9,7 @@
 #include <chrono>
 #include <random>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/voxel_grid.hpp>
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <nomdp_planning/simple_pid_controller.hpp>
@@ -56,8 +57,6 @@ namespace nomdp_planning_tools
         OBSTACLE_CONFIG() : object_id(0u), r(0u), g(0u), b(0u), a(0u), pose(Eigen::Affine3d::Identity()), extents(0.0, 0.0, 0.0) {}
     };
 
-
-
     template<typename Configuration, typename ConfigAlloc=std::allocator<Configuration>>
     struct ForwardSimulationContactResolverStepTrace
     {
@@ -67,6 +66,8 @@ namespace nomdp_planning_tools
     template<typename Configuration, typename ConfigAlloc=std::allocator<Configuration>>
     struct ForwardSimulationResolverTrace
     {
+        Eigen::VectorXd control_input;
+        Eigen::VectorXd control_input_step;
         std::vector<ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>> contact_resolver_steps;
     };
 
@@ -76,36 +77,241 @@ namespace nomdp_planning_tools
         std::vector<ForwardSimulationResolverTrace<Configuration, ConfigAlloc>> resolver_steps;
     };
 
+    class SurfaceNormalGrid
+    {
+    protected:
+
+        struct StoredSurfaceNormal
+        {
+            Eigen::Vector3d normal;
+            Eigen::Vector3d entry_direction;
+
+            StoredSurfaceNormal(const Eigen::Vector3d& in_normal, const Eigen::Vector3d& in_direction) : normal(EigenHelpers::SafeNorm(in_normal)), entry_direction(EigenHelpers::SafeNorm(in_direction)) {}
+
+            StoredSurfaceNormal() : normal(Eigen::Vector3d(0.0, 0.0, 0.0)), entry_direction(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
+        };
+
+        bool initialized_;
+        VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>> surface_normal_grid_;
+
+        static Eigen::Vector3d GetBestSurfaceNormal(const std::vector<StoredSurfaceNormal>& stored_surface_normals, const Eigen::Vector3d& direction)
+        {
+            assert(stored_surface_normals.size() > 0);
+            const double direction_norm = direction.norm();
+            assert(direction_norm > 0.0);
+            const Eigen::Vector3d unit_direction = direction / direction_norm;
+            int32_t best_stored_index = -1;
+            double best_dot_product = -INFINITY;
+            for (size_t idx = 0; idx < stored_surface_normals.size(); idx++)
+            {
+                const StoredSurfaceNormal& stored_surface_normal = stored_surface_normals[idx];
+                const double dot_product = stored_surface_normal.entry_direction.dot(unit_direction);
+                if (dot_product > best_dot_product)
+                {
+                    best_dot_product = dot_product;
+                    best_stored_index = (int32_t)idx;
+                }
+            }
+            assert(best_stored_index >= 0);
+            const Eigen::Vector3d& best_surface_normal = stored_surface_normals[best_stored_index].normal;
+            return best_surface_normal;
+        }
+
+    public:
+
+        SurfaceNormalGrid(const Eigen::Affine3d& origin_transform, const double resolution, const double x_size, const double y_size, const double z_size)
+        {
+            surface_normal_grid_ = VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>>(origin_transform, resolution, x_size, y_size, z_size, std::vector<StoredSurfaceNormal>());
+            initialized_ = true;
+        }
+
+        SurfaceNormalGrid() : initialized_(false) {}
+
+        bool IsInitialized() const
+        {
+            return initialized_;
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const double x, const double y, const double z, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const Eigen::Vector3d location(x, y, z);
+            return LookupSurfaceNormal(location, direction);
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex(location);
+            if (indices.size() == 3)
+            {
+                return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            return LookupSurfaceNormal(index.x, index.y, index.z, direction);
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const std::pair<const std::vector<StoredSurfaceNormal>&, bool> lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
+            if (lookup.second)
+            {
+                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.first;
+                if (stored_surface_normals.size() == 0)
+                {
+                    return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), true);
+                }
+                else
+                {
+                    // We get the "best" match surface normal given our entry direction
+                    return std::pair<Eigen::Vector3d, bool>(GetBestSurfaceNormal(stored_surface_normals, direction), true);
+                }
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline bool InsertSurfaceNormal(const double x, const double y, const double z, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            const Eigen::Vector3d location(x, y, z);
+            return InsertSurfaceNormal(location, surface_normal, entry_direction);
+        }
+
+        inline bool InsertSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex(location);
+            if (indices.size() == 3)
+            {
+                return InsertSurfaceNormal(indices[0], indices[1], indices[2], surface_normal, entry_direction);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline bool InsertSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            return InsertSurfaceNormal(index.x, index.y, index.z, surface_normal, entry_direction);
+        }
+
+        inline bool InsertSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            std::pair<std::vector<StoredSurfaceNormal>&, bool> cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
+            if (cell_query.second)
+            {
+                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.first;
+                cell_normals.push_back(StoredSurfaceNormal(surface_normal, entry_direction));
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline bool ClearStoredSurfaceNormals(const double x, const double y, const double z)
+        {
+            assert(initialized_);
+            const Eigen::Vector3d location(x, y, z);
+            return ClearStoredSurfaceNormals(location);
+        }
+
+        inline bool ClearStoredSurfaceNormals(const Eigen::Vector3d& location)
+        {
+            assert(initialized_);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex(location);
+            if (indices.size() == 3)
+            {
+                return ClearStoredSurfaceNormals(indices[0], indices[1], indices[2]);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline bool ClearStoredSurfaceNormals(const VoxelGrid::GRID_INDEX& index)
+        {
+            assert(initialized_);
+            return ClearStoredSurfaceNormals(index.x, index.y, index.z);
+        }
+
+        inline bool ClearStoredSurfaceNormals(const int64_t x_index, const int64_t y_index, const int64_t z_index)
+        {
+            assert(initialized_);
+            std::pair<std::vector<StoredSurfaceNormal>&, bool> cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
+            if (cell_query.second)
+            {
+                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.first;
+                cell_normals.clear();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    };
+
     class SimpleParticleContactSimulator
     {
     protected:
+
+        struct RawCellSurfaceNormal
+        {
+            Eigen::Vector3d normal;
+            Eigen::Vector3d entry_direction;
+
+            RawCellSurfaceNormal(const Eigen::Vector3d& in_normal, const Eigen::Vector3d& in_direction) : normal(in_normal), entry_direction(in_direction) {}
+
+            RawCellSurfaceNormal() : normal(Eigen::Vector3d(0.0, 0.0, 0.0)), entry_direction(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
+        };
+
 
         bool initialized_;
         double contact_distance_threshold_;
         sdf_tools::TaggedObjectCollisionMapGrid environment_;
         sdf_tools::SignedDistanceField environment_sdf_;
+        SurfaceNormalGrid surface_normals_grid_;
         std::map<u_int32_t, sdf_tools::SignedDistanceField> per_object_sdfs_;
         VoxelGrid::VoxelGrid<u_int64_t> fingerprint_grid_;
 
         /* Discretize a cuboid obstacle to resolution-sized cells */
         inline std::vector<std::pair<Eigen::Vector3d, sdf_tools::TAGGED_OBJECT_COLLISION_CELL>> DiscretizeObstacle(const OBSTACLE_CONFIG& obstacle, const double resolution) const
         {
+            const double effective_resolution = resolution * 0.5;
             std::vector<std::pair<Eigen::Vector3d, sdf_tools::TAGGED_OBJECT_COLLISION_CELL>> cells;
             // Make the cell for the object
             sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, obstacle.object_id);
             // Generate all cells for the object
-            int32_t x_cells = (int32_t)(obstacle.extents.x() * 2.0 * (1.0 / resolution));
-            int32_t y_cells = (int32_t)(obstacle.extents.y() * 2.0 * (1.0 / resolution));
-            int32_t z_cells = (int32_t)(obstacle.extents.z() * 2.0 * (1.0 / resolution));
+            int32_t x_cells = (int32_t)(obstacle.extents.x() * 2.0 * (1.0 / effective_resolution));
+            int32_t y_cells = (int32_t)(obstacle.extents.y() * 2.0 * (1.0 / effective_resolution));
+            int32_t z_cells = (int32_t)(obstacle.extents.z() * 2.0 * (1.0 / effective_resolution));
             for (int32_t xidx = 0; xidx < x_cells; xidx++)
             {
                 for (int32_t yidx = 0; yidx < y_cells; yidx++)
                 {
                     for (int32_t zidx = 0; zidx < z_cells; zidx++)
                     {
-                        double x_location = -(obstacle.extents.x() - (resolution * 0.5)) + (resolution * xidx);
-                        double y_location = -(obstacle.extents.y() - (resolution * 0.5)) + (resolution * yidx);
-                        double z_location = -(obstacle.extents.z() - (resolution * 0.5)) + (resolution * zidx);
+                        double x_location = -(obstacle.extents.x() - (resolution * 0.5)) + (effective_resolution * xidx);
+                        double y_location = -(obstacle.extents.y() - (resolution * 0.5)) + (effective_resolution * yidx);
+                        double z_location = -(obstacle.extents.z() - (resolution * 0.5)) + (effective_resolution * zidx);
                         Eigen::Vector3d cell_location(x_location, y_location, z_location);
                         cells.push_back(std::pair<Eigen::Vector3d, sdf_tools::TAGGED_OBJECT_COLLISION_CELL>(cell_location, object_cell));
                     }
@@ -341,14 +547,256 @@ namespace nomdp_planning_tools
             }
         }
 
+        inline void UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Affine3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, SurfaceNormalGrid& surface_normals_grid) const
+        {
+            const Eigen::Vector3d world_location = transform * cell_location;
+            // Let's check the penetration distance. We only want to update cells that are *actually* on the surface
+            const float distance = environment_sdf.Get(world_location);
+            // If we're within one cell of the surface, we update
+            if (distance > -(environment_sdf.GetResolution() * 1.5))
+            {
+                // First, we clear any stored surface normals
+                surface_normals_grid.ClearStoredSurfaceNormals(world_location);
+                for (size_t idx = 0; idx < raw_surface_normals.size(); idx++)
+                {
+                    const RawCellSurfaceNormal& current_surface_normal = raw_surface_normals[idx];
+                    const Eigen::Vector3d& raw_surface_normal = current_surface_normal.normal;
+                    const Eigen::Vector3d& raw_entry_direction = current_surface_normal.entry_direction;
+                    const Eigen::Vector3d real_surface_normal = (Eigen::Vector3d)(transform.rotation() * raw_surface_normal);
+                    const Eigen::Vector3d real_entry_direction = (Eigen::Vector3d)(transform.rotation() * raw_entry_direction);
+                    surface_normals_grid.InsertSurfaceNormal(world_location, real_surface_normal, real_entry_direction);
+                }
+            }
+            else
+            {
+                // Do nothing otherwise
+                ;
+            }
+        }
+
+        inline SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::vector<OBSTACLE_CONFIG>& obstacles, const double resolution, const sdf_tools::SignedDistanceField& environment_sdf) const
+        {
+            // Make the grid
+            SurfaceNormalGrid surface_normals_grid(environment_sdf.GetOriginTransform(), environment_sdf.GetResolution(), environment_sdf.GetXSize(), environment_sdf.GetYSize(), environment_sdf.GetZSize());
+            // The naive start is to fill the surface normals grid with the gradient values from the SDF
+            for (int64_t x_idx = 0; x_idx < environment_sdf.GetNumXCells(); x_idx++)
+            {
+                for (int64_t y_idx = 0; y_idx < environment_sdf.GetNumYCells(); y_idx++)
+                {
+                    for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
+                    {
+                        const float distance = environment_sdf.Get(x_idx, y_idx, z_idx);
+                        if (distance < 0.0)
+                        {
+                            const Eigen::Vector3d gradient = EigenHelpers::StdVectorDoubleToEigenVector3d(environment_sdf.GetGradient(x_idx, y_idx, z_idx, true));
+                            surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, gradient, Eigen::Vector3d(0.0, 0.0, 0.0));
+                        }
+                    }
+                }
+            }
+            // Now, as a second pass, we go through the objects and compute the true surface normal(s) for every object
+            for (size_t idx = 0; idx < obstacles.size(); idx++)
+            {
+                const OBSTACLE_CONFIG& current_obstacle = obstacles[idx];
+                const double effective_resolution = resolution * 0.5;
+                // Generate all cells for the object
+                int32_t x_cells = (int32_t)(current_obstacle.extents.x() * 2.0 * (1.0 / effective_resolution));
+                int32_t y_cells = (int32_t)(current_obstacle.extents.y() * 2.0 * (1.0 / effective_resolution));
+                int32_t z_cells = (int32_t)(current_obstacle.extents.z() * 2.0 * (1.0 / effective_resolution));
+                for (int32_t xidx = 0; xidx < x_cells; xidx++)
+                {
+                    for (int32_t yidx = 0; yidx < y_cells; yidx++)
+                    {
+                        for (int32_t zidx = 0; zidx < z_cells; zidx++)
+                        {
+                            // If we're on the edge of the obstacle
+                            if ((xidx == 0) || (yidx == 0) || (zidx == 0) || (xidx == (x_cells - 1)) || (yidx == (y_cells - 1)) || (zidx == (z_cells - 1)))
+                            {
+                                double x_location = -(current_obstacle.extents.x() - (resolution * 0.5)) + (effective_resolution * xidx);
+                                double y_location = -(current_obstacle.extents.y() - (resolution * 0.5)) + (effective_resolution * yidx);
+                                double z_location = -(current_obstacle.extents.z() - (resolution * 0.5)) + (effective_resolution * zidx);
+                                const Eigen::Vector3d local_cell_location(x_location, y_location, z_location);
+                                // Go through all 26 cases
+                                // Start with the 8 corners
+                                if ((xidx == 0) && (yidx == 0) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == 0) && (yidx == 0) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == 0) && (yidx == (y_cells - 1)) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == 0) && (yidx == (y_cells - 1)) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (yidx == 0) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (yidx == 0) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (yidx == (y_cells - 1)) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (yidx == (y_cells - 1)) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal3(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2, normal3}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                // Next, let's cover the 12 edges
+                                else if ((xidx == 0) && (yidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == 0) && (yidx == (y_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (yidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (yidx == (y_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == 0) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == 0) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((xidx == (x_cells - 1)) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((yidx == 0) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((yidx == 0) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((yidx == (y_cells - 1)) && (zidx == 0))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal2(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if ((yidx == (y_cells - 1)) && (zidx == (z_cells - 1)))
+                                {
+                                    const RawCellSurfaceNormal normal1(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    const RawCellSurfaceNormal normal2(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal1, normal2}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                // Finally, let's cover the 6 faces
+                                else if (xidx == 0)
+                                {
+                                    const RawCellSurfaceNormal normal(-Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitX());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if (xidx == (x_cells - 1))
+                                {
+                                    const RawCellSurfaceNormal normal(Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if (yidx == 0)
+                                {
+                                    const RawCellSurfaceNormal normal(-Eigen::Vector3d::UnitY(), Eigen::Vector3d::UnitY());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if (yidx == (y_cells - 1))
+                                {
+                                    const RawCellSurfaceNormal normal(Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitY());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if (zidx == 0)
+                                {
+                                    const RawCellSurfaceNormal normal(-Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                                else if (zidx == (z_cells - 1))
+                                {
+                                    const RawCellSurfaceNormal normal(Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitZ());
+                                    UpdateSurfaceNormalGridCell(std::vector<RawCellSurfaceNormal>{normal}, current_obstacle.pose, local_cell_location, environment_sdf, surface_normals_grid);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return surface_normals_grid;
+        }
 
     public:
 
         inline SimpleParticleContactSimulator(const std::vector<OBSTACLE_CONFIG>& environment_objects, const double environment_resolution)
         {
             contact_distance_threshold_ = 0.0 * environment_resolution;
+            // Build the environment
             environment_ = BuildEnvironment(environment_objects, environment_resolution);
+            // Build the SDF
             environment_sdf_ = environment_.ExtractSignedDistanceField(INFINITY, std::vector<u_int32_t>()).first;
+            // Build the surface normals map
+            surface_normals_grid_ = BuildSurfaceNormalsGrid(environment_objects, environment_resolution, environment_sdf_);
             // Update & mark connected components
             environment_.UpdateConnectedComponents();
             // Update the convex segments
@@ -529,6 +977,8 @@ namespace nomdp_planning_tools
             if (enable_tracing)
             {
                 trace.resolver_steps.emplace_back();
+                trace.resolver_steps.back().control_input = control_input;
+                trace.resolver_steps.back().control_input_step = control_input_step;
             }
             // Iterate
             for (u_int32_t micro_step = 0; micro_step < number_microsteps; micro_step++)
@@ -596,68 +1046,36 @@ namespace nomdp_planning_tools
 //                                            extended_robot_jacobians << point_jacobian;
 //                                        }
 //                                        robot_jacobians = extended_robot_jacobians;
-                                        // We check to see if the point is possibly at a corner
-                                        const std::pair<bool, bool> cell_corner_check = environment_.CheckIfCandidateCorner(environment_relative_point);
-                                        assert(cell_corner_check.second);
-                                        const bool candidate_corner_cell = cell_corner_check.first;
-                                        // Almost all point aren't on a corner
-                                        if (candidate_corner_cell == false)
-                                        {
-                                            // If we're not on a boundary, we can trust the gradient returned by the SDF
-                                            const Eigen::Vector3d point_gradient = EigenHelpers::StdVectorDoubleToEigenVector3d(environment_sdf_.GetGradient(environment_relative_point, true));
-                                            const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(point_gradient);
-                                            // Scale the gradient by penetration distance
-                                            const double penetration_distance = fabs(contact_distance_threshold_ - distance);
-                                            const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
-                                            std::cout << "Point gradient: " << scaled_gradient << std::endl;
+                                        // We query the surface normal map for the gradient to move out of contact using the particle motion
+                                        // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
+                                        // xdot = J(q, p) * qdot
+                                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
+                                        const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                                        // Query the surface normal map
+                                        const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(environment_relative_point, normed_point_motion);
+                                        assert(surface_normal_query.second);
+                                        const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
+                                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                                        // We use the penetration distance as a scale
+                                        const double penetration_distance = fabs(contact_distance_threshold_ - distance);
+                                        const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
+                                        std::cout << "Point gradient: " << scaled_gradient << std::endl;
 //                                            // Make a new, larger, matrix to store the extended gradients
 //                                            Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_gradients;
 //                                            extended_point_gradients.resize(point_gradients.rows() + 3, Eigen::NoChange);
 //                                            // Append the gradient to the vector of gradients
 //                                            extended_point_gradients << point_gradients,scaled_gradient;
 //                                            point_gradients = extended_point_gradients;
-                                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = point_jacobian_pinv * scaled_gradient;
-                                            const Eigen::VectorXd point_correction = raw_correction.col(0);
-                                            if (raw_correction_step.size() == 0)
-                                            {
-                                                raw_correction_step = point_correction;
-                                            }
-                                            else
-                                            {
-                                                raw_correction_step = raw_correction_step + point_correction;
-                                            }
+                                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = point_jacobian_pinv * scaled_gradient;
+                                        const Eigen::VectorXd point_correction = raw_correction.col(0);
+                                        if (raw_correction_step.size() == 0)
+                                        {
+                                            raw_correction_step = point_correction;
                                         }
                                         else
                                         {
-                                            // If we're on a corner, we use the direction of point motion instead
-                                            // This is a conservative choice, as it provides a *less helpful* gradient in most cases
-                                            // However, it is considerably simpler to compute than referencing a true model for surface normals,
-                                            // which would be the "correct" choice here. The effects of this are seen in much more conservative planning for R3 robots
-                                            // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
-                                            // xdot = J(q, p) * qdot
-                                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
-                                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
-                                            const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion) * -1.0;
-                                            // Scale the "gradient" by penetration distance
-                                            const double penetration_distance = fabs(contact_distance_threshold_ - distance);
-                                            const Eigen::Vector3d scaled_gradient = normed_point_motion * penetration_distance;
-                                            std::cout << "Point gradient: " << scaled_gradient << std::endl;
-//                                            // Make a new, larger, matrix to store the extended gradients
-//                                            Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_gradients;
-//                                            extended_point_gradients.resize(point_gradients.rows() + 3, Eigen::NoChange);
-//                                            // Append the gradient to the vector of gradients
-//                                            extended_point_gradients << point_gradients,scaled_gradient;
-//                                            point_gradients = extended_point_gradients;
-                                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = point_jacobian_pinv * scaled_gradient;
-                                            const Eigen::VectorXd point_correction = raw_correction.col(0);
-                                            if (raw_correction_step.size() == 0)
-                                            {
-                                                raw_correction_step = point_correction;
-                                            }
-                                            else
-                                            {
-                                                raw_correction_step = raw_correction_step + point_correction;
-                                            }
+                                            raw_correction_step = raw_correction_step + point_correction;
                                         }
                                     }
                                 }
