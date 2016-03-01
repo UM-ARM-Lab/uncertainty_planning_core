@@ -216,11 +216,11 @@ namespace simplese2_robot_helpers
 
         inline void SetConfig(const Eigen::Matrix<double, 3, 1>& new_config)
         {
-            std::cout << "Raw config to set: " << new_config << std::endl;
+            //std::cout << "Raw config to set: " << new_config << std::endl;
             config_(0) = new_config(0);
             config_(1) = new_config(1);
             config_(2) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(2));
-            std::cout << "Real config set: " << config_ << std::endl;
+            //std::cout << "Real config set: " << config_ << std::endl;
             // Update pose
             pose_ = ComputePose();
         }
@@ -245,6 +245,13 @@ namespace simplese2_robot_helpers
         inline std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> GetRawLinksPoints() const
         {
             return std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>{std::pair<std::string, EigenHelpers::VectorVector3d>("robot", link_points_)};
+        }
+
+        inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
+        {
+            UNUSED(link1_index);
+            UNUSED(link2_index);
+            return true;
         }
 
         inline void UpdatePosition(const Eigen::Matrix<double, 3, 1>& position)
@@ -340,7 +347,7 @@ namespace simplese2_robot_helpers
                 jacobian.block<3,1>(0, 1) = jacobian.block<3,1>(0, 1) + Eigen::Vector3d::UnitY();
                 // Rotatational joints
                 // Compute Z-axis joint axis
-                const Eigen::Affine3d z_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond::Identity();
+                const Eigen::Affine3d z_joint_transform = current_transform;
                 const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
                 jacobian.block<3,1>(0, 2) = jacobian.block<3,1>(0, 2) + z_joint_axis.cross(world_point - current_position);
                 return jacobian;
@@ -367,7 +374,7 @@ namespace simplese2_robot_helpers
             jacobian.block<3,1>(0, 1) = jacobian.block<3,1>(0, 1) + Eigen::Vector3d::UnitY();
             // Rotatational joints
             // Compute Z-axis joint axis
-            const Eigen::Affine3d z_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond::Identity();
+            const Eigen::Affine3d z_joint_transform = current_transform;
             const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
             jacobian.block<3,1>(0, 2) = jacobian.block<3,1>(0, 2) + z_joint_axis.cross(world_point - current_position);
             jacobian.block<3,1>(3, 2) = jacobian.block<3,1>(3, 2) + z_joint_axis;

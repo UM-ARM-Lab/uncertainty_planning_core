@@ -28,6 +28,20 @@
 #include <visualization_msgs/MarkerArray.h>
 #endif
 
+namespace std
+{
+    template <>
+    struct hash<std::pair<size_t, size_t>>
+    {
+        std::size_t operator()(const std::pair<size_t, size_t>& pair) const
+        {
+            using std::size_t;
+            using std::hash;
+            return (std::hash<size_t>()(pair.first) ^ (std::hash<size_t>()(pair.second) << 1));
+        }
+    };
+}
+
 namespace nomdp_planning_tools
 {
     struct OBSTACLE_CONFIG
@@ -901,7 +915,7 @@ namespace nomdp_planning_tools
     #endif
 
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
-        inline std::pair<Configuration, bool> ForwardSimulatePointRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const u_int32_t forward_simulation_steps, const double simulation_shortcut_distance, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing=false) const
+        inline std::pair<Configuration, bool> ForwardSimulatePointRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const u_int32_t forward_simulation_steps, const double simulation_shortcut_distance, const bool use_individual_jacobians, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing=false) const
         {
             // Configure the robot
             robot.UpdatePosition(start_position);
@@ -913,7 +927,7 @@ namespace nomdp_planning_tools
                 // Have robot compute next control input first
                 // Then, in a second funtion *not* in a callback, apply that control input
                 const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, rng);
-                std::pair<Configuration, bool> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, trace, enable_tracing);
+                std::pair<Configuration, bool> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, use_individual_jacobians, trace, enable_tracing);
                 robot.UpdatePosition(result.first);
                 // Check if we've collided with the environment
                 if (result.second)
@@ -932,7 +946,7 @@ namespace nomdp_planning_tools
         }
 
         template<typename Robot>
-        inline bool CheckCollision(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points) const
+        inline bool CheckEnvironmentCollision(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points) const
         {
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
@@ -964,8 +978,283 @@ namespace nomdp_planning_tools
             return false;
         }
 
+        template<typename Robot>
+        inline std::map<std::pair<size_t, size_t>, Eigen::Vector3d> ExtractSelfCollidingPoints(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step, const std::vector<std::pair<size_t, size_t>>& candidate_points) const
+        {
+            if (candidate_points.size() > 1)
+            {
+                // Now, we separate the points by link
+                std::map<size_t, std::vector<size_t>> point_self_collision_check_map;
+                for (size_t idx = 0; idx < candidate_points.size(); idx++)
+                {
+                    const std::pair<size_t, size_t>& point = candidate_points[idx];
+                    point_self_collision_check_map[point.first].push_back(point.second);
+                }
+                //std::cout << "Considering " << point_self_collision_check_map.size() << " separate links with self-colliding points" << std::endl;
+                // Let's see how many links we have - we only care if multiple links are involved
+                if (point_self_collision_check_map.size() >= 2)
+                {
+                    // We go through each link and compute an "input momentum" vector that reflects the contribution of the particular link to the collision
+                    // We can assume that point motion has occurred over unit time, so motion = velocity, and that each point has unit mass, so momentum = velocity.
+                    // Thus, the momentum = motion for each particle
+                    std::map<size_t, Eigen::Vector3d> link_momentum_vectors;
+                    for (auto link_itr = point_self_collision_check_map.begin(); link_itr != point_self_collision_check_map.end(); ++link_itr)
+                    {
+                        const size_t link_idx = link_itr->first;
+                        const std::string& link_name = robot_links_points[link_itr->first].first;
+                        const std::vector<size_t>& link_points = link_itr->second;
+                        Eigen::Vector3d link_momentum_vector(0.0, 0.0, 0.0);
+                        for (size_t idx = 0; idx < link_points.size(); idx++)
+                        {
+                            const size_t link_point = link_points[idx];
+                            const Eigen::Vector3d& link_relative_point = robot_links_points[link_idx].second[link_point];
+                            const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
+                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                            link_momentum_vector = link_momentum_vector + point_motion;
+                        }
+                        link_momentum_vectors[link_idx] = link_momentum_vector;
+                    }
+                    // For each link, figure out which *other* links it is colliding with
+                    std::map<size_t, std::vector<size_t>> link_collisions;
+                    for (auto fitr = point_self_collision_check_map.begin(); fitr != point_self_collision_check_map.end(); ++fitr)
+                    {
+                        for (auto sitr = point_self_collision_check_map.begin(); sitr != point_self_collision_check_map.end(); ++sitr)
+                        {
+                            if (fitr != sitr)
+                            {
+                                const size_t fitr_link = fitr->first;
+                                const size_t sitr_link = sitr->first;
+                                const bool self_collision_allowed = robot.CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
+                                if (self_collision_allowed == false)
+                                {
+                                    link_collisions[fitr_link].push_back(sitr_link);
+                                }
+                            }
+                        }
+                    }
+                    // Store the corrections we compute
+                    std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points_with_corrections;
+                    // Now, for each link, we compute a correction for each colliding point on the link
+                    for (auto link_itr = link_collisions.begin(); link_itr != link_collisions.end(); ++link_itr)
+                    {
+                        const size_t link_idx = link_itr->first;
+                        const std::vector<size_t>& colliding_links = link_itr->second;
+                        // We compute a whole-link correction
+                        // For the purposes of simulation, we assume an elastic collision - i.e. momentum must be conserved
+                        Eigen::MatrixXd contact_matrix = Eigen::MatrixXd::Zero((colliding_links.size() + 1) * 3, colliding_links.size() * 3);
+                        // For each link, fill in the contact matrix
+                        for (int64_t link = 1; link <= colliding_links.size(); link++)
+                        {
+                            int64_t collision_number = link - 1;
+                            // Our current link gets -I
+                            contact_matrix.block<3, 3>(0, (collision_number * 3)) = (Eigen::MatrixXd::Identity(3, 3) * -1.0);
+                            // The other link gets +I
+                            contact_matrix.block<3, 3>((link * 3), (collision_number * 3)) = Eigen::MatrixXd::Identity(3, 3);
+                        }
+                        // Generate the contact normal matrix
+                        Eigen::MatrixXd contact_normal_matrix = Eigen::MatrixXd::Zero(colliding_links.size() * 3, colliding_links.size());
+                        for (int64_t collision = 0; collision < colliding_links.size(); collision++)
+                        {
+                            const size_t other_link_idx = colliding_links[collision];
+                            // Compute the contact normal
+                            const Eigen::Vector3d& link_velocity = link_momentum_vectors[link_idx] / point_self_collision_check_map[link_idx].size();
+                            const Eigen::Vector3d& other_link_velocity = link_momentum_vectors[other_link_idx] / point_self_collision_check_map[other_link_idx].size();
+                            const Eigen::Vector3d current_link_position = link_velocity * -1.0;
+                            const Eigen::Vector3d current_other_link_position = other_link_velocity * -1.0;
+                            const Eigen::Vector3d contact_direction = current_other_link_position - current_link_position;
+                            const Eigen::Vector3d contact_normal = EigenHelpers::SafeNorm(contact_direction);
+                            contact_normal_matrix.block<3, 1>((collision * 3), collision) = contact_normal;
+                        }
+                        // Generate the mass matrix
+                        Eigen::MatrixXd mass_matrix = Eigen::MatrixXd::Zero((colliding_links.size() + 1) * 3, (colliding_links.size() + 1) * 3);
+                        // Add the mass of our link
+                        mass_matrix.block<3, 3>(0, 0) = Eigen::MatrixXd::Identity(3, 3) * point_self_collision_check_map[link_idx].size();
+                        // Add the mass of the other links
+                        for (int64_t link = 1; link <= colliding_links.size(); link++)
+                        {
+                            const size_t other_link_idx = colliding_links[link - 1];
+                            mass_matrix.block<3, 3>((link * 3), (link * 3)) = Eigen::MatrixXd::Identity(3, 3) * point_self_collision_check_map[other_link_idx].size();
+                        }
+                        // Generate the velocity matrix
+                        Eigen::MatrixXd velocity_matrix = Eigen::MatrixXd::Zero((colliding_links.size() + 1) * 3, 1);
+                        const Eigen::Vector3d link_velocity = link_momentum_vectors[link_idx] / point_self_collision_check_map[link_idx].size();
+                        velocity_matrix.block<3, 1>(0, 0) = link_velocity;
+                        for (int64_t link = 1; link <= colliding_links.size(); link++)
+                        {
+                            const size_t other_link_idx = colliding_links[link - 1];
+                            const Eigen::Vector3d other_link_velocity = link_momentum_vectors[other_link_idx] / point_self_collision_check_map[other_link_idx].size();
+                            velocity_matrix.block<3, 1>((link * 3), 0) = other_link_velocity;
+                        }
+                        // Compute the impulse corrections
+                        // Yes, this is ugly. This is to suppress a warning on type conversion related to Eigen operations
+                        #pragma GCC diagnostic push
+                        #pragma GCC diagnostic ignored "-Wconversion"
+                        const Eigen::MatrixXd impulses = (contact_normal_matrix.transpose() * contact_matrix.transpose() * mass_matrix.inverse() * contact_matrix * contact_normal_matrix).inverse() * contact_normal_matrix.transpose() * contact_matrix.transpose() * velocity_matrix;
+                        //std::cout << "Impulses:\n" << impulses << std::endl;
+                        // Compute the new velocities
+                        const Eigen::MatrixXd velocity_delta = (mass_matrix.inverse() * contact_matrix * contact_normal_matrix * impulses) * -1.0;
+                        //std::cout << "New velocities:\n" << velocity_delta << std::endl;
+                        #pragma GCC diagnostic pop
+                        // Extract the correction just for our current link
+                        const Eigen::Vector3d link_correction_velocity = velocity_delta.block<3, 1>(0, 0);
+                        // We then distribute that correction over the points on that link that have contributed to the collision
+                        const std::vector<size_t>& link_points = point_self_collision_check_map[link_idx];
+                        for (size_t idx = 0; idx < link_points.size(); idx++)
+                        {
+                            const size_t point_idx = link_points[idx];
+                            const std::pair<size_t, size_t> point_id(link_idx, point_idx);
+                            const Eigen::Vector3d point_correction = link_correction_velocity / (double)(link_points.size());
+                            //std::cout << "Correction (new): " << PrettyPrint::PrettyPrint(point_id) << "\n" << point_correction << std::endl;
+                            self_colliding_points_with_corrections[point_id] = point_correction;
+                        }
+                    }
+                    /* This is the old, but "working" version
+                    // Now, we go through every pair and check if self-collisions are allowed
+                    for (auto fitr = point_self_collision_check_map.begin(); fitr != point_self_collision_check_map.end(); ++fitr)
+                    {
+                        for (auto sitr = point_self_collision_check_map.begin(); sitr != point_self_collision_check_map.end(); ++sitr)
+                        {
+                            if (fitr != sitr)
+                            {
+                                const size_t fitr_link = fitr->first;
+                                const size_t sitr_link = sitr->first;
+                                const bool self_collision_allowed = robot.CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
+                                // If self-collision is not allowed, we have detected a self collision and we are done
+                                if (self_collision_allowed == false)
+                                {
+                                    //std::cout << "Processing self-collision between " << robot_links_points[fitr_link].first << " (" << fitr_link << ") and " << robot_links_points[sitr_link].first << " (" << sitr_link << ")" << std::endl;
+                                    // Add all the fitr points
+                                    for (size_t idx = 0; idx < fitr->second.size(); idx++)
+                                    {
+                                        const size_t point_idx = fitr->second[idx];
+                                        const std::pair<size_t, size_t> point_id(fitr_link, point_idx);
+                                        const std::string& link_name = robot_links_points[point_id.first].first;
+                                        const Eigen::Vector3d& link_relative_point = robot_links_points[point_id.first].second[point_id.second];
+                                        const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                                        //std::cout << "Point Jacobian:\n" << point_jacobian << std::endl;
+                                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
+                                        //std::cout << "Point motion:\n" << raw_point_motion << std::endl;
+                                        const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                                        const Eigen::Vector3d point_correction = point_motion * -1.0;
+                                        std::cout << "Correction (old): " << PrettyPrint::PrettyPrint(point_id) << "\n" << point_correction << std::endl;
+                                        //self_colliding_points_with_corrections[point_id] = point_correction;
+                                    }
+                                    // We're done with the current fitr
+                                    break;
+                                }
+                                else
+                                {
+                                    //std::cout << "Ignoring allowed self-collision between " << robot_links_points[fitr_link].first << " (" << fitr_link << ") and " << robot_links_points[sitr_link].first << " (" << sitr_link << ")" << std::endl;
+                                }
+                            }
+                        }
+                    }
+                    */
+                    return self_colliding_points_with_corrections;
+                }
+                // One link cannot be self-colliding
+                else
+                {
+                    return std::map<std::pair<size_t, size_t>, Eigen::Vector3d>();
+                }
+            }
+            // One point cannot be self-colliding
+            else
+            {
+                return std::map<std::pair<size_t, size_t>, Eigen::Vector3d>();
+            }
+        }
+
+        inline std::vector<int64_t> LocationToExtendedGridIndex(const Eigen::Vector3d& location) const
+        {
+            assert(initialized_);
+            const Eigen::Vector3d point_in_grid_frame = environment_.GetOriginTransform().inverse() * location;
+            const int64_t x_cell = (int64_t)(point_in_grid_frame.x() / environment_.GetResolution());
+            const int64_t y_cell = (int64_t)(point_in_grid_frame.y() / environment_.GetResolution());
+            const int64_t z_cell = (int64_t)(point_in_grid_frame.z() / environment_.GetResolution());
+            return std::vector<int64_t>{x_cell, y_cell, z_cell};
+        }
+
+        template<typename Robot>
+        inline std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> CollectSelfCollisions(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step) const
+        {
+            // Note that robots with only one link *cannot* self-collide!
+            if (robot_links_points.size() == 1)
+            {
+                return std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>();
+            }
+            else if (robot_links_points.size() == 2)
+            {
+                // If the robot is only two links, and self-collision between them is allowed, we can avoid checks
+                if (robot.CheckIfSelfCollisionAllowed(0, 1))
+                {
+                    return std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>();
+                }
+            }
+            // We use a hastable to detect self-collisions
+            std::unordered_map<VoxelGrid::GRID_INDEX, std::vector<std::pair<size_t, size_t>>> self_collision_check_map;
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    // Get the corresponding index
+                    const std::vector<int64_t> index = LocationToExtendedGridIndex(environment_relative_point);
+                    assert(index.size() == 3);
+                    VoxelGrid::GRID_INDEX point_index(index[0], index[1], index[2]);
+                    // Insert the index into the map
+                    self_collision_check_map[point_index].push_back(std::pair<size_t, size_t>(link_idx, point_idx));
+                }
+            }
+            // Now, we go through the map and see if any points overlap
+            // Store "true" self-collisions
+            std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> self_collisions;
+            for (auto itr = self_collision_check_map.begin(); itr != self_collision_check_map.end(); ++itr)
+            {
+                //const VoxelGrid::GRID_INDEX& location = itr->first;
+                const std::vector<std::pair<size_t, size_t>>& candidate_points = itr->second;
+                //std::cout << "Candidate points: " << PrettyPrint::PrettyPrint(candidate_points) << std::endl;
+                const std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points = ExtractSelfCollidingPoints(robot, robot_links_points, control_input_step, candidate_points);
+                //std::cout << "Extracted points: " << PrettyPrint::PrettyPrint(self_colliding_points) << std::endl;
+                for (auto spcitr = self_colliding_points.begin(); spcitr != self_colliding_points.end(); ++spcitr)
+                {
+                    const std::pair<size_t, size_t>& self_colliding_point = spcitr->first;
+                    const Eigen::Vector3d& correction = spcitr->second;
+                    self_collisions[self_colliding_point] = correction;
+                }
+            }
+            // If we haven't already returned, we are self-collision-free
+            return self_collisions;
+        }
+
+        template<typename Robot>
+        inline std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> CheckCollision(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step) const
+        {
+            const bool env_collision = CheckEnvironmentCollision(robot, robot_links_points);
+            const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> self_collisions = CollectSelfCollisions(robot, robot_links_points, control_input_step);
+            //std::cout << self_collisions.size() << " self-colliding points to resolve" << std::endl;
+            if (env_collision || (self_collisions.size() > 0))
+            {
+                return std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>>(true, self_collisions);
+            }
+            else
+            {
+                return std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>>(false, self_collisions);
+            }
+        }
+
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
-        inline std::pair<Configuration, bool> ResolveForwardSimulation(Robot& robot, const Eigen::VectorXd& control_input, RNG& rng, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
+        inline std::pair<Configuration, bool> ResolveForwardSimulation(Robot& robot, const Eigen::VectorXd& control_input, RNG& rng, const bool use_individual_jacobians, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
         {
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
@@ -987,9 +1276,13 @@ namespace nomdp_planning_tools
                 {
                     trace.resolver_steps.back().contact_resolver_steps.emplace_back();
                 }
+                // Store the previous configuration of the robot
+                Configuration previous_configuration = robot.GetPosition();
                 // Update the position of the robot
                 robot.ApplyControlInput(control_input_step, rng);
-                collided = CheckCollision(robot, robot_links_points);
+                std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, robot_links_points, control_input_step);
+                std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map = collision_check.second;
+                collided = collision_check.first;
                 if (enable_tracing)
                 {
                     trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(robot.GetPosition());
@@ -1001,110 +1294,36 @@ namespace nomdp_planning_tools
                     u_int32_t resolver_iterations = 0;
                     while (in_collision)
                     {
-                        // In case a collision has occured, we need to compute a "collision gradient" that will push the robot out of collision
-                        // The "collision gradient" is of the form qgradient = J(q)+ * xgradient
-//                        // Make space for the xgradient and Jacobian
-//                        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians;
-//                        Eigen::Matrix<double, Eigen::Dynamic, 1> point_gradients;
-                        Eigen::VectorXd raw_correction_step;
-                        // Now, go through the links and points of the robot to build up the xgradient and Jacobian
-                        for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-                        {
-                            // Grab the link name and points
-                            const std::string& link_name = robot_links_points[link_idx].first;
-                            const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
-                            // Get the transform of the current link
-                            const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
-                            // Now, go through the points of the link
-                            for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                            {
-                                const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                                // Transform the link point into the environment frame
-                                const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                                // We only work with points in the SDF
-                                if (environment_sdf_.CheckInBounds(environment_relative_point))
-                                {
-                                    const float distance = environment_sdf_.Get(environment_relative_point);
-                                    // We only work with points in collision
-                                    if (distance < contact_distance_threshold_)
-                                    {
-                                        // Get the Jacobian for the current point
-                                        const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
-                                        std::cout << "Point jacobian: " << point_jacobian << std::endl;
-                                        // Invert
-                                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> point_jacobian_pinv = EigenHelpers::Pinv(point_jacobian, EigenHelpers::SuggestedRcond());
-//                                        // Make a new, larger, matrix to store the extended jacobians
-//                                        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> extended_robot_jacobians;
-//                                        extended_robot_jacobians.resize(robot_jacobians.rows() + 3, point_jacobian.cols());
-//                                        // Append the active jacobian to the matrix of jacobians
-//                                        if (robot_jacobians.cols() > 0)
-//                                        {
-//                                            extended_robot_jacobians << robot_jacobians,point_jacobian;
-//                                        }
-//                                        else
-//                                        {
-//                                            extended_robot_jacobians << point_jacobian;
-//                                        }
-//                                        robot_jacobians = extended_robot_jacobians;
-                                        // We query the surface normal map for the gradient to move out of contact using the particle motion
-                                        // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
-                                        // xdot = J(q, p) * qdot
-                                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
-                                        const Eigen::Vector3d point_motion = raw_point_motion.col(0);
-                                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
-                                        // Query the surface normal map
-                                        const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(environment_relative_point, normed_point_motion);
-                                        assert(surface_normal_query.second);
-                                        const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
-                                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
-                                        // We use the penetration distance as a scale
-                                        const double penetration_distance = fabs(contact_distance_threshold_ - distance);
-                                        const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
-                                        std::cout << "Point gradient: " << scaled_gradient << std::endl;
-//                                            // Make a new, larger, matrix to store the extended gradients
-//                                            Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_gradients;
-//                                            extended_point_gradients.resize(point_gradients.rows() + 3, Eigen::NoChange);
-//                                            // Append the gradient to the vector of gradients
-//                                            extended_point_gradients << point_gradients,scaled_gradient;
-//                                            point_gradients = extended_point_gradients;
-                                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = point_jacobian_pinv * scaled_gradient;
-                                        const Eigen::VectorXd point_correction = raw_correction.col(0);
-                                        if (raw_correction_step.size() == 0)
-                                        {
-                                            raw_correction_step = point_correction;
-                                        }
-                                        else
-                                        {
-                                            raw_correction_step = raw_correction_step + point_correction;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-//                        // Now, we've collected the Jacobians and point gradients for everything
-//                        // Do qgrad = J(q)+ * xgrad
-//                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> jacobian_pinv = EigenHelpers::Pinv(robot_jacobians, EigenHelpers::SuggestedRcond());
-//                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_cspace_gradient = jacobian_pinv * point_gradients;
-//                        // Process it to make a correction step
-//                        // The "robot" knows how to do this
-//                        const Eigen::VectorXd raw_correction_step = raw_cspace_gradient.col(0);
-                        std::cout << "Raw Cstep: " << raw_correction_step << std::endl;
+                        const Eigen::VectorXd raw_correction_step = use_individual_jacobians ? ComputeResolverCorrectionStepIndividualJacobians(robot, robot_links_points, control_input_step, self_collision_map) : ComputeResolverCorrectionStepStackedJacobian(robot, robot_links_points, control_input_step, self_collision_map);
+                        //std::cout << "Raw Cstep: " << raw_correction_step << std::endl;
                         const Eigen::VectorXd real_correction_step = robot.ProcessCorrectionAction(raw_correction_step);
-                        std::cout << "Real Cstep: " << real_correction_step << std::endl;
+                        //std::cout << "Real Cstep: " << real_correction_step << std::endl;
                         // Apply correction step
                         robot.ApplyControlInput(real_correction_step);
                         // Check to see if we're still in collision
-                        bool still_in_collision = CheckCollision(robot, robot_links_points);
+                        const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, robot_links_points, control_input_step);
+                        // Update the self-collision map
+                        self_collision_map = new_collision_check.second;
                         // Update the collision check variable
-                        in_collision = still_in_collision;
+                        in_collision = new_collision_check.first;
                         resolver_iterations++;
-                        if (resolver_iterations > 100)
-                        {
-                            std::cerr << "Resolver iterations = " << resolver_iterations << ", is the simulator stuck?" << std::endl;
-                        }
+                        // Update tracing
                         if (enable_tracing)
                         {
                             trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(robot.GetPosition());
+                        }
+                        if (resolver_iterations > 150)
+                        {
+                            std::cerr << "Resolver iterations > 150, terminating microstep+resolver and returning previous configuration" << std::endl;
+                            if (enable_tracing)
+                            {
+                                trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(previous_configuration);
+                            }
+                            return std::pair<Configuration, bool>(previous_configuration, true);
+                        }
+                        else if (resolver_iterations > 100)
+                        {
+                            std::cerr << "Resolver iterations = " << resolver_iterations << ", is the simulator stuck?" << std::endl;
                         }
                     }
                 }
@@ -1114,6 +1333,199 @@ namespace nomdp_planning_tools
                 }
             }
             return std::pair<Configuration, bool>(robot.GetPosition(), collided);
+        }
+
+        template<typename Robot>
+        Eigen::VectorXd ComputeResolverCorrectionStepIndividualJacobians(Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map) const
+        {
+            // In case a collision has occured, we need to compute a "collision gradient" that will push the robot out of collision
+            Eigen::VectorXd raw_correction_step;
+            // Now, go through the links and points of the robot to build up the xgradient and Jacobian
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Check if we have a self-collision correction
+                    std::pair<bool, Eigen::Vector3d> self_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
+                    auto self_collision_check = self_collision_map.find(std::pair<size_t, size_t>(link_idx, point_idx));
+                    if (self_collision_check != self_collision_map.end())
+                    {
+                        self_collision_correction.first = true;
+                        self_collision_correction.second = self_collision_check->second;
+                    }
+                    // Check against the environment
+                    std::pair<bool, Eigen::Vector3d> env_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    // Get the Jacobian for the current point
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    //std::cout << "Point jacobian: " << point_jacobian << std::endl;
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    // We only work with points in the SDF
+                    if (environment_sdf_.CheckInBounds(environment_relative_point))
+                    {
+                        const float distance = environment_sdf_.Get(environment_relative_point);
+                        // We only work with points in collision
+                        if (distance < contact_distance_threshold_)
+                        {
+                            // We query the surface normal map for the gradient to move out of contact using the particle motion
+                            // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
+                            // xdot = J(q, p) * qdot
+                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
+                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                            const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                            // Query the surface normal map
+                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(environment_relative_point, normed_point_motion);
+                            assert(surface_normal_query.second);
+                            const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
+                            const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                            // We use the penetration distance as a scale
+                            const double penetration_distance = fabs(contact_distance_threshold_ - distance);
+                            const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
+                            //std::cout << "Point gradient: " << scaled_gradient << std::endl;
+                            env_collision_correction.first = true;
+                            env_collision_correction.second = scaled_gradient;
+                        }
+                    }
+                    // We only add a correction for the point if necessary
+                    if (self_collision_correction.first || env_collision_correction.first)
+                    {
+                        // Invert the point jacobian
+                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> point_jacobian_pinv = EigenHelpers::Pinv(point_jacobian, EigenHelpers::SuggestedRcond());
+                        // Assemble the workspace correction vector
+                        Eigen::Vector3d point_correction(0.0, 0.0, 0.0);
+                        if (self_collision_correction.first)
+                        {
+                            point_correction = point_correction + self_collision_correction.second;
+                        }
+                        if (env_collision_correction.first)
+                        {
+                            point_correction = point_correction + env_collision_correction.second;
+                        }
+                        // Compute the correction step
+                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = point_jacobian_pinv * point_correction;
+                        // Extract the c-space correction
+                        const Eigen::VectorXd point_correction_step = raw_correction.col(0);
+                        if (raw_correction_step.size() == 0)
+                        {
+                            raw_correction_step = point_correction_step;
+                        }
+                        else
+                        {
+                            raw_correction_step = raw_correction_step + point_correction_step;
+                        }
+                    }
+                }
+            }
+            return raw_correction_step;
+        }
+
+        template<typename Robot>
+        Eigen::VectorXd ComputeResolverCorrectionStepStackedJacobian(Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map) const
+        {
+            // In case a collision has occured, we need to compute a "collision gradient" that will push the robot out of collision
+            // The "collision gradient" is of the form qgradient = J(q)+ * xgradient
+            // Make space for the xgradient and Jacobian
+            Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians;
+            Eigen::Matrix<double, Eigen::Dynamic, 1> point_corrections;
+            // Now, go through the links and points of the robot to build up the xgradient and Jacobian
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Check if we have a self-collision correction
+                    std::pair<bool, Eigen::Vector3d> self_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
+                    auto self_collision_check = self_collision_map.find(std::pair<size_t, size_t>(link_idx, point_idx));
+                    if (self_collision_check != self_collision_map.end())
+                    {
+                        self_collision_correction.first = true;
+                        self_collision_correction.second = self_collision_check->second;
+                    }
+                    // Check against the environment
+                    std::pair<bool, Eigen::Vector3d> env_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    // Get the Jacobian for the current point
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    //std::cout << "Point jacobian: " << point_jacobian << std::endl;
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    // We only work with points in the SDF
+                    if (environment_sdf_.CheckInBounds(environment_relative_point))
+                    {
+                        const float distance = environment_sdf_.Get(environment_relative_point);
+                        // We only work with points in collision
+                        if (distance < contact_distance_threshold_)
+                        {
+                            // We query the surface normal map for the gradient to move out of contact using the particle motion
+                            // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
+                            // xdot = J(q, p) * qdot
+                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
+                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                            const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                            // Query the surface normal map
+                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(environment_relative_point, normed_point_motion);
+                            assert(surface_normal_query.second);
+                            const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
+                            const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                            // We use the penetration distance as a scale
+                            const double penetration_distance = fabs(contact_distance_threshold_ - distance);
+                            const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
+                            //std::cout << "Point gradient: " << scaled_gradient << std::endl;
+                            env_collision_correction.first = true;
+                            env_collision_correction.second = scaled_gradient;
+                        }
+                    }
+                    // We only add a correction for the point if necessary
+                    if (self_collision_correction.first || env_collision_correction.first)
+                    {
+                        // Append the new point jacobian to the matrix of jacobians
+                        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> extended_robot_jacobians;
+                        extended_robot_jacobians.resize(robot_jacobians.rows() + 3, point_jacobian.cols());
+                        if (robot_jacobians.cols() > 0)
+                        {
+                            extended_robot_jacobians << robot_jacobians,point_jacobian;
+                        }
+                        else
+                        {
+                            extended_robot_jacobians << point_jacobian;
+                        }
+                        robot_jacobians = extended_robot_jacobians;
+                        // Assemble the workspace correction vector
+                        Eigen::Vector3d point_correction(0.0, 0.0, 0.0);
+                        if (self_collision_correction.first)
+                        {
+                            point_correction = point_correction + self_collision_correction.second;
+                        }
+                        if (env_collision_correction.first)
+                        {
+                            point_correction = point_correction + env_collision_correction.second;
+                        }
+                        // Append the new workspace correction vector to the matrix of correction vectors
+                        Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_corrections;
+                        extended_point_corrections.resize(point_corrections.rows() + 3, Eigen::NoChange);
+                        extended_point_corrections << point_corrections,point_correction;
+                        point_corrections = extended_point_corrections;
+                    }
+                }
+            }
+            // Compute the correction step
+            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians_pinv = EigenHelpers::Pinv(robot_jacobians, EigenHelpers::SuggestedRcond());
+            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = robot_jacobians_pinv * point_corrections;
+            // Extract the c-space correction
+            const Eigen::VectorXd raw_correction_step = raw_correction.col(0);
+            return raw_correction_step;
         }
     };
 }

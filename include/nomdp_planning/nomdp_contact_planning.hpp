@@ -83,6 +83,7 @@ namespace nomdp_contact_planning
 
         bool allow_contacts_;
         bool resample_particles_;
+        bool simulate_with_individual_jacobians_;
         size_t num_particles_;
         double step_size_;
         double goal_distance_threshold_;
@@ -139,7 +140,7 @@ namespace nomdp_contact_planning
 
     public:
 
-        inline NomdpPlanningSpace(const bool allow_contacts, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution, const u_int32_t num_threads) : robot_(robot), sampler_(sampler)
+        inline NomdpPlanningSpace(const bool allow_contacts, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution, const u_int32_t num_threads) : robot_(robot), sampler_(sampler)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -154,6 +155,7 @@ namespace nomdp_contact_planning
                 rngs_.push_back(PRNG(seed_dist(rng_)));
             }
             allow_contacts_ = allow_contacts;
+            simulate_with_individual_jacobians_ = simulate_with_individual_jacobians;
             num_particles_ = num_particles;
             step_size_ = step_size;
             goal_distance_threshold_ = goal_distance_threshold;
@@ -176,13 +178,41 @@ namespace nomdp_contact_planning
         {
             // Draw the simulation environment
             display_pub.publish(simulator_.ExportAllForDisplay());
+            // Draw the start and goal
+            std_msgs::ColorRGBA start_color;
+            start_color.r = 1.0;
+            start_color.g = 0.5;
+            start_color.b = 0.0;
+            start_color.a = 1.0;
+            std_msgs::ColorRGBA goal_color;
+            goal_color.r = 1.0;
+            goal_color.g = 0.0;
+            goal_color.b = 1.0;
+            goal_color.a = 1.0;
+            visualization_msgs::Marker start_marker = DrawRobotConfiguration(robot_, start, start_color);
+            start_marker.ns = "start_state";
+            start_marker.id = 1;
+            visualization_msgs::Marker goal_marker = DrawRobotConfiguration(robot_, goal, goal_color);
+            goal_marker.ns = "goal_state";
+            goal_marker.id = 1;
+            visualization_msgs::MarkerArray simulator_step_display_rep;
+            simulator_step_display_rep.markers.push_back(start_marker);
+            simulator_step_display_rep.markers.push_back(goal_marker);
+            display_pub.publish(simulator_step_display_rep);
             // Wait for input
-            std::cout << "Press ENTER to continue..." << std::endl;
+            std::cout << "Press ENTER to solve..." << std::endl;
+#ifndef FORCE_DEBUG
             std::cin.get();
+#endif
             nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(start, goal);
             const u_int32_t number_of_steps = (u_int32_t)ceil(target_distance / step_size_) * 40u;
-            simulator_.ForwardSimulatePointRobot(robot_, start, goal, rng_, number_of_steps, (goal_distance_threshold_ * 0.5), trace, true);
+            simulator_.ForwardSimulatePointRobot(robot_, start, goal, rng_, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, trace, true);
+            // Wait for input
+            std::cout << "Press ENTER to draw..." << std::endl;
+#ifndef FORCE_DEBUG
+            std::cin.get();
+#endif
             // Draw the action
             std_msgs::ColorRGBA free_color;
             free_color.r = 0.0;
@@ -194,25 +224,52 @@ namespace nomdp_contact_planning
             colliding_color.g = 0.0;
             colliding_color.b = 0.0;
             colliding_color.a = 1.0;
+            std_msgs::ColorRGBA control_input_color;
+            control_input_color.r = 1.0;
+            control_input_color.g = 1.0;
+            control_input_color.b = 0.0;
+            control_input_color.a = 1.0;
+            std_msgs::ColorRGBA control_step_color;
+            control_step_color.r = 0.0;
+            control_step_color.g = 1.0;
+            control_step_color.b = 1.0;
+            control_step_color.a = 1.0;
+            // Keep track of previous position
+            Configuration previous_config = start;
             for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
             {
                 const nomdp_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
+                const Eigen::VectorXd& control_input_step = step_trace.control_input_step;
+                // Draw the control input for the entire trace segment
+                const Eigen::VectorXd& control_input = step_trace.control_input;
+                visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, previous_config, control_input, control_input_color);
+                control_step_marker.ns = "control_input_state";
+                control_step_marker.id = 1;
+                visualization_msgs::MarkerArray control_display_rep;
+                control_display_rep.markers.push_back(control_step_marker);
+                display_pub.publish(control_display_rep);
                 for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
                 {
+                    // Get the current trace segment
                     const nomdp_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
                     for (size_t contact_resolution_step_idx = 0; contact_resolution_step_idx < contact_resolution_trace.contact_resolution_steps.size(); contact_resolution_step_idx++)
                     {
                         const Configuration& current_config = contact_resolution_trace.contact_resolution_steps[contact_resolution_step_idx];
+                        previous_config = current_config;
                         const std_msgs::ColorRGBA& current_color = (contact_resolution_step_idx == (contact_resolution_trace.contact_resolution_steps.size() - 1)) ? free_color : colliding_color;
                         visualization_msgs::Marker step_marker = DrawRobotConfiguration(robot_, current_config, current_color);
                         step_marker.ns = "step_state";
                         step_marker.id = 1;
+                        visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, current_config, -control_input_step, control_step_color);
+                        control_step_marker.ns = "control_step_state";
+                        control_step_marker.id = 1;
                         visualization_msgs::MarkerArray simulator_step_display_rep;
                         simulator_step_display_rep.markers.push_back(step_marker);
+                        simulator_step_display_rep.markers.push_back(control_step_marker);
                         display_pub.publish(simulator_step_display_rep);
                         // Wait for input
-                        std::cout << "Press ENTER to continue..." << std::endl;
-                        ros::Duration(0.01).sleep();
+                        //std::cout << "Press ENTER to continue..." << std::endl;
+                        ros::Duration(0.05).sleep();
                         //std::cin.get();
                     }
                 }
@@ -769,9 +826,9 @@ namespace nomdp_contact_planning
                 nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
 #ifdef ENABLE_PARALLEL
                 int th_id = omp_get_thread_num();
-                propagated_points[idx] = simulator_.ForwardSimulatePointRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), trace, false);
+                propagated_points[idx] = simulator_.ForwardSimulatePointRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, trace, false);
 #else
-                propagated_points[idx] = simulator_.ForwardSimulatePointRobot(robot_, initial_particle, target_point, rng_, num_simulation_steps, (goal_distance_threshold_ * 0.5), trace, false);
+                propagated_points[idx] = simulator_.ForwardSimulatePointRobot(robot_, initial_particle, target_point, rng_, num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, trace, false);
 #endif
             }
             // Cluster the live particles into (potentially) multiple states
@@ -1429,6 +1486,72 @@ namespace nomdp_contact_planning
                     const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
                     const geometry_msgs::Point marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_point);
                     configuration_marker.points.push_back(marker_point);
+                    if (link_relative_point.norm() == 0.0)
+                    {
+                        std_msgs::ColorRGBA black_color;
+                        black_color.r = 0.0f;
+                        black_color.g = 0.0f;
+                        black_color.b = 0.0f;
+                        black_color.a = 1.0f;
+                        configuration_marker.colors.push_back(black_color);
+                    }
+                    else
+                    {
+                        configuration_marker.colors.push_back(real_color);
+                    }
+                }
+            }
+            return configuration_marker;
+        }
+#endif
+
+#ifdef USE_ROS
+        inline visualization_msgs::Marker DrawRobotControlInput(Robot robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color) const
+        {
+            std_msgs::ColorRGBA real_color = color;
+            visualization_msgs::Marker configuration_marker;
+            configuration_marker.action = visualization_msgs::Marker::ADD;
+            configuration_marker.ns = "UNKNOWN";
+            configuration_marker.id = 1;
+            configuration_marker.frame_locked = false;
+            configuration_marker.lifetime = ros::Duration(0.0);
+            configuration_marker.type = visualization_msgs::Marker::LINE_LIST;
+            configuration_marker.header.frame_id = simulator_.GetFrame();
+            configuration_marker.scale.x = simulator_.GetResolution() * 0.5;
+            configuration_marker.scale.y = simulator_.GetResolution() * 0.5;
+            configuration_marker.scale.z = simulator_.GetResolution() * 0.5;
+            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+            configuration_marker.color = real_color;
+            // Make the indivudal points
+            // Get the list of link name + link points for all the links of the robot
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Get the current transform
+                // Update the position of the robot
+                robot.UpdatePosition(configuration);
+                // Get the transform of the current link
+                const Eigen::Affine3d current_link_transform = robot.GetLinkTransform(link_name);
+                // Apply the control input
+                robot.ApplyControlInput(control_input);
+                // Get the transform of the current link
+                const Eigen::Affine3d current_plus_control_link_transform = robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector3d environment_relative_current_point = current_link_transform * link_relative_point;
+                    const Eigen::Vector3d environment_relative_current_plus_control_point = current_plus_control_link_transform * link_relative_point;
+                    const geometry_msgs::Point current_marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_current_point);
+                    const geometry_msgs::Point current_plus_control_marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_current_plus_control_point);
+                    configuration_marker.points.push_back(current_marker_point);
+                    configuration_marker.points.push_back(current_plus_control_marker_point);
+                    configuration_marker.colors.push_back(real_color);
                     configuration_marker.colors.push_back(real_color);
                 }
             }

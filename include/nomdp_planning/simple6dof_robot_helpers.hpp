@@ -243,14 +243,14 @@ namespace simple6dof_robot_helpers
 
         inline void SetConfig(const Eigen::Matrix<double, 6, 1>& new_config)
         {
-            std::cout << "Raw config to set: " << new_config << std::endl;
+            //std::cout << "Raw config to set: " << new_config << std::endl;
             config_(0) = new_config(0);
             config_(1) = new_config(1);
             config_(2) = new_config(2);
             config_(3) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(3));
             config_(4) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(4));
             config_(5) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(5));
-            std::cout << "Real config set: " << config_ << std::endl;
+            //std::cout << "Real config set: " << config_ << std::endl;
             // Update pose
             pose_ = ComputePose();
         }
@@ -284,6 +284,13 @@ namespace simple6dof_robot_helpers
         inline std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> GetRawLinksPoints() const
         {
             return std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>{std::pair<std::string, EigenHelpers::VectorVector3d>("robot", link_points_)};
+        }
+
+        inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
+        {
+            UNUSED(link1_index);
+            UNUSED(link2_index);
+            return true;
         }
 
         inline void UpdatePosition(const Eigen::Matrix<double, 6, 1>& position)
@@ -398,15 +405,15 @@ namespace simple6dof_robot_helpers
                 // Rotatational joints
                 // X joint
                 // Compute X-axis joint axis (this is basically a formality)
-                const Eigen::Affine3d x_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond::Identity();
+                const Eigen::Affine3d x_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX()));
                 const Eigen::Vector3d x_joint_axis = (Eigen::Vector3d)(x_joint_transform.rotation() * Eigen::Vector3d::UnitX());
                 jacobian.block<3,1>(0, 3) = jacobian.block<3,1>(0, 3) + x_joint_axis.cross(world_point - current_position);
                 // Compute Y-axis joint axis
-                const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX())));
+                const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
                 const Eigen::Vector3d y_joint_axis = (Eigen::Vector3d)(y_joint_transform.rotation() * Eigen::Vector3d::UnitY());
                 jacobian.block<3,1>(0, 4) = jacobian.block<3,1>(0, 4) + y_joint_axis.cross(world_point - current_position);
                 // Compute Z-axis joint axis
-                const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
+                const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.z(), Eigen::Vector3d::UnitZ())));
                 const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
                 jacobian.block<3,1>(0, 5) = jacobian.block<3,1>(0, 5) + z_joint_axis.cross(world_point - current_position);
                 return jacobian;
@@ -437,17 +444,17 @@ namespace simple6dof_robot_helpers
             // Rotatational joints
             // X joint
             // Compute X-axis joint axis (this is basically a formality)
-            const Eigen::Affine3d x_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond::Identity();
+            const Eigen::Affine3d x_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX()));
             const Eigen::Vector3d x_joint_axis = (Eigen::Vector3d)(x_joint_transform.rotation() * Eigen::Vector3d::UnitX());
             jacobian.block<3,1>(0, 3) = jacobian.block<3,1>(0, 3) + x_joint_axis.cross(world_point - current_position);
             jacobian.block<3,1>(3, 3) = jacobian.block<3,1>(3, 3) + x_joint_axis;
             // Compute Y-axis joint axis
-            const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX())));
+            const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
             const Eigen::Vector3d y_joint_axis = (Eigen::Vector3d)(y_joint_transform.rotation() * Eigen::Vector3d::UnitY());
             jacobian.block<3,1>(0, 4) = jacobian.block<3,1>(0, 4) + y_joint_axis.cross(world_point - current_position);
             jacobian.block<3,1>(3, 4) = jacobian.block<3,1>(3, 4) + y_joint_axis;
             // Compute Z-axis joint axis
-            const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
+            const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.z(), Eigen::Vector3d::UnitZ())));
             const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
             jacobian.block<3,1>(0, 5) = jacobian.block<3,1>(0, 5) + z_joint_axis.cross(world_point - current_position);
             jacobian.block<3,1>(3, 5) = jacobian.block<3,1>(3, 5) + z_joint_axis;

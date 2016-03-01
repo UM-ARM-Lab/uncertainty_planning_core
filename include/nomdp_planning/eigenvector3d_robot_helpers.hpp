@@ -192,6 +192,13 @@ namespace eigenvector3d_robot_helpers
             return std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>{std::pair<std::string, EigenHelpers::VectorVector3d>("robot", link_points_)};
         }
 
+        inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
+        {
+            UNUSED(link1_index);
+            UNUSED(link2_index);
+            return true;
+        }
+
         inline void UpdatePosition(const Eigen::Vector3d& position)
         {
             position_ = position;

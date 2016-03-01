@@ -92,7 +92,8 @@ set(NOMDP_CORE_SOURCES
     include/${PROJECT_NAME}/eigenvector3d_robot_helpers.hpp
     include/${PROJECT_NAME}/eigenvectorxd_robot_helpers.hpp
     include/${PROJECT_NAME}/simple6dof_robot_helpers.hpp
-    include/${PROJECT_NAME}/simplese2_robot_helpers.hpp)
+    include/${PROJECT_NAME}/simplese2_robot_helpers.hpp
+    include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp)
 
 set(NOMDP_SOURCES ${NOMDP_CORE_SOURCES} src/nomdp_contact_planning_node.cpp)
 
@@ -110,6 +111,11 @@ add_executable(sixdof_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_te
 add_dependencies(sixdof_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(sixdof_simulator_test_node ${catkin_LIBRARIES} rt)
 set_target_properties(sixdof_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_6DOF")
+
+add_executable(linked_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+add_dependencies(linked_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(linked_simulator_test_node ${catkin_LIBRARIES} rt)
+set_target_properties(linked_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_LINKED")
 
 add_executable(nomdp_contact_planning_node_no_ros_debug ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros_debug ${catkin_EXPORTED_TARGETS})
