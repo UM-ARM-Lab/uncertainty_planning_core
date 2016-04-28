@@ -201,6 +201,7 @@ namespace simplese2_robot_helpers
     protected:
 
         bool initialized_;
+        double max_motion_per_unit_step_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
         simple_pid_controller::SimplePIDController y_axis_controller_;
         simple_pid_controller::SimplePIDController zr_axis_controller_;
@@ -227,6 +228,49 @@ namespace simplese2_robot_helpers
 
     public:
 
+        static inline double ComputeMaxMotionPerStep(SimpleSE2Robot robot)
+        {
+            double max_motion = 0.0;
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = robot.GetRawLinksPoints();
+            // Generate motion primitives
+            std::vector<Eigen::VectorXd> motion_primitives;
+            motion_primitives.reserve(6);
+            for (size_t joint_idx = 0; joint_idx < 3; joint_idx++)
+            {
+                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(3);
+                raw_motion_plus(joint_idx) = 1.0;
+                motion_primitives.push_back(raw_motion_plus);
+                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(3);
+                raw_motion_neg(joint_idx) = -1.0;
+                motion_primitives.push_back(raw_motion_neg);
+            }
+            // Go through the robot model & compute how much it moves
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    // Get the Jacobian for the current point
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    // Compute max point motion
+                    for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
+                    {
+                        const Eigen::VectorXd& current_motion = motion_primitives[motion_idx];
+                        const double point_motion = (point_jacobian * current_motion).row(0).norm();
+                        if (point_motion > max_motion)
+                        {
+                            max_motion = point_motion;
+                        }
+                    }
+                }
+            }
+            return max_motion;
+        }
+
         inline SimpleSE2Robot(const EigenHelpers::VectorVector3d& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
         {
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -238,6 +282,7 @@ namespace simplese2_robot_helpers
             x_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.max_actuator_noise, robot_config.max_actuator_noise, robot_config.velocity_limit);
             y_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.max_actuator_noise, robot_config.max_actuator_noise, robot_config.velocity_limit);
             zr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.r_max_actuator_noise, robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
+            max_motion_per_unit_step_ = ComputeMaxMotionPerStep(*this);
             UpdatePosition(initial_position);
             initialized_ = true;
         }
@@ -406,6 +451,11 @@ namespace simplese2_robot_helpers
             Eigen::VectorXd real_correction(3);
             real_correction << real_translation_correction, real_rotation_correction;
             return real_correction;
+        }
+
+        inline double GetMaxMotionPerStep() const
+        {
+            return max_motion_per_unit_step_;
         }
     };
 }

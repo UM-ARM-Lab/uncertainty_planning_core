@@ -45,7 +45,7 @@ find_package(OpenMP)
 add_message_files(DIRECTORY msg FILES ObstacleConfig.msg)
 
 ## Generate services in the 'srv' folder
-#add_service_files(DIRECTORY srv FILES )
+add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -92,20 +92,21 @@ set(NOMDP_CORE_SOURCES
     include/${PROJECT_NAME}/eigenvector3d_robot_helpers.hpp
     include/${PROJECT_NAME}/eigenvectorxd_robot_helpers.hpp
     include/${PROJECT_NAME}/simple6dof_robot_helpers.hpp
+    include/${PROJECT_NAME}/proper6dof_robot_helpers.hpp
     include/${PROJECT_NAME}/simplese2_robot_helpers.hpp
     include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp)
 
 set(NOMDP_SOURCES ${NOMDP_CORE_SOURCES} src/nomdp_contact_planning_node.cpp)
 
-add_executable(se2_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
-add_dependencies(se2_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se2_simulator_test_node ${catkin_LIBRARIES} rt)
-set_target_properties(se2_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_SE2")
+#add_executable(se2_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+#add_dependencies(se2_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+#target_link_libraries(se2_simulator_test_node ${catkin_LIBRARIES} rt)
+#set_target_properties(se2_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_SE2")
 
-add_executable(r3_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
-add_dependencies(r3_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(r3_simulator_test_node ${catkin_LIBRARIES} rt)
-set_target_properties(r3_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_R3")
+#add_executable(r3_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+#add_dependencies(r3_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+#target_link_libraries(r3_simulator_test_node ${catkin_LIBRARIES} rt)
+#set_target_properties(r3_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_R3")
 
 add_executable(sixdof_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
 add_dependencies(sixdof_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
@@ -134,12 +135,12 @@ set_target_properties(nomdp_contact_planning_node_parallel_debug PROPERTIES COMP
 add_executable(nomdp_contact_planning_node ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node ${catkin_LIBRARIES} rt)
-set_target_properties(nomdp_contact_planning_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set_target_properties(nomdp_contact_planning_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
 
 add_executable(nomdp_contact_planning_node_parallel ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_parallel_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(nomdp_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DENABLE_PARALLEL")
+set_target_properties(nomdp_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL")
 
 add_executable(nomdp_contact_planning_node_no_ros ${NOMDP_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros ${catkin_EXPORTED_TARGETS})

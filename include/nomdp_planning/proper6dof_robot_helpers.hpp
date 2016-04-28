@@ -3,49 +3,38 @@
 #include <map>
 #include <random>
 #include <Eigen/Geometry>
+#include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <nomdp_planning/simple_pid_controller.hpp>
 #include <nomdp_planning/simple_uncertainty_models.hpp>
 
-#ifndef SIMPLE6DOF_ROBOT_HELPERS_HPP
-#define SIMPLE6DOF_ROBOT_HELPERS_HPP
+#ifndef PROPER6DOF_ROBOT_HELPERS_HPP
+#define PROPER6DOF_ROBOT_HELPERS_HPP
 
-namespace simple6dof_robot_helpers
+
+/*
+ * FIX THIS TO USE PROPER SE(3) MODELS - USE AFFINE3D AND TWISTS AND GEOMETRIC JACOBIAN
+ * SINGLE PID CONTROLLER FOR SE(3) + ADD NOISE TO TWIST & SENSE NOISE BY CONVERTING SO(3) TO TWIST AND ADDING NOISE
+ */
+
+
+namespace proper6dof_robot_helpers
 {
-    class EigenMatrixD61Serializer
-    {
-    public:
+    typedef Eigen::Affine3d ConfigType;
+    typedef EigenHelpers::VectorAffine3d ConfigTypeVector;
 
-        static inline std::string TypeName()
-        {
-            return std::string("EigenMatrixD61Serializer");
-        }
-
-        static inline uint64_t Serialize(const Eigen::Matrix<double, 6, 1>& value, std::vector<uint8_t>& buffer)
-        {
-            return EigenHelpers::Serialize(value, buffer);
-        }
-
-        static inline std::pair<Eigen::Matrix<double, 6, 1>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
-        {
-            return EigenHelpers::Deserialize<Eigen::Matrix<double, 6, 1>>(buffer, current);
-        }
-    };
-
-    class Simple6DOFBaseSampler
+    class Proper6DOFBaseSampler
     {
     protected:
 
         std::uniform_real_distribution<double> x_distribution_;
         std::uniform_real_distribution<double> y_distribution_;
         std::uniform_real_distribution<double> z_distribution_;
-        std::uniform_real_distribution<double> xr_distribution_;
-        std::uniform_real_distribution<double> yr_distribution_;
-        std::uniform_real_distribution<double> zr_distribution_;
+        arc_helpers::RandomRotationGenerator rotation_generator_;
 
     public:
 
-        Simple6DOFBaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits)
+        Proper6DOFBaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits)
         {
             assert(x_limits.first <= x_limits.second);
             assert(y_limits.first <= y_limits.second);
@@ -53,155 +42,99 @@ namespace simple6dof_robot_helpers
             x_distribution_ = std::uniform_real_distribution<double>(x_limits.first, x_limits.second);
             y_distribution_ = std::uniform_real_distribution<double>(y_limits.first, y_limits.second);
             z_distribution_ = std::uniform_real_distribution<double>(z_limits.first, z_limits.second);
-            xr_distribution_ = std::uniform_real_distribution<double>(-M_PI, M_PI);
-            yr_distribution_ = std::uniform_real_distribution<double>(-M_PI, M_PI);
-            zr_distribution_ = std::uniform_real_distribution<double>(-M_PI, M_PI);
         }
 
         template<typename Generator>
-        Eigen::Matrix<double, 6, 1> Sample(Generator& prng)
+        ConfigType Sample(Generator& prng)
         {
             const double x = x_distribution_(prng);
             const double y = y_distribution_(prng);
             const double z = z_distribution_(prng);
-            const double xr = xr_distribution_(prng);
-            const double yr = yr_distribution_(prng);
-            const double zr = zr_distribution_(prng);
-            Eigen::Matrix<double, 6, 1> state;
-            state << x, y, z, xr, yr, zr;
+            const Eigen::Quaterniond quat = rotation_generator_.GetQuaternion(prng);
+            const Eigen::Affine3d state = Eigen::Translation3d(x, y, z) * quat;
             return state;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Simple6DOFBaseSampler");
         }
     };
 
-    class Simple6DOFInterpolator
+    class Proper6DOFInterpolator
     {
     public:
 
-        Eigen::Matrix<double, 6, 1> operator()(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2, const double ratio) const
+        ConfigType operator()(const ConfigType& t1, const ConfigType& t2, const double ratio) const
         {
             return Interpolate(t1, t2, ratio);
         }
 
-        static Eigen::Matrix<double, 6, 1> Interpolate(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2, const double ratio)
+        static ConfigType Interpolate(const ConfigType& t1, const ConfigType& t2, const double ratio)
         {
-            Eigen::Matrix<double, 6, 1> interpolated = Eigen::Matrix<double, 6, 1>::Zero();
-            interpolated.head<3>() = EigenHelpers::Interpolate(t1.head<3>(), t2.head<3>(), ratio);
-            interpolated(3) = EigenHelpers::InterpolateContinuousRevolute(t1(3), t2(3), ratio);
-            interpolated(4) = EigenHelpers::InterpolateContinuousRevolute(t1(4), t2(4), ratio);
-            interpolated(5) = EigenHelpers::InterpolateContinuousRevolute(t1(5), t2(5), ratio);
+            const ConfigType interpolated = EigenHelpers::Interpolate(t1, t2, ratio);
             return interpolated;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Simple6DOFInterpolator");
         }
     };
 
-    class Simple6DOFAverager
+    class Proper6DOFAverager
     {
     public:
 
-        Eigen::Matrix<double, 6, 1> operator()(const std::vector<Eigen::Matrix<double, 6, 1>>& vec) const
+        ConfigType operator()(const ConfigTypeVector& vec) const
         {
             return Average(vec);
         }
 
-        static Eigen::Matrix<double, 6, 1> Average(const std::vector<Eigen::Matrix<double, 6, 1>>& vec)
+        static ConfigType Average(const ConfigTypeVector& vec)
         {
             if (vec.size() > 0)
             {
-                // Separate translation and rotation values
-                EigenHelpers::VectorVector3d translations(vec.size());
-                std::vector<double> xrs(vec.size());
-                std::vector<double> yrs(vec.size());
-                std::vector<double> zrs(vec.size());
-                for (size_t idx = 0; idx < vec.size(); idx++)
-                {
-                    const Eigen::Matrix<double, 6, 1>& state = vec[idx];
-                    translations[idx] = Eigen::Vector3d(state(0), state(1), state(2));
-                    xrs[idx] = state(3);
-                    yrs[idx] = state(4);
-                    zrs[idx] = state(5);
-                }
-                // Get the average values
-                const Eigen::Vector3d average_translation = EigenHelpers::AverageEigenVector3d(translations);
-                const double average_xr = EigenHelpers::AverageContinuousRevolute(xrs);
-                const double average_yr = EigenHelpers::AverageContinuousRevolute(yrs);
-                const double average_zr = EigenHelpers::AverageContinuousRevolute(zrs);
-                Eigen::Matrix<double, 6, 1> average;
-                average << average_translation, average_xr, average_yr, average_zr;
-                return average;
+                return EigenHelpers::AverageEigenAffine3d(vec);
             }
             else
             {
-                return Eigen::Matrix<double, 6, 1>::Zero();
+                return Eigen::Affine3d::Identity();
             }
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Simple6DOFAverager");
         }
     };
 
-    class Simple6DOFDimDistancer
+    class Proper6DOFDimDistancer
     {
     public:
 
-        Eigen::VectorXd operator()(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2) const
+        Eigen::VectorXd operator()(const ConfigType& t1, const ConfigType& t2) const
         {
             return Distance(t1, t2);
         }
 
-        static Eigen::VectorXd Distance(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2)
+        static Eigen::VectorXd Distance(const ConfigType& t1, const ConfigType& t2)
         {
             return RawDistance(t1, t2).cwiseAbs();
         }
 
-        static Eigen::VectorXd RawDistance(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2)
+        static Eigen::VectorXd RawDistance(const ConfigType& t1, const ConfigType& t2)
         {
-            Eigen::VectorXd dim_distances(6);
-            dim_distances(0) = t2(0) - t1(0);
-            dim_distances(1) = t2(1) - t1(1);
-            dim_distances(2) = t2(2) - t1(2);
-            dim_distances(3) = EigenHelpers::ContinuousRevoluteSignedDistance(t1(3), t2(3));
-            dim_distances(4) = EigenHelpers::ContinuousRevoluteSignedDistance(t1(4), t2(4));
-            dim_distances(5) = EigenHelpers::ContinuousRevoluteSignedDistance(t1(5), t2(5));
+            const Eigen::Vector3d tt1 = t1.translation();
+            const Eigen::Quaterniond qt1(t1.rotation());
+            const Eigen::Vector3d tt2 = t2.translation();
+            const Eigen::Quaterniond qt2(t2.rotation());
+            Eigen::VectorXd dim_distances(4);
+            dim_distances(0) = tt2.x() - tt1.x();
+            dim_distances(1) = tt2.y() - tt1.y();
+            dim_distances(2) = tt2.z() - tt1.z();
+            dim_distances(3) = EigenHelpers::Distance(qt1, qt2);
             return dim_distances;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Simple6DOFDimDistancer");
         }
     };
 
-    class Simple6DOFDistancer
+    class Proper6DOFDistancer
     {
     public:
 
-        double operator()(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2) const
+        double operator()(const ConfigType& t1, const ConfigType& t2) const
         {
             return Distance(t1, t2);
         }
 
-        static double Distance(const Eigen::Matrix<double, 6, 1>& t1, const Eigen::Matrix<double, 6, 1>& t2)
+        static double Distance(const ConfigType& t1, const ConfigType& t2)
         {
-            const Eigen::VectorXd dim_distances = Simple6DOFDimDistancer::Distance(t1, t2);
-            const double trans_dist = sqrt((dim_distances(0) * dim_distances(0)) + (dim_distances(1) * dim_distances(1)) + (dim_distances(2) * dim_distances(2)));
-            const double rots_dist = sqrt((dim_distances(3) * dim_distances(3)) + (dim_distances(4) * dim_distances(4)) + (dim_distances(5) * dim_distances(5)));
-            return trans_dist + rots_dist;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Simple6DOFDistancer");
+            return (EigenHelpers::Distance(t1, t2, 0.5) * 2.0);
         }
     };
 
@@ -259,7 +192,12 @@ namespace simple6dof_robot_helpers
         }
     };
 
-    class Simple6DOFRobot
+    /*
+     * Fix to use twists for control actions and geometric jacobian for SE(3). Almost everything else remains unchanged.
+     * Change to use a single PID controller for all 6 DOF, applied to the twists.
+     * Add noise to the twists for actuation noise, and add noise to the orientation by converting to twist/euler angles, add noise, then convert back.
+     */
+    class Proper6DOFRobot
     {
     protected:
 
@@ -303,7 +241,7 @@ namespace simple6dof_robot_helpers
 
     public:
 
-        static inline double ComputeMaxMotionPerStep(Simple6DOFRobot robot)
+        static inline double ComputeMaxMotionPerStep(Proper6DOFRobot robot)
         {
             double max_motion = 0.0;
             const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = robot.GetRawLinksPoints();
@@ -346,7 +284,7 @@ namespace simple6dof_robot_helpers
             return max_motion;
         }
 
-        inline Simple6DOFRobot(const EigenHelpers::VectorVector3d& robot_points, const Eigen::Matrix<double, 6, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline Proper6DOFRobot(const EigenHelpers::VectorVector3d& robot_points, const Eigen::Matrix<double, 6, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
         {
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -413,7 +351,7 @@ namespace simple6dof_robot_helpers
 
         inline double ComputeDistanceTo(const Eigen::Matrix<double, 6, 1>& target) const
         {
-            return Simple6DOFDistancer::Distance(GetPosition(), target);
+            return Proper6DOFDistancer::Distance(GetPosition(), target);
         }
 
         template<typename PRNG>
@@ -422,7 +360,7 @@ namespace simple6dof_robot_helpers
             // Get the current position
             const Eigen::Matrix<double, 6, 1> current = GetPosition();
             // Get the current error
-            const Eigen::VectorXd current_error = Simple6DOFDimDistancer::RawDistance(current, target);
+            const Eigen::VectorXd current_error = Proper6DOFDimDistancer::RawDistance(current, target);
             // Compute feedback terms
             const double x_term = x_axis_controller_.ComputeFeedbackTerm(current_error(0), 1.0);
             const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), 1.0);
@@ -590,4 +528,4 @@ namespace simple6dof_robot_helpers
     };
 }
 
-#endif // SIMPLE6DOF_ROBOT_HELPERS_HPP
+#endif // PROPER6DOF_ROBOT_HELPERS_HPP

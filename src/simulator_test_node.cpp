@@ -476,7 +476,7 @@ int main(int argc, char** argv)
     // Make the robot geometry
     const EigenHelpers::VectorVector3d robot_points = make_robot(robot_code);
     eigenvector3d_robot_helpers::ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise);
-    eigenvector3d_robot_helpers::SimpleEigenVector3dRobot robot(robot_points, Eigen::Vector3d::Identity(), robot_config);
+    eigenvector3d_robot_helpers::SimpleEigenVector3dRobot robot(robot_points, Eigen::Vector3d::Zero(), robot_config);
 #endif
 #ifdef USE_SE2
     // Make the robot geometry
@@ -495,18 +495,17 @@ int main(int argc, char** argv)
     robot.SetBaseTransform(base_transform);
     simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler(reference_configuration);
 #endif
-    bool use_contact = true;
 #ifdef USE_6DOF
-    NomdpPlanningSpace<simple6dof_robot_helpers::Simple6DOFRobot, simple6dof_robot_helpers::Simple6DOFBaseSampler, Eigen::Matrix<double, 6, 1>, simple6dof_robot_helpers::Simple6DOFAverager, simple6dof_robot_helpers::Simple6DOFDistancer, simple6dof_robot_helpers::Simple6DOFDimDistancer, simple6dof_robot_helpers::Simple6DOFInterpolator, std::allocator<Eigen::Matrix<double, 6, 1>>, std::mt19937_64> planning_space(use_contact, true, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution, 1u);
+    NomdpPlanningSpace<simple6dof_robot_helpers::Simple6DOFRobot, simple6dof_robot_helpers::Simple6DOFBaseSampler, Eigen::Matrix<double, 6, 1>, simple6dof_robot_helpers::EigenMatrixD61Serializer, simple6dof_robot_helpers::Simple6DOFAverager, simple6dof_robot_helpers::Simple6DOFDistancer, simple6dof_robot_helpers::Simple6DOFDimDistancer, simple6dof_robot_helpers::Simple6DOFInterpolator, std::allocator<Eigen::Matrix<double, 6, 1>>, std::mt19937_64> planning_space(true, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution);
 #endif
 #ifdef USE_R3
-    NomdpPlanningSpace<eigenvector3d_robot_helpers::SimpleEigenVector3dRobot, eigenvector3d_robot_helpers::EigenVector3dBaseSampler, Eigen::Vector3d, eigenvector3d_robot_helpers::EigenVector3dAverager, eigenvector3d_robot_helpers::EigenVector3dDistancer, eigenvector3d_robot_helpers::EigenVector3dDimDistancer, eigenvector3d_robot_helpers::EigenVector3dInterpolator, Eigen::aligned_allocator<Eigen::Vector3d>, std::mt19937_64> planning_space(use_contact, true, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution, 1u);
+    NomdpPlanningSpace<eigenvector3d_robot_helpers::SimpleEigenVector3dRobot, eigenvector3d_robot_helpers::EigenVector3dBaseSampler, Eigen::Vector3d, eigenvector3d_robot_helpers::EigenVector3dSerializer, eigenvector3d_robot_helpers::EigenVector3dAverager, eigenvector3d_robot_helpers::EigenVector3dDistancer, eigenvector3d_robot_helpers::EigenVector3dDimDistancer, eigenvector3d_robot_helpers::EigenVector3dInterpolator, Eigen::aligned_allocator<Eigen::Vector3d>, std::mt19937_64> planning_space(true, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution);
 #endif
 #ifdef USE_SE2
-    NomdpPlanningSpace<simplese2_robot_helpers::SimpleSE2Robot, simplese2_robot_helpers::SimpleSE2BaseSampler, Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, simplese2_robot_helpers::SimpleSE2Interpolator, std::allocator<Eigen::Matrix<double, 3, 1>>, std::mt19937_64> planning_space(use_contact, true, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution, 1u);
+    NomdpPlanningSpace<simplese2_robot_helpers::SimpleSE2Robot, simplese2_robot_helpers::SimpleSE2BaseSampler, Eigen::Matrix<double, 3, 1>, simple6dof_robot_helpers::EigenMatrixD61Serializer, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, simplese2_robot_helpers::SimpleSE2Interpolator, std::allocator<Eigen::Matrix<double, 3, 1>>, std::mt19937_64> planning_space(true, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution);
 #endif
 #ifdef USE_LINKED
-    NomdpPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedAverager, simplelinked_robot_helpers::SimpleLinkedDistancer, simplelinked_robot_helpers::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(use_contact, false, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution, 1u);
+    NomdpPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, simplelinked_robot_helpers::SimpleLinkedDistancer, simplelinked_robot_helpers::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(false, 1u, step_size, goal_distance_threshold, goal_probability_threshold, signature_matching_threshold, feasibility_alpha, variance_alpha, robot, sampler, env_objects, env_resolution);
 #endif
     // Now, run a series of simulator tests
 #ifdef USE_6DOF

@@ -3,6 +3,7 @@
 #include <map>
 #include <random>
 #include <Eigen/Geometry>
+#include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <nomdp_planning/simple_pid_controller.hpp>
 #include <nomdp_planning/simple_uncertainty_models.hpp>
@@ -26,6 +27,18 @@ namespace simplelinked_robot_helpers
 
     public:
 
+        static inline uint64_t Serialize(const SimpleJointModel& model, std::vector<uint8_t>& buffer)
+        {
+            return model.SerializeSelf(buffer);
+        }
+
+        static inline std::pair<SimpleJointModel, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            SimpleJointModel temp_model;
+            const uint64_t bytes_read = temp_model.DeserializeSelf(buffer, current);
+            return std::make_pair(temp_model, bytes_read);
+        }
+
         inline SimpleJointModel(const std::pair<double, double>& limits, const double value, const JOINT_TYPE type)
         {
             type_ = type;
@@ -46,6 +59,40 @@ namespace simplelinked_robot_helpers
             limits_ = std::pair<double, double>(0.0, 0.0);
             type_ = JOINT_TYPE::FIXED;
             SetValue(0.0);
+        }
+
+        inline uint64_t SerializeSelf(std::vector<uint8_t>& buffer) const
+        {
+            const uint64_t start_buffer_size = buffer.size();
+            arc_helpers::SerializeFixedSizePOD<double>(limits_.first, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(limits_.second, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(value_, buffer);
+            arc_helpers::SerializeFixedSizePOD<JOINT_TYPE>(type_, buffer);
+            // Figure out how many bytes were written
+            const uint64_t end_buffer_size = buffer.size();
+            const uint64_t bytes_written = end_buffer_size - start_buffer_size;
+            return bytes_written;
+        }
+
+        inline uint64_t DeserializeSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            assert(current < buffer.size());
+            uint64_t current_position = current;
+            const std::pair<double, uint64_t> deserialized_limits_first = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            limits_.first = deserialized_limits_first.first;
+            current_position += deserialized_limits_first.second;
+            const std::pair<double, uint64_t> deserialized_limits_second = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            limits_.second = deserialized_limits_second.first;
+            current_position += deserialized_limits_second.second;
+            const std::pair<double, uint64_t> deserialized_value = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            value_ = deserialized_value.first;
+            current_position += deserialized_value.second;
+            const std::pair<JOINT_TYPE, uint64_t> deserialized_type = arc_helpers::DeserializeFixedSizePOD<JOINT_TYPE>(buffer, current_position);
+            type_ = deserialized_type.first;
+            current_position += deserialized_type.second;
+            // Figure out how many bytes were read
+            const uint64_t bytes_read = current_position - current;
+            return bytes_read;
         }
 
         inline bool IsContinuous() const
@@ -184,6 +231,26 @@ namespace simplelinked_robot_helpers
         inline SimpleJointModel CopyWithNewValue(const double value) const
         {
             return SimpleJointModel(limits_, value, type_);
+        }
+    };
+
+    class SimpleLinkedConfigurationSerializer
+    {
+    public:
+
+        static inline std::string TypeName()
+        {
+            return std::string("SimpleLinkedConfigurationSerializer");
+        }
+
+        static inline uint64_t Serialize(const std::vector<SimpleJointModel>& value, std::vector<uint8_t>& buffer)
+        {
+            return arc_helpers::SerializeVector<SimpleJointModel>(value, buffer, SimpleJointModel::Serialize);
+        }
+
+        static inline std::pair<std::vector<SimpleJointModel>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return arc_helpers::DeserializeVector<SimpleJointModel>(buffer, current, SimpleJointModel::Deserialize);
         }
     };
 
@@ -331,6 +398,11 @@ namespace simplelinked_robot_helpers
                 return SimpleLinkedConfiguration();
             }
         }
+
+        static inline std::string TypeName()
+        {
+            return std::string("SimpleLinkedAverager");
+        }
     };
 
     class SimpleLinkedDimDistancer
@@ -365,6 +437,11 @@ namespace simplelinked_robot_helpers
             }
             return distances;
         }
+
+        static inline std::string TypeName()
+        {
+            return std::string("SimpleLinkedDimDistancer");
+        }
     };
 
     class SimpleLinkedDistancer
@@ -380,6 +457,11 @@ namespace simplelinked_robot_helpers
         {
             const Eigen::VectorXd dim_distances = SimpleLinkedDimDistancer::Distance(q1, q2);
             return dim_distances.norm();
+        }
+
+        static inline std::string TypeName()
+        {
+            return std::string("SimpleLinkedDistancer");
         }
     };
 
@@ -460,6 +542,7 @@ namespace simplelinked_robot_helpers
 
         bool initialized_;
         size_t num_active_joints_;
+        double max_motion_per_unit_step_;
         Eigen::Affine3d base_transform_;
         Eigen::MatrixXi self_collision_map_;
         std::vector<RobotLink> links_;
@@ -594,7 +677,7 @@ namespace simplelinked_robot_helpers
                 }
             }
             // Make sure the links all have unique names
-            std::map<std::string, u_int32_t> name_check_map;
+            std::map<std::string, uint32_t> name_check_map;
             for (size_t idx = 0; idx < links.size(); idx++)
             {
                 const std::string& link_name = links[idx].link_name;
@@ -623,6 +706,49 @@ namespace simplelinked_robot_helpers
             return allowed_self_collision_map;
         }
 
+        static inline double ComputeMaxMotionPerStep(SimpleLinkedRobot robot)
+        {
+            double max_motion = 0.0;
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = robot.GetRawLinksPoints();
+            // Generate motion primitives
+            std::vector<Eigen::VectorXd> motion_primitives;
+            motion_primitives.reserve(robot.GetNumActiveJoints() * 2);
+            for (size_t joint_idx = 0; joint_idx < robot.GetNumActiveJoints(); joint_idx++)
+            {
+                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(robot.GetNumActiveJoints());
+                raw_motion_plus(joint_idx) = 1.0;
+                motion_primitives.push_back(raw_motion_plus);
+                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(robot.GetNumActiveJoints());
+                raw_motion_neg(joint_idx) = -1.0;
+                motion_primitives.push_back(raw_motion_neg);
+            }
+            // Go through the robot model & compute how much it moves
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    // Get the Jacobian for the current point
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    // Compute max point motion
+                    for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
+                    {
+                        const Eigen::VectorXd& current_motion = motion_primitives[motion_idx];
+                        const double point_motion = (point_jacobian * current_motion).row(0).norm();
+                        if (point_motion > max_motion)
+                        {
+                            max_motion = point_motion;
+                        }
+                    }
+                }
+            }
+            return max_motion;
+        }
+
         inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
         {
             base_transform_ = base_transform;
@@ -634,6 +760,7 @@ namespace simplelinked_robot_helpers
                 throw std::invalid_argument("Attempted to construct a SimpleLinkedRobot with an invalid robot model");
             }
             num_active_joints_ = GetNumActiveJoints();
+            max_motion_per_unit_step_ = ComputeMaxMotionPerStep(*this);
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             UpdatePosition(initial_position);
@@ -912,7 +1039,7 @@ namespace simplelinked_robot_helpers
         {
             assert(links_.size() > 0);
             const RobotLink& last_link = links_.back();
-            return ComputeFullLinkPointJacobian(last_link.link_name, Eigen::Vector3d::Identity());
+            return ComputeFullLinkPointJacobian(last_link.link_name, Eigen::Vector3d::Zero());
         }
 
         inline Eigen::VectorXd ProcessCorrectionAction(const Eigen::VectorXd& raw_correction_action) const
@@ -921,6 +1048,11 @@ namespace simplelinked_robot_helpers
             const double action_norm = raw_correction_action.norm();
             const Eigen::VectorXd real_action = (action_norm > 0.005) ? (raw_correction_action / action_norm) * 0.005 : raw_correction_action;
             return real_action;
+        }
+
+        inline double GetMaxMotionPerStep() const
+        {
+            return max_motion_per_unit_step_;
         }
     };
 }

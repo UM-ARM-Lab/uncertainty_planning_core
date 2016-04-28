@@ -1,0 +1,65 @@
+Extracted policy size: 129
+P(goal reached): 0.96
+Policy simulation successful resolves: 132003
+Policy simulation unsuccessful resolves: 34
+Policy success: 1
+Successful simulator resolves: 3.36099e+06
+Unsuccessful simulator resolves: 48
+failed_samples: 0
+planning_time: 240.046
+solutions: 4
+successful_samples: 1551
+total_samples: 1551
+total_states: 1925
+Extracted policy size: 313
+P(goal reached): 1
+Policy simulation successful resolves: 3.27785e+06
+Policy simulation unsuccessful resolves: 0
+Policy success: 0
+Successful simulator resolves: 3.73467e+06
+Unsuccessful simulator resolves: 444
+failed_samples: 0
+planning_time: 240.119
+solutions: 14
+successful_samples: 2121
+total_samples: 2121
+total_states: 2278
+Extracted policy size: 23
+P(goal reached): 0.96
+Policy simulation successful resolves: 12482
+Policy simulation unsuccessful resolves: 11
+Policy success: 1
+Successful simulator resolves: 3.98041e+06
+Unsuccessful simulator resolves: 36
+failed_samples: 0
+planning_time: 240.068
+solutions: 1
+successful_samples: 2173
+total_samples: 2173
+total_states: 2271
+Extracted policy size: 72
+P(goal reached): 1
+Policy simulation successful resolves: 3.28146e+06
+Policy simulation unsuccessful resolves: 0
+Policy success: 0
+Successful simulator resolves: 3.76325e+06
+Unsuccessful simulator resolves: 85
+failed_samples: 0
+planning_time: 240.111
+solutions: 4
+successful_samples: 2004
+total_samples: 2004
+total_states: 2252
+Extracted policy size: 132
+P(goal reached): 0.963222
+Policy simulation successful resolves: 77370
+Policy simulation unsuccessful resolves: 12
+Policy success: 1
+Successful simulator resolves: 3.95485e+06
+Unsuccessful simulator resolves: 199
+failed_samples: 0
+planning_time: 240.237
+solutions: 6
+successful_samples: 2002
+total_samples: 2002
+total_states: 2293

@@ -12,6 +12,26 @@
 
 namespace eigenvector3d_robot_helpers
 {
+    class EigenVector3dSerializer
+    {
+    public:
+
+        static inline std::string TypeName()
+        {
+            return std::string("EigenVector3dSerializer");
+        }
+
+        static inline uint64_t Serialize(const Eigen::Vector3d& value, std::vector<uint8_t>& buffer)
+        {
+            return EigenHelpers::Serialize(value, buffer);
+        }
+
+        static inline std::pair<Eigen::Vector3d, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return EigenHelpers::Deserialize<Eigen::Vector3d>(buffer, current);
+        }
+    };
+
     class EigenVector3dBaseSampler
     {
     protected:
@@ -297,6 +317,11 @@ namespace eigenvector3d_robot_helpers
             {
                 return raw_correction_action;
             }
+        }
+
+        inline double GetMaxMotionPerStep() const
+        {
+            return 1.0;
         }
     };
 }
