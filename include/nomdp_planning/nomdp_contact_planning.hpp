@@ -181,13 +181,11 @@ namespace nomdp_contact_planning
                 std::cout << "Attempting to serialize tree..." << std::endl;
                 std::vector<uint8_t> buffer;
                 SerializePlannerTree(planner_tree, buffer);
-            #ifdef USE_ROS
-                std::cout << "Compressing for storage..." << std::endl;
-                const std::vector<uint8_t> compressed_serialized_tree = ZlibHelpers::CompressBytes(buffer);
-            #else
+                // Write a header to detect if compression is enabled (someday)
+                //std::cout << "Compressing for storage..." << std::endl;
+                //const std::vector<uint8_t> compressed_serialized_tree = ZlibHelpers::CompressBytes(buffer);
                 std::cout << " Compression disabled (no Zlib available)..." << std::endl;
                 const std::vector<uint8_t> compressed_serialized_tree = buffer;
-            #endif
                 std::cout << "Attempting to save to file..." << std::endl;
                 std::ofstream output_file(filepath, std::ios::out|std::ios::binary);
                 uint64_t serialized_size = compressed_serialized_tree.size();
@@ -213,13 +211,11 @@ namespace nomdp_contact_planning
             uint64_t serialized_size = end - begin;
             std::vector<uint8_t> file_buffer(serialized_size, 0x00);
             input_file.read(reinterpret_cast<char*>(file_buffer.data()), serialized_size);
-        #ifdef USE_ROS
-            std::cout << "Decompressing from storage..." << std::endl;
-            const std::vector<uint8_t> decompressed_serialized_tree = ZlibHelpers::DecompressBytes(file_buffer);
-        #else
+            // Write a header to detect if compression is enabled (someday)
+            //std::cout << "Decompressing from storage..." << std::endl;
+            //const std::vector<uint8_t> decompressed_serialized_tree = ZlibHelpers::DecompressBytes(file_buffer);
             std::cout << "Decompression disabled (no Zlib available)..." << std::endl;
             const std::vector<uint8_t> decompressed_serialized_tree = file_buffer;
-        #endif
             std::cout << "Attempting to deserialize tree..." << std::endl;
             return DeserializePlannerTree(decompressed_serialized_tree, 0u).first;
         }
@@ -231,13 +227,11 @@ namespace nomdp_contact_planning
                 std::cout << "Attempting to serialize policy..." << std::endl;
                 std::vector<uint8_t> buffer;
                 NomdpPlanningPolicy::Serialize(policy, buffer);
-            #ifdef USE_ROS
-                std::cout << "Compressing for storage..." << std::endl;
-                const std::vector<uint8_t> compressed_serialized_policy = ZlibHelpers::CompressBytes(buffer);
-            #else
+                // Write a header to detect if compression is enabled (someday)
+                //std::cout << "Compressing for storage..." << std::endl;
+                //const std::vector<uint8_t> compressed_serialized_policy = ZlibHelpers::CompressBytes(buffer);
                 std::cout << "Compression disabled (no Zlib available)..." << std::endl;
                 const std::vector<uint8_t> compressed_serialized_policy = buffer;
-            #endif
                 std::cout << "Attempting to save to file..." << std::endl;
                 std::ofstream output_file(filepath, std::ios::out|std::ios::binary);
                 uint64_t serialized_size = compressed_serialized_policy.size();
@@ -263,13 +257,11 @@ namespace nomdp_contact_planning
             uint64_t serialized_size = end - begin;
             std::vector<uint8_t> file_buffer(serialized_size, 0x00);
             input_file.read(reinterpret_cast<char*>(file_buffer.data()), serialized_size);
-        #ifdef USE_ROS
-            std::cout << "Decompressing from storage..." << std::endl;
-            const std::vector<uint8_t> decompressed_serialized_policy = ZlibHelpers::DecompressBytes(file_buffer);
-        #else
+            // Write a header to detect if compression is enabled (someday)
+            //std::cout << "Decompressing from storage..." << std::endl;
+            //const std::vector<uint8_t> decompressed_serialized_policy = ZlibHelpers::DecompressBytes(file_buffer);
             std::cout << "Decompression disabled (no Zlib available)..." << std::endl;
             const std::vector<uint8_t> decompressed_serialized_policy = file_buffer;
-        #endif
             std::cout << "Attempting to deserialize policy..." << std::endl;
             return NomdpPlanningPolicy::Deserialize(decompressed_serialized_policy, 0u).first;
         }
@@ -947,7 +939,7 @@ namespace nomdp_contact_planning
                     display_markers.markers.push_back(current_marker);
                     display_pub.publish(display_markers);
                     // Wait for a bit
-                    std::this_thread::sleep_for(std::chrono::duration<double>(0.05));
+                    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
                 }
             }
             else

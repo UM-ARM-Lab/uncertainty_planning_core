@@ -104,53 +104,95 @@ EigenHelpers::VectorVector3d make_robot(const int32_t robot_code)
 {
     if (robot_code == 0)
     {
-        return EigenHelpers::VectorVector3d{Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(-0.125, 0.0, 0.0), Eigen::Vector3d(-0.25, 0.0, 0.0), Eigen::Vector3d(-0.375, 0.0, 0.0), Eigen::Vector3d(-0.5, 0.0, 0.0)};
+        EigenHelpers::VectorVector3d robot_points;
+        robot_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.25, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.375, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.5, 0.0, 0.0));
+        return robot_points;
     }
     else if (robot_code == 1)
     {
-        return EigenHelpers::VectorVector3d{Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0)};
+        EigenHelpers::VectorVector3d robot_points;
+        robot_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        return robot_points;
     }
     else if (robot_code == 2)
     {
-        return EigenHelpers::VectorVector3d{Eigen::Vector3d(-1.0, 0.0, 0.0), Eigen::Vector3d(-0.875, 0.0, 0.0), Eigen::Vector3d(-0.75, 0.0, 0.0), Eigen::Vector3d(-0.625, 0.0, 0.0), Eigen::Vector3d(-0.5, 0.0, 0.0), Eigen::Vector3d(-0.375, 0.0, 0.0), Eigen::Vector3d(-0.25, 0.0, 0.0), Eigen::Vector3d(-0.125, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0)};
+        EigenHelpers::VectorVector3d robot_points;
+        robot_points.push_back(Eigen::Vector3d(-1.0, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.875, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.75, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.625, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.5, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.375, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.25, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.0, 0.0, 0.0));
+        return robot_points;
     }
     else if (robot_code == 3)
     {
-        return EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, -0.125, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(-0.125, 0.0, 0.0), Eigen::Vector3d(0.0, 0.125, 0.0), Eigen::Vector3d(0.125, 0.125, 0.0), Eigen::Vector3d(-0.125, 0.125, 0.0), Eigen::Vector3d(0.25, 0.125, 0.0), Eigen::Vector3d(-0.25, 0.125, 0.0)};
+        EigenHelpers::VectorVector3d robot_points;
+        robot_points.push_back(Eigen::Vector3d(0.0, -0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.25, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.25, 0.125, 0.0));
+        return robot_points;
     }
     else if (robot_code == 4)
     {
-        return EigenHelpers::VectorVector3d{Eigen::Vector3d(-0.125, -0.125, -0.125),
-                                            Eigen::Vector3d(-0.125, 0.0, -0.125),
-                                            Eigen::Vector3d(-0.125, 0.125, -0.125),
-                                            Eigen::Vector3d(0.0, -0.125, -0.125),
-                                            Eigen::Vector3d(0.0, 0.0, -0.125),
-                                            Eigen::Vector3d(0.0, 0.125, -0.125),
-                                            Eigen::Vector3d(0.125, -0.125, -0.125),
-                                            Eigen::Vector3d(0.125, 0.0, -0.125),
-                                            Eigen::Vector3d(0.125, 0.125, -0.125),
-                                            Eigen::Vector3d(-0.125, -0.125, 0.0),
-                                            Eigen::Vector3d(-0.125, 0.0, 0.0),
-                                            Eigen::Vector3d(-0.125, 0.125, 0.0),
-                                            Eigen::Vector3d(0.0, -0.125, 0.0),
-                                            Eigen::Vector3d(0.0, 0.0, 0.0),
-                                            Eigen::Vector3d(0.0, 0.125, 0.0),
-                                            Eigen::Vector3d(0.125, -0.125, 0.0),
-                                            Eigen::Vector3d(0.125, 0.0, 0.0),
-                                            Eigen::Vector3d(0.125, 0.125, 0.0),
-                                            Eigen::Vector3d(-0.125, -0.125, 0.125),
-                                            Eigen::Vector3d(-0.125, 0.0, 0.125),
-                                            Eigen::Vector3d(-0.125, 0.125, 0.125),
-                                            Eigen::Vector3d(0.0, -0.125, 0.125),
-                                            Eigen::Vector3d(0.0, 0.0, 0.125),
-                                            Eigen::Vector3d(0.0, 0.125, 0.125),
-                                            Eigen::Vector3d(0.125, -0.125, 0.125),
-                                            Eigen::Vector3d(0.125, 0.0, 0.125),
-                                            Eigen::Vector3d(0.125, 0.125, 0.125)};
+        EigenHelpers::VectorVector3d robot_points;
+        robot_points.push_back(Eigen::Vector3d(-0.125, -0.125, -0.125));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.0, -0.125));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.125, -0.125));
+        robot_points.push_back(Eigen::Vector3d(0.0, -0.125, -0.125));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.0, -0.125));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.125, -0.125));
+        robot_points.push_back(Eigen::Vector3d(0.125, -0.125, -0.125));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.0, -0.125));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.125, -0.125));
+        robot_points.push_back(Eigen::Vector3d(-0.125, -0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, -0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, -0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.125, 0.0));
+        robot_points.push_back(Eigen::Vector3d(-0.125, -0.125, 0.125));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.0, 0.125));
+        robot_points.push_back(Eigen::Vector3d(-0.125, 0.125, 0.125));
+        robot_points.push_back(Eigen::Vector3d(0.0, -0.125, 0.125));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.125));
+        robot_points.push_back(Eigen::Vector3d(0.0, 0.125, 0.125));
+        robot_points.push_back(Eigen::Vector3d(0.125, -0.125, 0.125));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.125));
+        robot_points.push_back(Eigen::Vector3d(0.125, 0.125, 0.125));
+        return robot_points;
     }
     else
     {
-        return EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0)};
+        return EigenHelpers::VectorVector3d(1, Eigen::Vector3d(0.0, 0.0, 0.0));
     }
 }
 
@@ -168,19 +210,33 @@ std::pair<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_ro
         link1.link_points = EigenHelpers::VectorVector3d();
         simplelinked_robot_helpers::RobotLink link2;
         link2.link_name = "link2";
-        link2.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0)};
+        link2.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link3;
         link3.link_name = "link3";
-        link3.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0)};
+        link3.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link4;
         link4.link_name = "link4";
-        link4.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link4.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         std::vector<simplelinked_robot_helpers::RobotLink> links = {link1, link2, link3, link4};
         std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3)};
         simplelinked_robot_helpers::RobotJoint joint1;
@@ -220,19 +276,33 @@ std::pair<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_ro
         link1.link_points = EigenHelpers::VectorVector3d();
         simplelinked_robot_helpers::RobotLink link2;
         link2.link_name = "link2";
-        link2.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link2.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link3;
         link3.link_name = "link3";
-        link3.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0)};
+        link3.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link4;
         link4.link_name = "link4";
-        link4.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0)};
+        link4.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
         std::vector<simplelinked_robot_helpers::RobotLink> links = {link1, link2, link3, link4};
         std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3)};
         simplelinked_robot_helpers::RobotJoint joint1;
@@ -272,39 +342,81 @@ std::pair<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_ro
         // Make the robot model
         simplelinked_robot_helpers::RobotLink link1;
         link1.link_name = "link1";
-        link1.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link1.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link1.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link2;
         link2.link_name = "link2";
-        link2.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link2.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link2.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link3;
         link3.link_name = "link3";
-        link3.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link3.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link3.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link4;
         link4.link_name = "link4";
-        link4.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link4.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link4.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link5;
         link5.link_name = "link5";
-        link5.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link5.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link5.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link6;
         link6.link_name = "link6";
-        link6.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link6.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link6.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         simplelinked_robot_helpers::RobotLink link7;
         link7.link_name = "link7";
-        link7.link_points = EigenHelpers::VectorVector3d{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.125, 0.0, 0.0), Eigen::Vector3d(0.25, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.375, 0.0, 0.0), Eigen::Vector3d(0.5, 0.0, 0.0), Eigen::Vector3d(0.625, 0.0, 0.0),
-                                                            Eigen::Vector3d(0.75, 0.0, 0.0), Eigen::Vector3d(0.875, 0.0, 0.0), Eigen::Vector3d(1.0, 0.0, 0.0)};
+        link7.link_points.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.25, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.375, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.5, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.625, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.75, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(0.875, 0.0, 0.0));
+        link7.link_points.push_back(Eigen::Vector3d(1.0, 0.0, 0.0));
         std::vector<simplelinked_robot_helpers::RobotLink> links = {link1, link2, link3, link4, link5, link6, link7};
         std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6)};
         simplelinked_robot_helpers::RobotJoint joint1;

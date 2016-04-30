@@ -96,63 +96,99 @@ set(NOMDP_CORE_SOURCES
     include/${PROJECT_NAME}/simplese2_robot_helpers.hpp
     include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp)
 
-set(NOMDP_SOURCES ${NOMDP_CORE_SOURCES} src/nomdp_contact_planning_node.cpp)
+set(NOMDP_PLANNER_SOURCES ${NOMDP_CORE_SOURCES} src/nomdp_contact_planning_node.cpp)
 
-#add_executable(se2_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+set(NOMDP_EXECUTION_SOURCES ${NOMDP_CORE_SOURCES} src/nomdp_contact_execution_node.cpp)
+
+set(NOMDP_SIMULATOR_TEST_SOURCES ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+
+#add_executable(se2_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
 #add_dependencies(se2_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 #target_link_libraries(se2_simulator_test_node ${catkin_LIBRARIES} rt)
 #set_target_properties(se2_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_SE2")
 
-#add_executable(r3_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+#add_executable(r3_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
 #add_dependencies(r3_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 #target_link_libraries(r3_simulator_test_node ${catkin_LIBRARIES} rt)
 #set_target_properties(r3_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_R3")
 
-add_executable(sixdof_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+add_executable(sixdof_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
 add_dependencies(sixdof_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(sixdof_simulator_test_node ${catkin_LIBRARIES} rt)
 set_target_properties(sixdof_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_6DOF")
 
-add_executable(linked_simulator_test_node ${NOMDP_CORE_SOURCES} src/simulator_test_node.cpp)
+add_executable(linked_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
 add_dependencies(linked_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(linked_simulator_test_node ${catkin_LIBRARIES} rt)
 set_target_properties(linked_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_LINKED")
 
-add_executable(nomdp_contact_planning_node_no_ros_debug ${NOMDP_SOURCES})
+add_executable(nomdp_contact_planning_node_no_ros_debug ${NOMDP_PLANNER_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros_debug ${catkin_EXPORTED_TARGETS})
 set_target_properties(nomdp_contact_planning_node_no_ros_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DDISABLE_ROS_INTERFACE -DFORCE_DEBUG")
 
-add_executable(nomdp_contact_planning_node_debug ${NOMDP_SOURCES})
+add_executable(nomdp_contact_planning_node_debug ${NOMDP_PLANNER_SOURCES})
 add_dependencies(nomdp_contact_planning_node_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_debug ${catkin_LIBRARIES} rt)
 set_target_properties(nomdp_contact_planning_node_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DFORCE_DEBUG")
 
-add_executable(nomdp_contact_planning_node_parallel_debug ${NOMDP_SOURCES})
+add_executable(nomdp_contact_planning_node_parallel_debug ${NOMDP_PLANNER_SOURCES})
 add_dependencies(nomdp_contact_planning_node_parallel_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_parallel_debug ${catkin_LIBRARIES} rt)
 set_target_properties(nomdp_contact_planning_node_parallel_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DFORCE_DEBUG -DENABLE_PARALLEL")
 
-add_executable(nomdp_contact_planning_node ${NOMDP_SOURCES})
+add_executable(nomdp_contact_planning_node ${NOMDP_PLANNER_SOURCES})
 add_dependencies(nomdp_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node ${catkin_LIBRARIES} rt)
 set_target_properties(nomdp_contact_planning_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
 
-add_executable(nomdp_contact_planning_node_parallel ${NOMDP_SOURCES})
-add_dependencies(nomdp_contact_planning_node_parallel_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+add_executable(nomdp_contact_planning_node_parallel ${NOMDP_PLANNER_SOURCES})
+add_dependencies(nomdp_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(nomdp_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
 set_target_properties(nomdp_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL")
 
-add_executable(nomdp_contact_planning_node_no_ros ${NOMDP_SOURCES})
+add_executable(nomdp_contact_planning_node_no_ros ${NOMDP_PLANNER_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros ${catkin_EXPORTED_TARGETS})
 set_target_properties(nomdp_contact_planning_node_no_ros PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DDISABLE_ROS_INTERFACE")
 
-add_executable(nomdp_contact_planning_node_no_ros_parallel ${NOMDP_SOURCES})
+add_executable(nomdp_contact_planning_node_no_ros_parallel ${NOMDP_PLANNER_SOURCES})
 add_dependencies(nomdp_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
 set_target_properties(nomdp_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DENABLE_PARALLEL -DDISABLE_ROS_INTERFACE")
 
+add_executable(nomdp_contact_execution_node_no_ros_debug ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node_no_ros_debug ${catkin_EXPORTED_TARGETS})
+set_target_properties(nomdp_contact_execution_node_no_ros_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DDISABLE_ROS_INTERFACE -DFORCE_DEBUG")
+
+add_executable(nomdp_contact_execution_node_debug ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(nomdp_contact_execution_node_debug ${catkin_LIBRARIES} rt)
+set_target_properties(nomdp_contact_execution_node_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DFORCE_DEBUG")
+
+add_executable(nomdp_contact_execution_node_parallel_debug ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node_parallel_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(nomdp_contact_execution_node_parallel_debug ${catkin_LIBRARIES} rt)
+set_target_properties(nomdp_contact_execution_node_parallel_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DFORCE_DEBUG -DENABLE_PARALLEL")
+
+add_executable(nomdp_contact_execution_node ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(nomdp_contact_execution_node ${catkin_LIBRARIES} rt)
+set_target_properties(nomdp_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
+
+add_executable(nomdp_contact_execution_node_parallel ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(nomdp_contact_execution_node_parallel ${catkin_LIBRARIES} rt)
+set_target_properties(nomdp_contact_execution_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL")
+
+add_executable(nomdp_contact_execution_node_no_ros ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node_no_ros ${catkin_EXPORTED_TARGETS})
+set_target_properties(nomdp_contact_execution_node_no_ros PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DDISABLE_ROS_INTERFACE")
+
+add_executable(nomdp_contact_execution_node_no_ros_parallel ${NOMDP_EXECUTION_SOURCES})
+add_dependencies(nomdp_contact_execution_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
+set_target_properties(nomdp_contact_execution_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DENABLE_PARALLEL -DDISABLE_ROS_INTERFACE")
+
 if(BUILD_XEON_PHI_NATIVE)
     message(STATUS "Building executable for Xeon Phi (Native mode)")
-    add_executable(nomdp_contact_planning_node_mic ${NOMDP_SOURCES})
+    add_executable(nomdp_contact_planning_node_mic ${NOMDP_PLANNER_SOURCES})
     add_dependencies(nomdp_contact_planning_node_mic ${catkin_EXPORTED_TARGETS})
     set_target_properties(nomdp_contact_planning_node_mic PROPERTIES COMPILE_FLAGS "-I/usr/include -I/usr/include/x86_64-linux-gnu -mmic -openmp -std=c++0x ${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -DENABLE_PARALLEL -DDISABLE_ROS_INTERFACE")
 else()
