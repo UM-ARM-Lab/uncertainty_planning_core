@@ -36,9 +36,6 @@
     #include <ros/ros.h>
     #include <visualization_msgs/MarkerArray.h>
     #include <arc_utilities/eigen_helpers_conversions.hpp>
-    #include <cv_bridge/cv_bridge.h>
-    #include <sensor_msgs/Image.h>
-    #include <sensor_msgs/image_encodings.h>
 #endif
 
 #ifdef ENABLE_PARALLEL
