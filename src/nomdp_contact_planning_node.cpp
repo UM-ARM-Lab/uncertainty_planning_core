@@ -52,6 +52,7 @@ struct PLANNER_OPTIONS
     bool use_contact;
     bool use_reverse;
     bool use_spur_actions;
+    bool enable_contact_manifold_target_adjustment;
 };
 
 #ifdef USE_ROS
@@ -100,9 +101,9 @@ std::map<std::string, double> peg_in_hole_env_6dof(const PLANNER_OPTIONS& planne
     NomdpPlanningSpace<simple6dof_robot_helpers::Simple6DOFRobot, simple6dof_robot_helpers::Simple6DOFBaseSampler, Eigen::Matrix<double, 6, 1>, simple6dof_robot_helpers::EigenMatrixD61Serializer, simple6dof_robot_helpers::Simple6DOFAverager, simple6dof_robot_helpers::Simple6DOFDistancer, simple6dof_robot_helpers::Simple6DOFDimDistancer, simple6dof_robot_helpers::Simple6DOFInterpolator, std::allocator<Eigen::Matrix<double, 6, 1>>, std::mt19937_64> planning_space(false, planner_options.num_particles, planner_options.step_size, planner_options.goal_distance_threshold, planner_options.goal_probability_threshold, planner_options.signature_matching_threshold, planner_options.feasibility_alpha, planner_options.variance_alpha, robot, sampler, "peg_in_hole", env_resolution);
     // Plan & execute
 #ifdef USE_ROS
-    auto planner_result = planning_space.Plan(start, goal, planner_options.goal_bias, planner_time_limit, planner_options.max_attempt_count, planner_options.use_contact, planner_options.use_reverse, planner_options.use_spur_actions, display_debug_publisher);
+    auto planner_result = planning_space.Plan(start, goal, planner_options.goal_bias, planner_time_limit, planner_options.max_attempt_count, planner_options.use_contact, planner_options.use_reverse, planner_options.use_spur_actions, planner_options.enable_contact_manifold_target_adjustment, display_debug_publisher);
 #else
-    auto planner_result = planning_space.Plan(start, goal, planner_options.goal_bias, planner_time_limit, planner_options.max_attempt_count, planner_options.use_contact, planner_options.use_reverse, planner_options.use_spur_actions);
+    auto planner_result = planning_space.Plan(start, goal, planner_options.goal_bias, planner_time_limit, planner_options.max_attempt_count, planner_options.use_contact, planner_options.use_reverse, planner_options.use_spur_actions, planner_options.enable_contact_manifold_target_adjustment);
 #endif
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;
@@ -175,6 +176,7 @@ int main(int argc, char** argv)
     planner_options.use_contact = true;
     planner_options.use_reverse = true;
     planner_options.use_spur_actions = use_spur_actions;
+    planner_options.enable_contact_manifold_target_adjustment = false;
     // Fixed controller params
     const double kp = 0.1;
     const double ki = 0.0;

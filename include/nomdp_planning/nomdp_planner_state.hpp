@@ -20,9 +20,17 @@ namespace nomdp_planning_tools
     {
     protected:
 
+        // Changes to support online policy learning & adaptation
+        // Fix serializer and deserializer to support counts
+        // Fix the constructor in the forward propagator to use counts rather than probabilities
+
         bool initialized_;
         bool has_particles_;
         bool use_for_nearest_neighbors_;
+        uint32_t attempt_count_;
+        uint32_t reached_count_;
+        uint32_t reverse_attempt_count_;
+        uint32_t reverse_reached_count_;
         double step_size_;
         double parent_motion_Pfeasibility_;
         double raw_edge_Pfeasibility_;
@@ -33,6 +41,7 @@ namespace nomdp_planning_tools
         double space_independent_variance_;
         uint64_t state_id_;
         uint64_t transition_id_;
+        uint64_t reverse_transition_id_;
         uint64_t split_id_;
         double goal_Pfeasibility_;
         Configuration expectation_;
@@ -71,68 +80,30 @@ namespace nomdp_planning_tools
             assert(initialized_);
             const uint64_t start_buffer_size = buffer.size();
             // First thing we save is the qualified type id
-            //std::cout << "Serializing self with QualifiedTypeID: [" << GetQualifiedTypeID() << "] and QualifiedTypeID hash: [" << GetQualifiedTypeIDHash() << "]" << std::endl;
-            const uint64_t qualified_type_id_hash = GetQualifiedTypeIDHash();
-            // Now build the fixed-size serialized parts
-            const uint8_t has_particles_serialized = (uint8_t)(has_particles_);
-            const uint8_t use_for_nearest_neighbors_serialized = (uint8_t)(use_for_nearest_neighbors_);
-            const uint64_t fixed_size_buffer_size = sizeof(qualified_type_id_hash)
-                                                    + sizeof(has_particles_serialized)
-                                                    + sizeof(use_for_nearest_neighbors_serialized)
-                                                    + sizeof(step_size_)
-                                                    + sizeof(parent_motion_Pfeasibility_)
-                                                    + sizeof(raw_edge_Pfeasibility_)
-                                                    + sizeof(effective_edge_Pfeasibility_)
-                                                    + sizeof(reverse_edge_Pfeasibility_)
-                                                    + sizeof(motion_Pfeasibility_)
-                                                    + sizeof(variance_)
-                                                    + sizeof(space_independent_variance_)
-                                                    + sizeof(state_id_)
-                                                    + sizeof(transition_id_)
-                                                    + sizeof(split_id_)
-                                                    + sizeof(goal_Pfeasibility_);
-            std::vector<uint8_t> temp_buffer(fixed_size_buffer_size, 0x00);
-            // Copy everything over
-            uint64_t current_position = 0u;
-            memcpy(&temp_buffer[current_position], &qualified_type_id_hash, sizeof(qualified_type_id_hash));
-            current_position += sizeof(qualified_type_id_hash);
-            memcpy(&temp_buffer[current_position], &has_particles_serialized, sizeof(has_particles_serialized));
-            current_position += sizeof(has_particles_serialized);
-            memcpy(&temp_buffer[current_position], &use_for_nearest_neighbors_serialized, sizeof(use_for_nearest_neighbors_serialized));
-            current_position += sizeof(use_for_nearest_neighbors_serialized);
-            memcpy(&temp_buffer[current_position], &step_size_, sizeof(step_size_));
-            current_position += sizeof(step_size_);
-            memcpy(&temp_buffer[current_position], &parent_motion_Pfeasibility_, sizeof(parent_motion_Pfeasibility_));
-            current_position += sizeof(parent_motion_Pfeasibility_);
-            memcpy(&temp_buffer[current_position], &raw_edge_Pfeasibility_, sizeof(raw_edge_Pfeasibility_));
-            current_position += sizeof(raw_edge_Pfeasibility_);
-            memcpy(&temp_buffer[current_position], &effective_edge_Pfeasibility_, sizeof(effective_edge_Pfeasibility_));
-            current_position += sizeof(effective_edge_Pfeasibility_);
-            memcpy(&temp_buffer[current_position], &reverse_edge_Pfeasibility_, sizeof(reverse_edge_Pfeasibility_));
-            current_position += sizeof(reverse_edge_Pfeasibility_);
-            memcpy(&temp_buffer[current_position], &motion_Pfeasibility_, sizeof(motion_Pfeasibility_));
-            current_position += sizeof(motion_Pfeasibility_);
-            memcpy(&temp_buffer[current_position], &variance_, sizeof(variance_));
-            current_position += sizeof(variance_);
-            memcpy(&temp_buffer[current_position], &space_independent_variance_, sizeof(space_independent_variance_));
-            current_position += sizeof(space_independent_variance_);
-            memcpy(&temp_buffer[current_position], &state_id_, sizeof(state_id_));
-            current_position += sizeof(state_id_);
-            memcpy(&temp_buffer[current_position], &transition_id_, sizeof(transition_id_));
-            current_position += sizeof(transition_id_);
-            memcpy(&temp_buffer[current_position], &split_id_, sizeof(split_id_));
-            current_position += sizeof(split_id_);
-            memcpy(&temp_buffer[current_position], &goal_Pfeasibility_, sizeof(goal_Pfeasibility_));
-            current_position += sizeof(goal_Pfeasibility_);
-            // Serialize the variable-sized parts
-            ConfigSerializer::Serialize(expectation_, temp_buffer);
-            ConfigSerializer::Serialize(command_, temp_buffer);
-            EigenHelpers::Serialize(variances_, temp_buffer);
-            EigenHelpers::Serialize(space_independent_variances_, temp_buffer);
+            arc_helpers::SerializeFixedSizePOD<uint64_t>(GetQualifiedTypeIDHash(), buffer);
+            arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)has_particles_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)use_for_nearest_neighbors_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint32_t>(attempt_count_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint32_t>(reached_count_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint32_t>(reverse_attempt_count_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint32_t>(reverse_reached_count_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(step_size_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(parent_motion_Pfeasibility_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(effective_edge_Pfeasibility_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(motion_Pfeasibility_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(variance_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(space_independent_variance_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint64_t>(state_id_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint64_t>(transition_id_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint64_t>(reverse_transition_id_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint64_t>(split_id_, buffer);
+            arc_helpers::SerializeFixedSizePOD<double>(goal_Pfeasibility_, buffer);
+            ConfigSerializer::Serialize(expectation_, buffer);
+            ConfigSerializer::Serialize(command_, buffer);
+            EigenHelpers::Serialize(variances_, buffer);
+            EigenHelpers::Serialize(space_independent_variances_, buffer);
             // Serialize the particles
-            arc_helpers::SerializeVector<Configuration, ConfigAlloc>(particles_, temp_buffer, &ConfigSerializer::Serialize);
-            // Move into the buffer
-            buffer.insert(buffer.end(), temp_buffer.begin(), temp_buffer.end());
+            arc_helpers::SerializeVector<Configuration, ConfigAlloc>(particles_, buffer, &ConfigSerializer::Serialize);
             // Figure out how many bytes we wrote
             const uint64_t end_buffer_size = buffer.size();
             const uint64_t bytes_written = end_buffer_size - start_buffer_size;
@@ -148,69 +119,71 @@ namespace nomdp_planning_tools
 
         inline uint64_t DeserializeSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
+            uint64_t current_position = current;
             // First thing we load and check is the qualified type ID so we know that we're loading our state properly
             // First thing we save is the qualified type id
             const uint64_t reference_qualified_type_id_hash = GetQualifiedTypeIDHash();
-            // Now build the fixed-size serialized parts
-            uint8_t has_particles_serialized = 0x00;
-            uint8_t use_for_nearest_neighbors_serialized = 0x00;
-            const uint64_t fixed_size_buffer_size = sizeof(reference_qualified_type_id_hash)
-                                                    + sizeof(has_particles_serialized)
-                                                    + sizeof(use_for_nearest_neighbors_serialized)
-                                                    + sizeof(step_size_)
-                                                    + sizeof(parent_motion_Pfeasibility_)
-                                                    + sizeof(raw_edge_Pfeasibility_)
-                                                    + sizeof(effective_edge_Pfeasibility_)
-                                                    + sizeof(reverse_edge_Pfeasibility_)
-                                                    + sizeof(motion_Pfeasibility_)
-                                                    + sizeof(variance_)
-                                                    + sizeof(space_independent_variance_)
-                                                    + sizeof(state_id_)
-                                                    + sizeof(transition_id_)
-                                                    + sizeof(split_id_)
-                                                    + sizeof(goal_Pfeasibility_);
-            assert(current < buffer.size());
-            assert((current + fixed_size_buffer_size) <= buffer.size());
-            // Load the stored type ID header
-            uint64_t current_position = current;
-            uint64_t qualified_type_id_hash = 0u;
-            memcpy(&qualified_type_id_hash, &buffer[current_position], sizeof(qualified_type_id_hash));
-            current_position += sizeof(qualified_type_id_hash);
+            const std::pair<uint64_t, uint64_t> deserialized_qualified_type_id_hash = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            const uint64_t qualified_type_id_hash = deserialized_qualified_type_id_hash.first;
+            current_position += deserialized_qualified_type_id_hash.second;
             // Check types
             //std::cout << "Reference TypeID hash: " << reference_qualified_type_id_hash << std::endl;
             //std::cout << "Loaded TypeID hash: " << qualified_type_id_hash << std::endl;
             assert(qualified_type_id_hash == reference_qualified_type_id_hash);
-            // Copy the remaining fixed-size elements
-            memcpy(&has_particles_serialized, &buffer[current_position], sizeof(has_particles_serialized));
-            current_position += sizeof(has_particles_serialized);
-            has_particles_ = (bool)has_particles_serialized;
-            memcpy(&use_for_nearest_neighbors_serialized, &buffer[current_position], sizeof(use_for_nearest_neighbors_serialized));
-            current_position += sizeof(use_for_nearest_neighbors_serialized);
-            use_for_nearest_neighbors_ = (bool)use_for_nearest_neighbors_serialized;
-            memcpy(&step_size_, &buffer[current_position], sizeof(step_size_));
-            current_position += sizeof(step_size_);
-            memcpy(&parent_motion_Pfeasibility_, &buffer[current_position], sizeof(parent_motion_Pfeasibility_));
-            current_position += sizeof(parent_motion_Pfeasibility_);
-            memcpy(&raw_edge_Pfeasibility_, &buffer[current_position], sizeof(raw_edge_Pfeasibility_));
-            current_position += sizeof(raw_edge_Pfeasibility_);
-            memcpy(&effective_edge_Pfeasibility_, &buffer[current_position], sizeof(effective_edge_Pfeasibility_));
-            current_position += sizeof(effective_edge_Pfeasibility_);
-            memcpy(&reverse_edge_Pfeasibility_, &buffer[current_position], sizeof(reverse_edge_Pfeasibility_));
-            current_position += sizeof(reverse_edge_Pfeasibility_);
-            memcpy(&motion_Pfeasibility_, &buffer[current_position], sizeof(motion_Pfeasibility_));
-            current_position += sizeof(motion_Pfeasibility_);
-            memcpy(&variance_, &buffer[current_position], sizeof(variance_));
-            current_position += sizeof(variance_);
-            memcpy(&space_independent_variance_, &buffer[current_position], sizeof(space_independent_variance_));
-            current_position += sizeof(space_independent_variance_);
-            memcpy(&state_id_, &buffer[current_position], sizeof(state_id_));
-            current_position += sizeof(state_id_);
-            memcpy(&transition_id_, &buffer[current_position], sizeof(transition_id_));
-            current_position += sizeof(transition_id_);
-            memcpy(&split_id_, &buffer[current_position], sizeof(split_id_));
-            current_position += sizeof(split_id_);
-            memcpy(&goal_Pfeasibility_, &buffer[current_position], sizeof(goal_Pfeasibility_));
-            current_position += sizeof(goal_Pfeasibility_);
+            // Load fixed size members
+            const std::pair<uint8_t, uint64_t> deserialized_has_particles = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+            has_particles_ = (bool)deserialized_has_particles.first;
+            current_position += deserialized_has_particles.second;
+            const std::pair<uint8_t, uint64_t> deserialized_use_for_nearest_neighbors = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+            use_for_nearest_neighbors_ = (bool)deserialized_use_for_nearest_neighbors.first;
+            current_position += deserialized_use_for_nearest_neighbors.second;
+            const std::pair<uint32_t, uint64_t> deserialized_attempt_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            attempt_count_ = deserialized_attempt_count.first;
+            current_position += deserialized_attempt_count.second;
+            const std::pair<uint32_t, uint64_t> deserialized_reached_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            reached_count_ = deserialized_reached_count.first;
+            current_position += deserialized_reached_count.second;
+            raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
+            const std::pair<uint32_t, uint64_t> deserialized_reverse_attempt_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            reverse_attempt_count_ = deserialized_reverse_attempt_count.first;
+            current_position += deserialized_reverse_attempt_count.second;
+            const std::pair<uint32_t, uint64_t> deserialized_reverse_reached_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            reverse_reached_count_ = deserialized_reverse_reached_count.first;
+            current_position += deserialized_reverse_reached_count.second;
+            reverse_edge_Pfeasibility_ = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
+            const std::pair<double, uint64_t> deserialized_step_size = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            step_size_ = deserialized_step_size.first;
+            current_position += deserialized_step_size.second;
+            const std::pair<double, uint64_t> deserialized_parent_motion_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            parent_motion_Pfeasibility_ = deserialized_parent_motion_Pfeasibility.first;
+            current_position += deserialized_parent_motion_Pfeasibility.second;
+            const std::pair<double, uint64_t> deserialized_effective_edge_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            effective_edge_Pfeasibility_ = deserialized_effective_edge_Pfeasibility.first;
+            current_position += deserialized_effective_edge_Pfeasibility.second;
+            const std::pair<double, uint64_t> deserialized_motion_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            motion_Pfeasibility_ = deserialized_motion_Pfeasibility.first;
+            current_position += deserialized_motion_Pfeasibility.second;
+            const std::pair<double, uint64_t> deserialized_variance = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            variance_ = deserialized_variance.first;
+            current_position += deserialized_variance.second;
+            const std::pair<double, uint64_t> deserialized_space_independent_variance = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            space_independent_variance_ = deserialized_space_independent_variance.first;
+            current_position += deserialized_space_independent_variance.second;
+            const std::pair<uint64_t, uint64_t> deserialized_state_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            state_id_ = deserialized_state_id.first;
+            current_position += deserialized_state_id.second;
+            const std::pair<uint64_t, uint64_t> deserialized_transition_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            transition_id_ = deserialized_transition_id.first;
+            current_position += deserialized_transition_id.second;
+            const std::pair<uint64_t, uint64_t> deserialized_reverse_transition_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            reverse_transition_id_ = deserialized_reverse_transition_id.first;
+            current_position += deserialized_reverse_transition_id.second;
+            const std::pair<uint64_t, uint64_t> deserialized_split_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            split_id_ = deserialized_split_id.first;
+            current_position += deserialized_split_id.second;
+            const std::pair<double, uint64_t> deserialized_goal_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            goal_Pfeasibility_ = deserialized_goal_Pfeasibility.first;
+            current_position += deserialized_goal_Pfeasibility.second;
             // Load the variable-sized components
             const std::pair<Configuration, uint64_t> deserialized_expectation = ConfigSerializer::Deserialize(buffer, current_position);
             expectation_ = deserialized_expectation.first;
@@ -242,6 +215,8 @@ namespace nomdp_planning_tools
             expectation_ = expectation;
             particles_ = std::vector<Configuration, ConfigAlloc>{expectation_};
             UpdateStatistics();
+            attempt_count_ = 1u;
+            reached_count_ = 1u;
             parent_motion_Pfeasibility_ = 1.0;
             raw_edge_Pfeasibility_ = 1.0;
             effective_edge_Pfeasibility_ = 1.0;
@@ -252,30 +227,36 @@ namespace nomdp_planning_tools
             use_for_nearest_neighbors_ = true;
             split_id_ = 0u;
             transition_id_ = 0;
+            reverse_transition_id_ = 0;
             goal_Pfeasibility_ = 0.0;
         }
 
-        inline NomdpPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const double raw_edge_Pfeasibility, const double effective_edge_Pfeasibility, const double reverse_edge_Pfeasibility, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t split_id)
+        inline NomdpPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
         {
             state_id_ = state_id;
             step_size_ = step_size;
             particles_ = particles;
             UpdateStatistics();
+            attempt_count_ = attempt_count;
+            reached_count_ = reached_count;
+            reverse_attempt_count_ = reverse_attempt_count;
+            reverse_reached_count_ = reverse_reached_count;
             parent_motion_Pfeasibility_ = parent_motion_Pfeasibility;
-            raw_edge_Pfeasibility_ = raw_edge_Pfeasibility;
+            raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
             effective_edge_Pfeasibility_ = effective_edge_Pfeasibility;
-            reverse_edge_Pfeasibility_ = reverse_edge_Pfeasibility;
+            reverse_edge_Pfeasibility_ = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
             motion_Pfeasibility_ = effective_edge_Pfeasibility_ * parent_motion_Pfeasibility_;
             initialized_ = true;
             has_particles_ = true;
             use_for_nearest_neighbors_ = true;
             command_ = command;
             transition_id_ = transition_id;
+            reverse_transition_id_ = reverse_transition_id;
             split_id_ = split_id;
             goal_Pfeasibility_ = 0.0;
         }
 
-        inline NomdpPlannerState() : initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false), state_id_(0), transition_id_(0), split_id_(0u), goal_Pfeasibility_(0.0) {}
+        inline NomdpPlannerState() : initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), goal_Pfeasibility_(0.0) {}
 
         inline bool IsInitialized() const
         {
@@ -337,6 +318,32 @@ namespace nomdp_planning_tools
             return goal_Pfeasibility_;
         }
 
+        inline std::pair<uint32_t, uint32_t> GetAttemptAndReachedCounts() const
+        {
+            return std::make_pair(attempt_count_, reached_count_);
+        }
+
+        inline std::pair<uint32_t, uint32_t> GetReverseAttemptAndReachedCounts() const
+        {
+            return std::make_pair(reverse_attempt_count_, reverse_reached_count_);
+        }
+
+        inline void UpdateAttemptAndReachedCounts(const uint32_t attempt_count, const uint32_t reached_count)
+        {
+            attempt_count_ = attempt_count;
+            reached_count_ = reached_count;
+            raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
+            std::cout << "Updated attempted/reached counts to " << attempt_count_ << "/" << reached_count_ << " with new edge P(feasibility) " << raw_edge_Pfeasibility_ << std::endl;
+        }
+
+        inline void UpdateReverseAttemptAndReachedCounts(const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count)
+        {
+            reverse_attempt_count_ = reverse_attempt_count;
+            reverse_reached_count_ = reverse_reached_count;
+            reverse_edge_Pfeasibility_ = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
+            std::cout << "Updated reverse attempted/reached counts to " << reverse_attempt_count_ << "/" << reverse_reached_count_ << " with new edge P(feasibility) " << reverse_edge_Pfeasibility_ << std::endl;
+        }
+
         inline double SetEffectiveEdgePfeasibility(const double effective_edge_Pfeasibility)
         {
             effective_edge_Pfeasibility_ = effective_edge_Pfeasibility;
@@ -366,6 +373,11 @@ namespace nomdp_planning_tools
         inline uint64_t GetTransitionId() const
         {
             return transition_id_;
+        }
+
+        inline uint64_t GetReverseTransitionId() const
+        {
+            return reverse_transition_id_;
         }
 
         inline uint64_t GetSplitId() const

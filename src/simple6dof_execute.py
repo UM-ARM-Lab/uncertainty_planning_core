@@ -15,6 +15,7 @@ import geometry_msgs.msg
 import nomdp_planning.srv
 import nav_msgs.msg
 import threading
+import thruster_robot_examples.srv
 from sensitivity_learning.transformation_helper import *
 
 
@@ -39,7 +40,7 @@ def normalize_quaternion(q_raw):
 
 class ExecuteServer(object):
 
-    def __init__(self, service_path, command_topic, abort_service, feedback_topic, max_execution_time, error_threshold, exec_time_limit):
+    def __init__(self, service_path, command_topic, abort_service, teleport_service, feedback_topic, max_execution_time, error_threshold, exec_time_limit):
         self.max_execution_time = max_execution_time
         self.error_threshold = error_threshold
         self.exec_time_limit = exec_time_limit
@@ -48,6 +49,7 @@ class ExecuteServer(object):
         self.execution_lock = threading.Lock()
         self.command_publisher = rospy.Publisher(command_topic, geometry_msgs.msg.PoseStamped, queue_size=1)
         self.abort_client = rospy.ServiceProxy(abort_service, std_srvs.srv.Empty)
+        self.teleport_client = rospy.ServiceProxy(teleport_service, thruster_robot_examples.srv.Teleport)
         self.server = rospy.Service(service_path, nomdp_planning.srv.Simple6dofRobotMove, self.service_handler)
         self.feedback_sub = rospy.Subscriber(feedback_topic, nav_msgs.msg.Odometry, self.feedback_cb, queue_size=1)
         spin_rate = rospy.Rate(10.0)
@@ -58,25 +60,31 @@ class ExecuteServer(object):
     def service_handler(self, request):
         rospy.loginfo("Received execution service call")
         with self.execution_lock:
-            rospy.loginfo("Executing to " + str(request.target))
-            robot_target = request.target
-            self.command_to_target(robot_target)
-            start_time = rospy.Time.now()
-            rospy.sleep(5.0)
-            cur_time = rospy.Time.now()
-            elapsed_time = (cur_time - start_time).to_sec()
-            done = False
-            while not done and elapsed_time <= self.exec_time_limit:
-                with self.storage_lock:
-                    error = self.compute_error(self.trajectory_storage[-1].pose, request.target.pose)
-                    if error <= self.error_threshold:
-                        done = True
-                rospy.sleep(0.1)
+            if request.reset:
+                rospy.loginfo("Resetting to " + str(request.target))
+                self.command_stop()
+                rospy.sleep(2.5)
+                self.command_teleport(request.target)
+            else:
+                rospy.loginfo("Executing to " + str(request.target))
+                robot_target = request.target
+                self.command_to_target(robot_target)
+                start_time = rospy.Time.now()
+                rospy.sleep(5.0)
                 cur_time = rospy.Time.now()
                 elapsed_time = (cur_time - start_time).to_sec()
-            rospy.loginfo("Commanding stop")
-            self.command_stop()
-            rospy.sleep(5.0)
+                done = False
+                while not done and elapsed_time <= self.exec_time_limit:
+                    with self.storage_lock:
+                        error = self.compute_error(self.trajectory_storage[-1].pose, request.target.pose)
+                        if error <= self.error_threshold:
+                            done = True
+                    rospy.sleep(0.1)
+                    cur_time = rospy.Time.now()
+                    elapsed_time = (cur_time - start_time).to_sec()
+                rospy.loginfo("Commanding stop")
+                #self.command_stop()
+                #rospy.sleep(2.5)
             # Make the response
             with self.storage_lock:
                 rospy.loginfo("Assembling response")
@@ -102,6 +110,11 @@ class ExecuteServer(object):
         with self.storage_lock:
             self.trajectory_storage.append(feedback_pose)
 
+    def command_teleport(self, target_pose):
+        req = thruster_robot_examples.srv.TeleportRequest()
+        req.target_pose = target_pose
+        self.teleport_client.call(req)
+
     def command_to_target(self, target_pose):
         self.command_publisher.publish(target_pose)
 
@@ -112,4 +125,4 @@ class ExecuteServer(object):
 if __name__ == '__main__':
     rospy.init_node("simple6dof_execute_server")
     rospy.loginfo("Starting...")
-    ExecuteServer("simple_6dof_robot_move", "vehicle_bus/target_pose", "vehicle_bus/target_pose/abort", "vehicle_bus/pose", 10.0, 0.01, 40.0)
+    ExecuteServer("simple_6dof_robot_move", "vehicle_bus/target_pose", "vehicle_bus/target_pose/abort", "vehicle_bus/bus/teleport", "vehicle_bus/pose", 10.0, 0.01, 20.0)

@@ -47,6 +47,8 @@ struct PLANNER_OPTIONS
     uint32_t num_policy_executions;
     // Execution limits
     uint32_t exec_step_limit;
+    // Execution behavior
+    bool enable_contact_manifold_target_adjustment;
 };
 
 inline Eigen::Matrix<double, 6, 1> ConvertRobotPoseToConfiguration(const Eigen::Affine3d& pose)
@@ -68,16 +70,25 @@ inline double execution_distance_fn(const Eigen::Matrix<double, 6, 1>& q1, const
 }
 
 #ifdef USE_ROS
-inline std::vector<Eigen::Matrix<double, 6, 1>> move_robot(const Eigen::Matrix<double, 6, 1>& target_configuration, simple6dof_robot_helpers::Simple6DOFRobot robot, ros::ServiceClient& robot_control_service)
+inline std::vector<Eigen::Matrix<double, 6, 1>> move_robot(const Eigen::Matrix<double, 6, 1>& target_configuration, const bool reset, simple6dof_robot_helpers::Simple6DOFRobot robot, ros::ServiceClient& robot_control_service)
 {
     std::cout << "Commanding robot to configuration: " << PrettyPrint::PrettyPrint(target_configuration) << std::endl;
     robot.UpdatePosition(target_configuration);
     const Eigen::Affine3d target_transform = robot.GetLinkTransform("robot");
-    std::cout << "Commanding robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
     const geometry_msgs::PoseStamped target_pose = EigenHelpersConversions::EigenAffine3dToGeometryPoseStamped(target_transform, "world");
     // Put together service call
     nomdp_planning::Simple6dofRobotMove::Request req;
     req.target = target_pose;
+    if (reset)
+    {
+        std::cout << "Resetting robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
+        req.reset = true;
+    }
+    else
+    {
+        std::cout << "Commanding robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
+        req.reset = false;
+    }
     nomdp_planning::Simple6dofRobotMove::Response res;
     // Call service
     try
@@ -155,23 +166,22 @@ std::map<std::string, double> peg_in_hole_env_6dof(const PLANNER_OPTIONS& planne
 #ifdef USE_ROS
     std::cout << "Press ENTER to simulate policy..." << std::endl;
     std::cin.get();
-    const auto policy_simulation_stats = planning_space.SimulateExectionPolicy(policy, start, goal, planner_options.num_policy_simulations, planner_options.exec_step_limit, display_debug_publisher, true, false);
-    std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats, true) << std::endl;
-    complete_policy_stats["Policy simulation success"] = policy_simulation_stats.first;
+    const auto policy_simulation_stats = planning_space.SimulateExectionPolicy(policy, start, goal, planner_options.num_policy_simulations, planner_options.exec_step_limit, planner_options.enable_contact_manifold_target_adjustment, display_debug_publisher, true, false);
+    std::cout << "Policy simulation success: " << policy_simulation_stats.first.second << std::endl;
+    complete_policy_stats["Policy simulation success"] = policy_simulation_stats.first.second;
     complete_policy_stats["Policy simulation successful resolves"] = policy_simulation_stats.second.first;
     complete_policy_stats["Policy simulation unsuccessful resolves"] = policy_simulation_stats.second.second;
     std::cout << "Press ENTER to execute policy..." << std::endl;
     std::cin.get();
-    std::function<std::vector<Eigen::Matrix<double, 6, 1>>(const Eigen::Matrix<double, 6, 1>&)> robot_execution_fn = [&] (const Eigen::Matrix<double, 6, 1>& target_configuration) { return move_robot(target_configuration, robot, robot_control_service); };
+    std::function<std::vector<Eigen::Matrix<double, 6, 1>>(const Eigen::Matrix<double, 6, 1>&, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 6, 1>& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot, robot_control_service); };
     std::function<double(const Eigen::Matrix<double, 6, 1>&, const Eigen::Matrix<double, 6, 1>&)> exec_dist_fn = [&] (const Eigen::Matrix<double, 6, 1>& q1, const Eigen::Matrix<double, 6, 1>& q2) { return execution_distance_fn(q1, q2, robot); };
-    const double execution_success = planning_space.ExecuteExectionPolicy(policy, start, goal, robot_execution_fn, exec_dist_fn, planner_options.num_policy_executions, planner_options.exec_step_limit);
-    std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(execution_success, true) << std::endl;
-    complete_policy_stats["Policy execution success"] = execution_success;
+    const auto execution_results = planning_space.ExecuteExectionPolicy(policy, start, goal, robot_execution_fn, exec_dist_fn, planner_options.num_policy_executions, planner_options.exec_step_limit, display_debug_publisher, true, false);
+    std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(execution_results.second, true) << std::endl;
+    complete_policy_stats["Policy execution success"] = execution_results.second;
 #else
-    std::pair<double, std::pair<double, double>> policy_exec_stats = planning_space.SimulateExectionPolicy(policy, start, goal, planner_options.num_policy_simulations, planner_options.exec_step_limit);
-    const auto policy_stats = policy_exec_stats;
-    std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(policy_stats, true) << std::endl;
-    complete_policy_stats["Policy success"] = policy_stats.first;
+    const auto policy_stats = planning_space.SimulateExectionPolicy(policy, start, goal, planner_options.num_policy_simulations, planner_options.exec_step_limit, planner_options.enable_contact_manifold_target_adjustment);
+    std::cout << "Policy execution success: " << policy_stats.first.second << std::endl;
+    complete_policy_stats["Policy success"] = policy_stats.first.second;
     complete_policy_stats["Policy simulation successful resolves"] = policy_stats.second.first;
     complete_policy_stats["Policy simulation unsuccessful resolves"] = policy_stats.second.second;
 #endif
@@ -212,7 +222,8 @@ int main(int argc, char** argv)
     const double env_resolution = 0.125;
     // Planner params
     PLANNER_OPTIONS planner_options;
-    planner_options.exec_step_limit = 100u;
+    planner_options.enable_contact_manifold_target_adjustment = false;
+    planner_options.exec_step_limit = 1000u;
     planner_options.step_size = 10.0 * env_resolution;
     planner_options.goal_probability_threshold = goal_probability_threshold;
     planner_options.goal_distance_threshold = 1.0 * env_resolution;
@@ -243,7 +254,7 @@ int main(int argc, char** argv)
     }
     // Print out the results & save them to the log file
     const std::string log_results = PrettyPrint::PrettyPrint(policy_performance, false, "\n");
-    std::cout << "Policy results for " << num_particles << " particles:\nAll: " << log_results << std::endl;
+    std::cout << "Policy results for :\nAll: " << log_results << std::endl;
     std::ofstream log_file(log_filename, std::ios_base::out | std::ios_base::app);
     if (!log_file.is_open())
     {

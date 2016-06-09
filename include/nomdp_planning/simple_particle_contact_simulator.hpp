@@ -1158,7 +1158,7 @@ namespace nomdp_planning_tools
     #endif
 
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
-        inline std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const uint32_t forward_simulation_steps, const double simulation_shortcut_distance, const bool use_individual_jacobians, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing=false) const
+        inline std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const uint32_t forward_simulation_steps, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
         {
             // Configure the robot
             robot.UpdatePosition(start_position);
@@ -1169,8 +1169,9 @@ namespace nomdp_planning_tools
                 // Step forward via the simulator
                 // Have robot compute next control input first
                 // Then, in a second funtion *not* in a callback, apply that control input
-                const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, rng);
-                std::pair<Configuration, bool> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, use_individual_jacobians, trace, enable_tracing);
+                const Eigen::VectorXd initial_control_action = robot.GenerateControlAction(target_position, rng);
+                const Eigen::VectorXd control_action = enable_contact_manifold_target_adjustment ? PerformContactManifoldTargetAdjustment(robot, initial_control_action) : initial_control_action;
+                const std::pair<Configuration, bool> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, use_individual_jacobians, trace, enable_tracing);
                 robot.UpdatePosition(result.first);
                 // Check if we've collided with the environment
                 if (result.second)
@@ -1186,6 +1187,104 @@ namespace nomdp_planning_tools
             }
             // Return the ending position of the robot and if it has collided during simulation
             return std::pair<Configuration, bool>(robot.GetPosition(), collided);
+        }
+
+        template<typename Robot>
+        inline Eigen::VectorXd PerformContactManifoldTargetAdjustment(const Robot& robot, const Eigen::VectorXd& initial_control_action) const
+        {
+            // Basically, we do J(q) * qdot = xdot --adjust target--> x'dot --> J(q)+ * x'dot = q'dot (actually, we don't because J(q)+ for everything is expensive!)
+            // Instead, we do J(q) * qdot = xdot --adjust some points xs in x--> xs'dot --> J(q)+ * xs'dot = qdotadjustment --> q'dot = qdot + qdotadjustment
+            // Get the list of link name + link points for all the links of the robot
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
+            // Make space for the xgradient and Jacobian
+            Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians;
+            Eigen::Matrix<double, Eigen::Dynamic, 1> point_corrections;
+            // Now, go through the links and points of the robot to build up the xgradient and Jacobian
+            bool cmta_needed = false;
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Check for interaction forces
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    // Get the Jacobian for the current point
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    // xdot = J(q, p) * qdot
+                    const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * initial_control_action;
+                    const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                    //std::cout << "Point jacobian: " << point_jacobian << std::endl;
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    // We only work with points in the SDF
+                    if (environment_sdf_.CheckInBounds(environment_relative_point))
+                    {
+                        const float distance = environment_sdf_.Get(environment_relative_point);
+                        // We only work with points in contact
+                        if (distance <= (environment_sdf_.GetResolution() * 1.5))
+                        {
+                            cmta_needed = true;
+                            // Get the interaction force (approximate) from the SDF
+                            const std::vector<double> sdf_gradient_query = environment_sdf_.GetGradient(environment_relative_point, true);
+                            assert(sdf_gradient_query.size() == 3);
+                            const Eigen::Vector3d raw_interaction_force = EigenHelpers::StdVectorDoubleToEigenVector3d(sdf_gradient_query);
+                            // Check if we need to worry about the interaction force
+                            const double PMdotRIF = point_motion.dot(raw_interaction_force);
+                            if (PMdotRIF < -0.0)
+                            {
+                                // Now, adjust the desired point motion so we don't increase the interaction force
+                                // Project the interaction force back on the desired point motion, basically scale down motion that would increase the interation force
+                                // Take the projection of the motion onto the interaction force, scale it down, and subtract it from the motion
+                                const double RIFdotRIF = raw_interaction_force.dot(raw_interaction_force);
+                                const Eigen::Vector3d PMprojonRIF = (PMdotRIF / RIFdotRIF) * point_motion;
+                                const double PMprojonRIFmag = PMprojonRIF.norm();
+                                const double desiredPMprojonRIFmag = (PMprojonRIFmag > environment_sdf_.GetResolution()) ? environment_sdf_.GetResolution() : PMprojonRIFmag;
+                                const Eigen::Vector3d scaledPMprojonRIF = (PMprojonRIFmag > environment_sdf_.GetResolution()) ? (Eigen::Vector3d)((1.0 - (desiredPMprojonRIFmag / PMprojonRIFmag)) * PMprojonRIF) : PMprojonRIF;
+                                const Eigen::Vector3d corrected_point_motion = point_motion - scaledPMprojonRIF;
+                                const Eigen::Vector3d desired_point_motion = corrected_point_motion;
+                                std::cout << "Adjusted point motion from " << PrettyPrint::PrettyPrint(point_motion) << " to " << PrettyPrint::PrettyPrint(desired_point_motion) << " to reduce interaction forces" << std::endl;
+                                // Append the new point jacobian to the matrix of jacobians
+                                Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> extended_robot_jacobians;
+                                extended_robot_jacobians.resize(robot_jacobians.rows() + 3, point_jacobian.cols());
+                                if (robot_jacobians.cols() > 0)
+                                {
+                                    extended_robot_jacobians << robot_jacobians,point_jacobian;
+                                }
+                                else
+                                {
+                                    extended_robot_jacobians << point_jacobian;
+                                }
+                                robot_jacobians = extended_robot_jacobians;
+                                Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_corrections;
+                                extended_point_corrections.resize(point_corrections.rows() + 3, Eigen::NoChange);
+                                extended_point_corrections << point_corrections,desired_point_motion;
+                                point_corrections = extended_point_corrections;
+                            }
+                        }
+                    }
+                }
+            }
+            if (cmta_needed)
+            {
+                std::cout << "+++++ Performing Contact Manifold Target Adjustment +++++" << std::endl;
+                std::cout << "Adjusting control action via J(q,p) * qdot = pdot --> J(q,p)+ * p'dot" << std::endl;
+                // We could use the naive Pinv(J) * pdot, but instead we solve the Ax = b (Jqdot = pdot) problem directly using one of the solvers in Eigen
+                const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = robot_jacobians.colPivHouseholderQr().solve(point_corrections);
+                // Extract the c-space correction
+                const Eigen::VectorXd new_control_action_adjustment = raw_correction.col(0);
+                const Eigen::VectorXd new_control_action = initial_control_action + new_control_action_adjustment;
+                std::cout << "Adjusted control action from " << PrettyPrint::PrettyPrint(initial_control_action) << " to " << PrettyPrint::PrettyPrint(new_control_action) << " to reduce interaction forces" << std::endl;
+                return new_control_action;
+            }
+            else
+            {
+                return initial_control_action;
+            }
         }
 
         template<typename Robot>
@@ -1506,7 +1605,9 @@ namespace nomdp_planning_tools
             const double max_robot_motion_per_step = robot.GetMaxMotionPerStep();
             const double step_motion_estimate = step_norm * max_robot_motion_per_step;
             const double allowed_microstep_distance = GetResolution() * 0.5;
-            uint32_t number_microsteps = (uint32_t)ceil(step_motion_estimate / allowed_microstep_distance);
+            const uint32_t number_microsteps = (uint32_t)ceil(step_motion_estimate / allowed_microstep_distance);
+            assert(number_microsteps > 0);
+            //std::cout << "Resolving simulation step with estimated motion " << step_motion_estimate << " in " << number_microsteps << " microsteps" << std::endl;
             const Eigen::VectorXd control_input_step = control_input * (1.0 / (double)number_microsteps);
             bool collided = false;
             if (enable_tracing)
@@ -1542,7 +1643,7 @@ namespace nomdp_planning_tools
                     {
                         const Eigen::VectorXd raw_correction_step = use_individual_jacobians ? ComputeResolverCorrectionStepIndividualJacobians(robot, robot_links_points, control_input_step, self_collision_map) : ComputeResolverCorrectionStepStackedJacobian(robot, robot_links_points, control_input_step, self_collision_map);
                         //std::cout << "Raw Cstep: " << raw_correction_step << std::endl;
-                        // Sclae down the size of the correction step
+                        // Scale down the size of the correction step
                         const double correction_step_norm = raw_correction_step.norm();
                         const double correction_step_motion_estimate = correction_step_norm * max_robot_motion_per_step;
                         const double step_fraction = std::max((correction_step_motion_estimate / allowed_microstep_distance), 1.0);

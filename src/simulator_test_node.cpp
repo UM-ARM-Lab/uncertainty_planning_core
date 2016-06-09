@@ -641,6 +641,7 @@ int main(int argc, char** argv)
     const simplelinked_robot_helpers::SimpleLinkedConfiguration& start = start_and_goal.first;
     const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal = start_and_goal.second;
 #endif
-    planning_space.DemonstrateSimulator(start, goal, display_debug_publisher);
+    const bool enable_contact_manifold_target_adjustment = false;
+    planning_space.DemonstrateSimulator(start, goal, enable_contact_manifold_target_adjustment, display_debug_publisher);
     return 0;
 }

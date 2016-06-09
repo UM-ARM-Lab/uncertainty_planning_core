@@ -303,10 +303,10 @@ namespace simple6dof_robot_helpers
 
     public:
 
-        static inline double ComputeMaxMotionPerStep(Simple6DOFRobot robot)
+        inline double ComputeMaxMotionPerStep() const
         {
             double max_motion = 0.0;
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = GetRawLinksPoints();
             // Generate motion primitives
             std::vector<Eigen::VectorXd> motion_primitives;
             motion_primitives.reserve(12);
@@ -330,7 +330,7 @@ namespace simple6dof_robot_helpers
                 {
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = ComputeLinkPointJacobian(link_name, link_relative_point);
                     // Compute max point motion
                     for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
                     {
@@ -366,8 +366,8 @@ namespace simple6dof_robot_helpers
             xr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.r_max_actuator_noise, robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
             yr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.r_max_actuator_noise, robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
             zr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.r_max_actuator_noise, robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
-            max_motion_per_unit_step_ = ComputeMaxMotionPerStep(*this);
             UpdatePosition(initial_position);
+            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
