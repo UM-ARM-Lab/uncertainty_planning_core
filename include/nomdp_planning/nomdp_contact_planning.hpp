@@ -105,6 +105,7 @@ namespace nomdp_contact_planning
         double goal_distance_threshold_;
         double goal_probability_threshold_;
         double signature_matching_threshold_;
+        double distance_clustering_threshold_;
         double feasibility_alpha_;
         double variance_alpha_;
         Robot robot_;
@@ -118,6 +119,7 @@ namespace nomdp_contact_planning
         mutable uint64_t cluster_calls_;
         mutable uint64_t cluster_fallback_calls_;
         mutable double total_goal_reached_probability_;
+        mutable double time_to_first_solution_;
         mutable std::unordered_map<uint64_t, SplitProbabilityTable> split_probability_tables_;
         mutable NomdpPlanningTree nearest_neighbors_storage_;
 
@@ -264,7 +266,7 @@ namespace nomdp_contact_planning
             return NomdpPlanningPolicy::Deserialize(decompressed_serialized_policy, 0u).first;
         }
 
-        inline NomdpPlanningSpace(const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_objects, environment_resolution)
+        inline NomdpPlanningSpace(const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_objects, environment_resolution)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -290,6 +292,7 @@ namespace nomdp_contact_planning
             goal_distance_threshold_ = goal_distance_threshold;
             goal_probability_threshold_ = goal_probability_threshold;
             signature_matching_threshold_ = signature_matching_threshold;
+            distance_clustering_threshold_ = distance_clustering_threshold;
             feasibility_alpha_ = feasibility_alpha;
             variance_alpha_ = variance_alpha;
             state_counter_ = 0;
@@ -301,7 +304,7 @@ namespace nomdp_contact_planning
             resample_particles_ = false;
         }
 
-        inline NomdpPlanningSpace(const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::string& environment_id, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_id, environment_resolution)
+        inline NomdpPlanningSpace(const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::string& environment_id, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_id, environment_resolution)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -327,6 +330,7 @@ namespace nomdp_contact_planning
             goal_distance_threshold_ = goal_distance_threshold;
             goal_probability_threshold_ = goal_probability_threshold;
             signature_matching_threshold_ = signature_matching_threshold;
+            distance_clustering_threshold_ = distance_clustering_threshold;
             feasibility_alpha_ = feasibility_alpha;
             variance_alpha_ = variance_alpha;
             state_counter_ = 0;
@@ -449,7 +453,7 @@ namespace nomdp_contact_planning
 #endif
 
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
+        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
         {
             // Draw the simulation environment
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -487,108 +491,126 @@ namespace nomdp_contact_planning
             NomdpPlanningState start_state(start);
             NomdpPlanningState goal_state(goal);
             // Bind the helper functions
+            const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
             std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, planner_action_try_attempts, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, planner_action_try_attempts);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, planner_action_try_attempts, start_time);
             std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
             std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, planner_action_try_attempts, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
-            std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
+            time_to_first_solution_ = 0.0;
             std::pair<std::vector<std::vector<NomdpPlanningState>>, std::map<std::string, double>> planning_results = simple_rrt_planner::SimpleHybridRRTPlanner::PlanMultiPath(nearest_neighbors_storage_, start_state, nearest_neighbor_fn, goal_reached_fn, goal_reached_callback, complete_sampling_fn, forward_propagation_fn, termination_check_fn);
             // Make sure we got somewhere
             std::cout << "Planner terminated with goal reached probability: " << total_goal_reached_probability_ << std::endl;
             planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
-            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical clustering" << std::endl;
+            planning_results.second["Time to first solution"] = time_to_first_solution_;
+            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
             const std::pair<uint64_t, uint64_t> simulator_resolve_statistics = simulator_.GetResolveStatistics();
             planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first;
             planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.second;
             std::cout << "Simulator statistics: " << simulator_resolve_statistics.first << " successful resolves, " << simulator_resolve_statistics.second << " unsuccessful resolves" << std::endl;
-            const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
-            const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-            const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, planner_action_try_attempts);
-            planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
-            // Draw the final path(s)
-            for (size_t pidx = 0; pidx < planning_results.first.size(); pidx++)
+            if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
-                const std::vector<NomdpPlanningState>& planned_path = planning_results.first[pidx];
-                if (planned_path.size() >= 2)
+                const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
+                const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
+                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, planner_action_try_attempts, policy_action_attempt_count);
+                planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
+                // Draw the final path(s)
+                for (size_t pidx = 0; pidx < planning_results.first.size(); pidx++)
                 {
-                    double goal_reached_probability = planned_path[planned_path.size() - 1].GetGoalPfeasibility() * planned_path[planned_path.size() - 1].GetMotionPfeasibility();
-                    visualization_msgs::MarkerArray path_display_rep;
-                    for (size_t idx = 0; idx < planned_path.size(); idx++)
+                    const std::vector<NomdpPlanningState>& planned_path = planning_results.first[pidx];
+                    if (planned_path.size() >= 2)
                     {
-                        const NomdpPlanningState& current_state = planned_path[idx];
-                        const Configuration& current_configuration = current_state.GetExpectation();
-                        std_msgs::ColorRGBA forward_color;
-                        forward_color.r = (float)(1.0 - goal_reached_probability);
-                        forward_color.g = 0.0f;
-                        forward_color.b = 0.0f;
-                        forward_color.a = (float)current_state.GetMotionPfeasibility();
-                        visualization_msgs::Marker forward_expectation_marker = DrawRobotConfiguration(robot_, current_configuration, forward_color);
-                        forward_expectation_marker.id = (int)idx;
-                        forward_expectation_marker.ns = "final_path_" + std::to_string(pidx + 1);
-                        // Make the display color
-                        std_msgs::ColorRGBA reverse_color;
-                        reverse_color.r = (float)(1.0 - goal_reached_probability);
-                        reverse_color.g = 0.0f;
-                        reverse_color.b = 0.0f;
-                        reverse_color.a = (float)current_state.GetReverseEdgePfeasibility();
-                        visualization_msgs::Marker reverse_expectation_marker = DrawRobotConfiguration(robot_, current_configuration, reverse_color);
-                        reverse_expectation_marker.id = (int)idx;
-                        reverse_expectation_marker.ns = "final_path_reversible_" + std::to_string(pidx + 1);;
-                        // Add the markers
-                        path_display_rep.markers.push_back(forward_expectation_marker);
-                        path_display_rep.markers.push_back(reverse_expectation_marker);
+                        double goal_reached_probability = planned_path[planned_path.size() - 1].GetGoalPfeasibility() * planned_path[planned_path.size() - 1].GetMotionPfeasibility();
+                        visualization_msgs::MarkerArray path_display_rep;
+                        for (size_t idx = 0; idx < planned_path.size(); idx++)
+                        {
+                            const NomdpPlanningState& current_state = planned_path[idx];
+                            const Configuration& current_configuration = current_state.GetExpectation();
+                            std_msgs::ColorRGBA forward_color;
+                            forward_color.r = (float)(1.0 - goal_reached_probability);
+                            forward_color.g = 0.0f;
+                            forward_color.b = 0.0f;
+                            forward_color.a = (float)current_state.GetMotionPfeasibility();
+                            visualization_msgs::Marker forward_expectation_marker = DrawRobotConfiguration(robot_, current_configuration, forward_color);
+                            forward_expectation_marker.id = (int)idx;
+                            forward_expectation_marker.ns = "final_path_" + std::to_string(pidx + 1);
+                            // Make the display color
+                            std_msgs::ColorRGBA reverse_color;
+                            reverse_color.r = (float)(1.0 - goal_reached_probability);
+                            reverse_color.g = 0.0f;
+                            reverse_color.b = 0.0f;
+                            reverse_color.a = (float)current_state.GetReverseEdgePfeasibility();
+                            visualization_msgs::Marker reverse_expectation_marker = DrawRobotConfiguration(robot_, current_configuration, reverse_color);
+                            reverse_expectation_marker.id = (int)idx;
+                            reverse_expectation_marker.ns = "final_path_reversible_" + std::to_string(pidx + 1);;
+                            // Add the markers
+                            path_display_rep.markers.push_back(forward_expectation_marker);
+                            path_display_rep.markers.push_back(reverse_expectation_marker);
+                        }
+                        display_pub.publish(path_display_rep);
                     }
-                    display_pub.publish(path_display_rep);
                 }
+                DrawPolicy(policy, display_pub);
+                // Wait for input
+                std::cout << "Press ENTER to continue..." << std::endl;
+    #ifndef FORCE_DEBUG
+                std::cin.get();
+    #endif
+                return std::pair<NomdpPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
             }
-            DrawPolicy(policy, display_pub);
-            // Wait for input
-            std::cout << "Press ENTER to continue..." << std::endl;
-#ifndef FORCE_DEBUG
-            std::cin.get();
-#endif
-            return std::pair<NomdpPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
+            else
+            {
+                const NomdpPlanningPolicy policy;
+                planning_results.second["Extracted policy size"] = 0.0;
+                // Wait for input
+                std::cout << "Press ENTER to continue..." << std::endl;
+    #ifndef FORCE_DEBUG
+                std::cin.get();
+    #endif
+                return std::pair<NomdpPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
+            }
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment)
+        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment)
         {
             NomdpPlanningState start_state(start);
             NomdpPlanningState goal_state(goal);
             // Bind the helper functions
+            const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
             std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, planner_action_try_attempts, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, planner_action_try_attempts);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, planner_action_try_attempts, start_time);
             std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
             std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, planner_action_try_attempts, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
-            std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
+            time_to_first_solution_ = 0.0;
             std::pair<std::vector<std::vector<NomdpPlanningState>>, std::map<std::string, double>> planning_results = simple_rrt_planner::SimpleHybridRRTPlanner::PlanMultiPath(nearest_neighbors_storage_, start_state, nearest_neighbor_fn, goal_reached_fn, goal_reached_callback, complete_sampling_fn, forward_propagation_fn, termination_check_fn);
             // Make sure we got somewhere
             std::cout << "Planner terminated with goal reached probability: " << total_goal_reached_probability_ << std::endl;
             planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
-            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical clustering" << std::endl;
+            planning_results.second["Time to first solution"] = time_to_first_solution_;
+            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
             const std::pair<uint64_t, uint64_t> simulator_resolve_statistics = simulator_.GetResolveStatistics();
             planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first;
             planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.second;
             std::cout << "Simulator statistics: " << simulator_resolve_statistics.first << " successful resolves, " << simulator_resolve_statistics.second << " unsuccessful resolves" << std::endl;
-            if (total_goal_reached_probability_ > 0.0)
+            if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
                 const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, planner_action_try_attempts);
+                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, planner_action_try_attempts, policy_action_attempt_count);
                 planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
                 return std::pair<NomdpPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
             }
@@ -717,10 +739,10 @@ namespace nomdp_contact_planning
             return std::make_pair(num_particles_, reached_parent);
         }
 
-        inline NomdpPlanningPolicy ExtractPolicy(const NomdpPlanningTree& planner_tree, const Configuration& goal, const uint32_t planner_action_try_attempts) const
+        inline NomdpPlanningPolicy ExtractPolicy(const NomdpPlanningTree& planner_tree, const Configuration& goal, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count) const
         {
             const double marginal_edge_weight = 0.05;
-            const NomdpPlanningPolicy policy(planner_tree, goal, marginal_edge_weight, goal_probability_threshold_, planner_action_try_attempts);
+            const NomdpPlanningPolicy policy(planner_tree, goal, marginal_edge_weight, goal_probability_threshold_, planner_action_try_attempts, policy_action_attempt_count);
             return policy;
         }
 
@@ -892,16 +914,6 @@ namespace nomdp_contact_planning
                 std::cout << "----------\nReceived new action for parent state index " << parent_state_idx << " and transition ID " << desired_transition_id << "\n==========" << std::endl;
                 std::cout << "Drawing updated policy..." << std::endl;
                 DrawPolicy(policy, display_pub);
-                if (wait_for_user)
-                {
-                    std::cout << "Press ENTER to continue..." << std::endl;
-                    std::cin.get();
-                }
-                else
-                {
-                    // Wait for a bit
-                    std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
-                }
                 std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
                 const NomdpPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(parent_state_idx).GetValueImmutable();
                 const Configuration& parent_state_config = parent_state.GetExpectation();
@@ -1046,16 +1058,6 @@ namespace nomdp_contact_planning
                 std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
                 std::cout << "Drawing updated policy..." << std::endl;
                 DrawPolicy(policy, display_pub);
-                if (wait_for_user)
-                {
-                    std::cout << "Press ENTER to continue..." << std::endl;
-                    std::cin.get();
-                }
-                else
-                {
-                    // Wait for a bit
-                    std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
-                }
                 std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
                 const NomdpPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(parent_state_idx).GetValueImmutable();
                 const Configuration& parent_state_config = parent_state.GetExpectation();
@@ -1195,9 +1197,11 @@ namespace nomdp_contact_planning
             }
             all_particles.push_back(std::make_pair(current_config, false));
             all_particles.shrink_to_fit();
+            //std::cout << "All configs to consider for clustering: " << PrettyPrint::PrettyPrint(all_particles) << std::endl;
             // Do clustering magic
             // Collect the signatures for each particle
             const std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures = GenerateRegionSignatures(all_particles);
+            //std::cout << "Region signatures: " << PrettyPrint::PrettyPrint(particle_region_signatures) << std::endl;
             // We attempt to "grow" a region cluster from every particle. Yes, this is O(n^2), but we can parallelize it
             const std::vector<std::vector<size_t>> initial_clusters = GenerateInitialRegionSignatureClusters(particle_region_signatures);
             // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
@@ -1573,6 +1577,11 @@ namespace nomdp_contact_planning
                         percent_active = updated_percent_active;
                     }
                     assert(p_reached > 0.0);
+                    if (p_reached > 1.0)
+                    {
+                        assert(p_reached <= 1.001);
+                        p_reached = 1.0;
+                    }
                     assert(p_reached <= 1.0);
                     std::cout << "Computed effective edge P(feasibility) of " << p_reached << " for " << planner_action_try_attempts << " try/retry attempts" << std::endl;
                     current_state.SetEffectiveEdgePfeasibility(p_reached);
@@ -2037,6 +2046,10 @@ namespace nomdp_contact_planning
                     total_points++;
                     const uint32_t signature_1_point = signature_1_link[point_idx];
                     const uint32_t signature_2_point = signature_2_link[point_idx];
+                    if (signature_1_point == 0u || signature_2_point == 0u)
+                    {
+                        continue;
+                    }
                     if ((signature_1_point & signature_2_point) == 0u)
                     {
                         non_matching_points++;
@@ -2060,6 +2073,7 @@ namespace nomdp_contact_planning
             // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
             std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return ComputeConvexRegionSignatureDistance(particle_region_signatures[idx1], particle_region_signatures[idx2]); };
             const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(initial_cluster, distance_fn);
+            //std::cout << "Region signature distance matrix " << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
             // Check the max element of the distance matrix
             const double max_distance = distance_matrix.maxCoeff();
             if (max_distance <= signature_matching_threshold_)
@@ -2068,12 +2082,13 @@ namespace nomdp_contact_planning
             }
             else
             {
-                return simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(initial_cluster, distance_matrix, step_size_).first;
+                return simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(initial_cluster, distance_matrix, signature_matching_threshold_).first;
             }
         }
 
         inline std::vector<std::vector<size_t>> RunDistanceClusteringOnInitialClusters(const std::vector<std::vector<size_t>>& initial_clusters, const std::vector<std::pair<Configuration, bool>>& particles, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn) const
         {
+            const double distance_threshold = distance_clustering_threshold_;
             // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
             std::vector<std::vector<size_t>> intermediate_clusters;
             intermediate_clusters.reserve(initial_clusters.size());
@@ -2087,18 +2102,20 @@ namespace nomdp_contact_planning
                 const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(current_cluster, distance_fn);
                 // Check the max element of the distance matrix
                 const double max_distance = distance_matrix.maxCoeff();
-                if (max_distance <= step_size_ * 1.5)
+                if (max_distance <= distance_threshold)
                 {
                     intermediate_clusters.push_back(current_cluster);
                 }
                 else
                 {
+                    //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
                     cluster_fallback_calls_++;
-                    std::cout << "Cluster by convex region of " << current_cluster.size() << " elements exceeds distance threshold, performing additional hierarchical clustering" << std::endl;
-                    const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, step_size_ * 1.5).first;
+                    std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " exceeding distance threshold " << distance_threshold << ", performing additional hierarchical clustering" << std::endl;
+                    const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, distance_threshold).first;
                     std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
                     for (size_t ndx = 0; ndx < new_clustering.size(); ndx++)
                     {
+                        //std::cout << "Resulting cluster " << ndx << ":\n" << PrettyPrint::PrettyPrint(new_clustering[ndx]) << std::endl;
                         intermediate_clusters.push_back(new_clustering[ndx]);
                     }
                 }
@@ -2129,6 +2146,7 @@ namespace nomdp_contact_planning
             // Before we return, we need to convert the index clusters to configuration clusters
             std::vector<std::vector<std::pair<Configuration, bool>>> final_clusters;
             final_clusters.reserve(final_index_clusters.size());
+            int64_t total_particles = 0;
             for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
             {
                 const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
@@ -2136,6 +2154,7 @@ namespace nomdp_contact_planning
                 final_cluster.reserve(cluster.size());
                 for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
                 {
+                    total_particles++;
                     const size_t particle_idx = cluster[element_idx];
                     assert(particle_idx < particles.size());
                     const std::pair<Configuration, bool>& particle = particles[particle_idx];
@@ -2148,6 +2167,7 @@ namespace nomdp_contact_planning
                 final_clusters.push_back(final_cluster);
             }
             final_clusters.shrink_to_fit();
+            assert(total_particles == particles.size());
             // Now, return the clusters and probability table
             return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(final_clusters, split_probability_table);
         }
@@ -2477,9 +2497,19 @@ namespace nomdp_contact_planning
                         std::cout << "Goal reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << improved_goal_reached_probability << " and probability(start->goal): " << improved_goal_probability << std::endl;
                         return true;
                     }
-                    // Second, try path split assist
-                    std::cout << "*** Goal NOT reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << goal_reached_probability << " and probability(start->goal): " << goal_probability << " ***" << std::endl;
-                    return false;
+                    else if (improved_goal_probability > 0.0)
+                    {
+                        // Update the state
+                        goal_state_candidate.SetGoalPfeasibility(improved_goal_reached_probability);
+                        // Second, try path split assist
+                        std::cout << "*** Goal conditionally reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << goal_reached_probability << " and probability(start->goal): " << goal_probability << " ***" << std::endl;
+                        return true;
+                    }
+                    else
+                    {
+                        std::cout << "### Goal not reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << goal_reached_probability << " and probability(start->goal): " << goal_probability << " ###" << std::endl;
+                        return false;
+                    }
                 }
             }
             else
@@ -2488,8 +2518,15 @@ namespace nomdp_contact_planning
             }
         }
 
-        inline void GoalReachedCallback(NomdpPlanningTreeState& new_goal, const uint32_t planner_action_try_attempts) const
+        inline void GoalReachedCallback(NomdpPlanningTreeState& new_goal, const uint32_t planner_action_try_attempts, const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time) const
         {
+            // Update the time-to-first-solution if need be
+            if (time_to_first_solution_ == 0.0)
+            {
+                const std::chrono::time_point<std::chrono::high_resolution_clock> current_time = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = current_time - start_time;
+                time_to_first_solution_ = elapsed.count();
+            }
             // Backtrack through the solution path until we reach the root of the current "goal branch"
             // A goal branch is the entire branch leading to the goal
             // Make sure the goal state isn't a branch root itself
@@ -2574,12 +2611,48 @@ namespace nomdp_contact_planning
             // There are three ways a state can be the the root of a goal branch
             // 1) The transition leading to the state is low-probability
             const bool has_low_probability_transition = (state.GetValueImmutable().GetEffectiveEdgePfeasibility() < goal_probability_threshold_);
-            // 2) The transition leading to the state is the result of a split
+            // 2) The transition leading to the state is the result of an unresolved split
             const bool is_child_of_split = (state.GetValueImmutable().GetSplitId() > 0u) ? true : false;
+            // If we're a child of a split, check to see if the split has been resolved:
+            // 2a) - the P(goal reached) of the parent is 1
+            // 2b) - all the other children with the same transition are already blacklisted
+            bool is_child_of_unresolved_split = false;
+            if (is_child_of_split)
+            {
+                const NomdpPlanningTreeState& parent_tree_state = nearest_neighbors_storage_[state.GetParentIndex()];
+                const NomdpPlanningState& parent_state = parent_tree_state.GetValueImmutable();
+                if (parent_state.GetGoalPfeasibility() >= goal_probability_threshold_)
+                {
+                    is_child_of_unresolved_split = false;
+                }
+                else
+                {
+                    bool other_children_blacklisted = true;
+                    const std::vector<int64_t>& other_parent_children = parent_tree_state.GetChildIndices();
+                    for (size_t idx = 0; idx < other_parent_children.size(); idx++)
+                    {
+                        const int64_t other_child_index = other_parent_children[idx];
+                        const NomdpPlanningTreeState& other_child_tree_state = nearest_neighbors_storage_[other_child_index];
+                        const NomdpPlanningState& other_child_state = other_child_tree_state.GetValueImmutable();
+                        if (other_child_state.GetTransitionId() == state.GetValueImmutable().GetTransitionId() && other_child_state.UseForNearestNeighbors())
+                        {
+                            other_children_blacklisted = false;
+                        }
+                    }
+                    if (other_children_blacklisted)
+                    {
+                        is_child_of_unresolved_split = false;
+                    }
+                    else
+                    {
+                        is_child_of_unresolved_split = true;
+                    }
+                }
+            }
             // 3) The parent of the current node is the root of the tree
             const bool parent_is_root = (state.GetParentIndex() == 0);
             // If one or more condition is true, the state is a branch root
-            if (has_low_probability_transition || is_child_of_split || parent_is_root)
+            if (has_low_probability_transition || is_child_of_unresolved_split || parent_is_root)
             {
                 return true;
             }
@@ -2696,8 +2769,13 @@ namespace nomdp_contact_planning
                         }
                         percent_active = updated_percent_active;
                     }
-                    const double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
+                    double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
                     assert(p_reached_goal >= 0.0);
+                    if (p_reached_goal > 1.0)
+                    {
+                        assert(p_reached_goal <= 1.001);
+                        p_reached_goal = 1.0;
+                    }
                     assert(p_reached_goal <= 1.0);
                     child_goal_reached_probabilities[idx] = p_reached_goal;
                 }

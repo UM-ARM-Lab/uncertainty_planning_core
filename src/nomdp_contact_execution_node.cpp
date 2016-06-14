@@ -39,6 +39,7 @@ struct PLANNER_OPTIONS
     double goal_distance_threshold;
     // Distance function control params/weights
     double signature_matching_threshold;
+    double distance_clustering_threshold;
     double feasibility_alpha;
     double variance_alpha;
     // Particle/execution limits
@@ -159,14 +160,14 @@ std::map<std::string, double> peg_in_hole_env_6dof(const PLANNER_OPTIONS& planne
     Eigen::Matrix<double, 6, 1> initial_config = Eigen::Matrix<double, 6, 1>::Zero();
     simple6dof_robot_helpers::Simple6DOFRobot robot(robot_points, initial_config, robot_config);
     // Build the planning space
-    NomdpPlanningSpace<simple6dof_robot_helpers::Simple6DOFRobot, simple6dof_robot_helpers::Simple6DOFBaseSampler, Eigen::Matrix<double, 6, 1>, simple6dof_robot_helpers::EigenMatrixD61Serializer, simple6dof_robot_helpers::Simple6DOFAverager, simple6dof_robot_helpers::Simple6DOFDistancer, simple6dof_robot_helpers::Simple6DOFDimDistancer, simple6dof_robot_helpers::Simple6DOFInterpolator, std::allocator<Eigen::Matrix<double, 6, 1>>, std::mt19937_64> planning_space(false, planner_options.num_particles, planner_options.step_size, planner_options.goal_distance_threshold, planner_options.goal_probability_threshold, planner_options.signature_matching_threshold, planner_options.feasibility_alpha, planner_options.variance_alpha, robot, sampler, "peg_in_hole", env_resolution);
+    NomdpPlanningSpace<simple6dof_robot_helpers::Simple6DOFRobot, simple6dof_robot_helpers::Simple6DOFBaseSampler, Eigen::Matrix<double, 6, 1>, simple6dof_robot_helpers::EigenMatrixD61Serializer, simple6dof_robot_helpers::Simple6DOFAverager, simple6dof_robot_helpers::Simple6DOFDistancer, simple6dof_robot_helpers::Simple6DOFDimDistancer, simple6dof_robot_helpers::Simple6DOFInterpolator, std::allocator<Eigen::Matrix<double, 6, 1>>, std::mt19937_64> planning_space(false, planner_options.num_particles, planner_options.step_size, planner_options.goal_distance_threshold, planner_options.goal_probability_threshold, planner_options.signature_matching_threshold, planner_options.distance_clustering_threshold, planner_options.feasibility_alpha, planner_options.variance_alpha, robot, sampler, "peg_in_hole", env_resolution);
     // Load the policy
     const auto policy = planning_space.LoadPolicy(policy_filename);
     std::map<std::string, double> complete_policy_stats;
 #ifdef USE_ROS
     std::cout << "Press ENTER to simulate policy..." << std::endl;
     std::cin.get();
-    const auto policy_simulation_stats = planning_space.SimulateExectionPolicy(policy, start, goal, planner_options.num_policy_simulations, planner_options.exec_step_limit, planner_options.enable_contact_manifold_target_adjustment, display_debug_publisher, true, false);
+    const auto policy_simulation_stats = planning_space.SimulateExectionPolicy(policy, start, goal, planner_options.num_policy_simulations, planner_options.exec_step_limit, planner_options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, false);
     std::cout << "Policy simulation success: " << policy_simulation_stats.first.second << std::endl;
     complete_policy_stats["Policy simulation success"] = policy_simulation_stats.first.second;
     complete_policy_stats["Policy simulation successful resolves"] = policy_simulation_stats.second.first;
@@ -175,7 +176,7 @@ std::map<std::string, double> peg_in_hole_env_6dof(const PLANNER_OPTIONS& planne
     std::cin.get();
     std::function<std::vector<Eigen::Matrix<double, 6, 1>>(const Eigen::Matrix<double, 6, 1>&, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 6, 1>& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot, robot_control_service); };
     std::function<double(const Eigen::Matrix<double, 6, 1>&, const Eigen::Matrix<double, 6, 1>&)> exec_dist_fn = [&] (const Eigen::Matrix<double, 6, 1>& q1, const Eigen::Matrix<double, 6, 1>& q2) { return execution_distance_fn(q1, q2, robot); };
-    const auto execution_results = planning_space.ExecuteExectionPolicy(policy, start, goal, robot_execution_fn, exec_dist_fn, planner_options.num_policy_executions, planner_options.exec_step_limit, display_debug_publisher, true, false);
+    const auto execution_results = planning_space.ExecuteExectionPolicy(policy, start, goal, robot_execution_fn, exec_dist_fn, planner_options.num_policy_executions, planner_options.exec_step_limit, display_debug_publisher, false, false);
     std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(execution_results.second, true) << std::endl;
     complete_policy_stats["Policy execution success"] = execution_results.second;
 #else
@@ -190,6 +191,7 @@ std::map<std::string, double> peg_in_hole_env_6dof(const PLANNER_OPTIONS& planne
 
 int main(int argc, char** argv)
 {
+    const double env_resolution = 0.125;
 #ifdef USE_ROS
     ros::init(argc, argv, "nomdp_contact_execution_node");
     ros::NodeHandle nh;
@@ -198,9 +200,10 @@ int main(int argc, char** argv)
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<nomdp_planning::Simple6dofRobotMove>("simple_6dof_robot_move");
     const uint32_t num_particles = 50u;
-    const uint32_t num_executions = 50u;
+    const uint32_t num_executions = 1u;
     const double goal_probability_threshold = 0.51;
     const double signature_matching_threshold = 0.125;
+    const double distance_clustering_threshold = 8.0 * env_resolution;
     const double feasibility_alpha = 0.75;
     const double variance_alpha = 0.75;
     const uint32_t num_repeats = 1u;
@@ -213,13 +216,13 @@ int main(int argc, char** argv)
     const uint32_t num_repeats = (argc > 1) ? (uint32_t)atoi(argv[1]) : 1u;
     const std::string log_filename = (argc > 2) ? std::string(argv[2]) : std::string("/tmp/nomdp_planner_log.txt");
     const std::string policy_filename = (argc > 3) ? std::string(argv[3]) : std::string("/tmp/nomdp_planner_policy.policy");
-    const uint32_t num_executions = (argc > 4) ? (uint32_t)atoi(argv[4]) : 50u;
+    const uint32_t num_executions = (argc > 4) ? (uint32_t)atoi(argv[4]) : 5000u;
     const double goal_probability_threshold = (argc > 5) ? atof(argv[5]) : 0.51;
     const double signature_matching_threshold = (argc > 6) ? atof(argv[6]) : 0.125;
-    const double feasibility_alpha = (argc > 7) ? atof(argv[7]) : 0.75;
-    const double variance_alpha = (argc > 8) ? atof(argv[8]) : 0.75;
+    const double distance_clustering_threshold = (argc > 7) ? atof(argv[7]) : 8.0 * env_resolution;
+    const double feasibility_alpha = (argc > 8) ? atof(argv[8]) : 0.75;
+    const double variance_alpha = (argc > 9) ? atof(argv[9]) : 0.75;
 #endif
-    const double env_resolution = 0.125;
     // Planner params
     PLANNER_OPTIONS planner_options;
     planner_options.enable_contact_manifold_target_adjustment = false;
@@ -228,6 +231,7 @@ int main(int argc, char** argv)
     planner_options.goal_probability_threshold = goal_probability_threshold;
     planner_options.goal_distance_threshold = 1.0 * env_resolution;
     planner_options.signature_matching_threshold = signature_matching_threshold;
+    planner_options.distance_clustering_threshold = distance_clustering_threshold;
     planner_options.feasibility_alpha = feasibility_alpha;
     planner_options.variance_alpha = variance_alpha;
     planner_options.num_particles = num_particles;
