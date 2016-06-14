@@ -774,7 +774,6 @@ namespace execution_policy
         double marginal_edge_weight_;
         double conformant_planning_threshold_;
         uint32_t edge_attempt_threshold_;
-        uint32_t policy_action_attempt_count_;
         // Actual policy graph
         PolicyGraph policy_graph_;
         std::vector<int64_t> previous_index_map_;
@@ -793,7 +792,7 @@ namespace execution_policy
             return std::make_pair(temp_policy, bytes_read);
         }
 
-        inline ExecutionPolicy(const NomdpPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold, const uint32_t policy_action_attempt_count) : initialized_(true), planner_tree_(planner_tree), goal_(goal), marginal_edge_weight_(marginal_edge_weight), conformant_planning_threshold_(conformant_planning_threshold), edge_attempt_threshold_(edge_attempt_threshold), policy_action_attempt_count_(policy_action_attempt_count)
+        inline ExecutionPolicy(const NomdpPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold) : initialized_(true), planner_tree_(planner_tree), goal_(goal), marginal_edge_weight_(marginal_edge_weight), conformant_planning_threshold_(conformant_planning_threshold), edge_attempt_threshold_(edge_attempt_threshold)
         {
             RebuildPolicyGraph();
         }
@@ -835,8 +834,6 @@ namespace execution_policy
             arc_helpers::SerializeFixedSizePOD<double>(conformant_planning_threshold_, buffer);
             // Serialize the edge attempt threshold
             arc_helpers::SerializeFixedSizePOD<uint32_t>(edge_attempt_threshold_, buffer);
-            // Serialize the policy action attempt count
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(policy_action_attempt_count_, buffer);
             // Figure out how many bytes were written
             const uint64_t end_buffer_size = buffer.size();
             const uint64_t bytes_written = end_buffer_size - start_buffer_size;
@@ -871,10 +868,6 @@ namespace execution_policy
             const std::pair<uint32_t, uint64_t> edge_attempt_threshold_deserialized = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             edge_attempt_threshold_ = edge_attempt_threshold_deserialized.first;
             current_position += edge_attempt_threshold_deserialized.second;
-            // Deserialize the policy action attempt count
-            const std::pair<uint32_t, uint64_t> policy_action_attempt_count_deserialized = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
-            policy_action_attempt_count_ = policy_action_attempt_count_deserialized.first;
-            current_position += policy_action_attempt_count_deserialized.second;
             // Rebuild the policy graph
             RebuildPolicyGraph();
             // Figure out how many bytes were read
@@ -1117,8 +1110,8 @@ namespace execution_policy
                     NomdpPlanningTreeState& result_tree_state = planning_tree[result_state_index];
                     NomdpPlanningState& result_state = result_tree_state.GetValueMutable();
                     const std::pair<uint32_t, uint32_t> counts = result_state.GetAttemptAndReachedCounts();
-                    const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
-                    const uint32_t reached_count = counts.second + policy_action_attempt_count_;
+                    const uint32_t attempt_count = counts.first + 1u;
+                    const uint32_t reached_count = counts.second + 1u;
                     result_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                     std::cout << "Forward motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(result_state.GetAttemptAndReachedCounts()) << std::endl;
                 }
@@ -1126,8 +1119,8 @@ namespace execution_policy
                 else
                 {
                     const std::pair<uint32_t, uint32_t> counts = previous_index_state.GetReverseAttemptAndReachedCounts();
-                    const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
-                    const uint32_t reached_count = counts.second + policy_action_attempt_count_;
+                    const uint32_t attempt_count = counts.first + 1u;
+                    const uint32_t reached_count = counts.second + 1u;
                     previous_index_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
                     std::cout << "Reverse motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(previous_index_state.GetReverseAttemptAndReachedCounts()) << std::endl;
                 }
@@ -1170,13 +1163,13 @@ namespace execution_policy
                         const std::pair<uint32_t, uint32_t> counts = child_state.GetAttemptAndReachedCounts();
                         if (child_state_idx == result_state_index)
                         {
-                            const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
-                            const uint32_t reached_count = counts.second + policy_action_attempt_count_;
+                            const uint32_t attempt_count = counts.first + 1u;
+                            const uint32_t reached_count = counts.second + 1u;
                             child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                         }
                         else
                         {
-                            const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
+                            const uint32_t attempt_count = counts.first + 1u;
                             const uint32_t reached_count = counts.second + 0u;
                             child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                         }
@@ -1190,14 +1183,14 @@ namespace execution_policy
                     // If the result state was the parent state, add to the counts of the previous
                     if (result_state_index == parent_index)
                     {
-                        const uint32_t attempt_count = previous_state_counts.first + policy_action_attempt_count_;
-                        const uint32_t reached_count = previous_state_counts.second + policy_action_attempt_count_;
+                        const uint32_t attempt_count = previous_state_counts.first + 1u;
+                        const uint32_t reached_count = previous_state_counts.second + 1u;
                         previous_index_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
                     }
                     // If the result state was not the parent state, adjust the counts of the previous
                     else
                     {
-                        const uint32_t attempt_count = previous_state_counts.first + policy_action_attempt_count_;
+                        const uint32_t attempt_count = previous_state_counts.first + 1u;
                         const uint32_t reached_count = previous_state_counts.second + 0u;
                         previous_index_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
                     }
@@ -1214,13 +1207,13 @@ namespace execution_policy
                             const std::pair<uint32_t, uint32_t> counts = child_state.GetAttemptAndReachedCounts();
                             if (child_state_idx == result_state_index)
                             {
-                                const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
-                                const uint32_t reached_count = counts.second + policy_action_attempt_count_;
+                                const uint32_t attempt_count = counts.first + 1u;
+                                const uint32_t reached_count = counts.second + 1u;
                                 child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                             }
                             else
                             {
-                                const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
+                                const uint32_t attempt_count = counts.first + 1u;
                                 const uint32_t reached_count = counts.second + 0u;
                                 child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                             }
@@ -1240,14 +1233,14 @@ namespace execution_policy
 
         inline void UpdateTransitionProbabilities(NomdpPlanningTree& planning_tree, const NomdpPlanningState& previous_index_state, const std::vector<int64_t>& expected_possible_result_states, const int64_t parent_index, const double edge_attempt_threshold) const
         {
-            //std::cout << "Updating effective edge probabilities for " << expected_possible_result_states.size() << " states..." << std::endl;
+            std::cout << "Updating effective edge probabilities for " << expected_possible_result_states.size() << " states..." << std::endl;
             for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
             {
                 const int64_t child_state_idx = expected_possible_result_states[idx];
                 // We skip the parent state, since we don't store an effective edge probability for state->parent
                 if (child_state_idx != parent_index)
                 {
-                    //std::cout << "Updating effective edge probability for state " << child_state_idx << std::endl;
+                    std::cout << "Updating effective edge probability for state " << child_state_idx << std::endl;
                     NomdpPlanningTreeState& child_tree_state = planning_tree[child_state_idx];
                     NomdpPlanningState& child_state = child_tree_state.GetValueMutable();
                     double percent_active = 1.0;
@@ -1281,12 +1274,11 @@ namespace execution_policy
                         }
                         percent_active = updated_percent_active;
                     }
-                    //std::cout << "New effective edge probability for state " << child_state_idx << " is " << p_reached << std::endl;
+                    std::cout << "New effective edge probability for state " << child_state_idx << " is " << p_reached << std::endl;
                     assert(p_reached > 0.0);
                     if (p_reached > 1.0)
                     {
-                        std::cout << "WARNING - P(reached) = " << p_reached << " > 1.0 (probably numerical error)" << std::endl;
-                        assert(p_reached <= 1.001);
+                        std::cout << "WARNING - P(reached) > 1.0 (probably numerical error)" << std::endl;
                         p_reached = 1.0;
                     }
                     assert(p_reached <= 1.0);
@@ -1386,7 +1378,7 @@ namespace execution_policy
                 const uint64_t& child_transition_id = planner_tree_[current_child_index].GetValueImmutable().GetTransitionId();
                 effective_child_branches[child_transition_id].push_back(current_child_index);
             }
-            //std::cout << "Gathered effective child branches: " << PrettyPrint::PrettyPrint(effective_child_branches) << std::endl;
+            std::cout << "Gathered effective child branches: " << PrettyPrint::PrettyPrint(effective_child_branches) << std::endl;
             // Now that we have the transitions separated out, compute the goal probability of each transition
             std::vector<double> effective_child_branch_probabilities;
             for (auto itr = effective_child_branches.begin(); itr != effective_child_branches.end(); ++itr)
@@ -1394,7 +1386,7 @@ namespace execution_policy
                 double transtion_goal_probability = ComputeTransitionGoalProbability(itr->second, edge_attempt_threshold);
                 effective_child_branch_probabilities.push_back(transtion_goal_probability);
             }
-            //std::cout << "Computed effective child branch probabilities: " << PrettyPrint::PrettyPrint(effective_child_branch_probabilities) << std::endl;
+            std::cout << "Computed effective child branch probabilities: " << PrettyPrint::PrettyPrint(effective_child_branch_probabilities) << std::endl;
             // Now, get the highest transtion probability
             if (effective_child_branch_probabilities.size() > 0)
             {
@@ -1402,18 +1394,18 @@ namespace execution_policy
                 assert(max_transition_probability >= 0.0);
                 assert(max_transition_probability <= 1.0);
                 // Update the current state
-                //std::cout << "Updating P(goal reached) to " << max_transition_probability << std::endl;
+                std::cout << "Updating P(goal reached) to " << max_transition_probability << std::endl;
                 current_node.GetValueMutable().SetGoalPfeasibility(max_transition_probability);
             }
             else
             {
                 if (current_node.GetValueMutable().GetGoalPfeasibility() > 0.0)
                 {
-                    //std::cout << "Not updating P(goal reached) for an assumed goal state" << std::endl;
+                    std::cout << "Not updating P(goal reached) for an assumed goal state" << std::endl;
                 }
                 else
                 {
-                    //std::cout << "Not updating P(goal reached) for a state with no children" << std::endl;
+                    std::cout << "Not updating P(goal reached) for a state with no children" << std::endl;
                 }
             }
         }
@@ -1499,15 +1491,9 @@ namespace execution_policy
                         //std::cout << "P(others reached goal) so far " << p_others_reached_goal << std::endl;
                         percent_active = updated_percent_active;
                     }
-                    double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
+                    const double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
                     //std::cout << "Computed new P(goal reached) " << p_reached_goal << " for child " << idx + 1 << " of " << child_nodes.size() << std::endl;
                     assert(p_reached_goal >= 0.0);
-                    if (p_reached_goal > 1.0)
-                    {
-                        std::cout << "WARNING - P(reached) = " << p_reached_goal << " > 1.0 (probably numerical error)" << std::endl;
-                        assert(p_reached_goal <= 1.001);
-                        p_reached_goal = 1.0;
-                    }
                     assert(p_reached_goal <= 1.0);
                     child_goal_reached_probabilities[idx] = p_reached_goal;
                 }
