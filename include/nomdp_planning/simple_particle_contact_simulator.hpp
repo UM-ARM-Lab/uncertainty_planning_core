@@ -526,6 +526,71 @@ namespace nomdp_planning_tools
                 }
                 return grid;
             }
+            else if (environment_id == "blocked_peg_in_hole")
+            {
+                double grid_x_size = 10.0;
+                double grid_y_size = 10.0;
+                double grid_z_size = 10.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            // Set the object we belong to
+                            // We assume that all objects are convex, so we can set the convex region as 1
+                            // "Bottom bottom"
+                            if (z <= 3.0)
+                            {
+                                if (x <= 2.0 || y <= 2.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 2.5 || y > 2.5)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                            }
+                            else if (z <= 4.5)
+                            {
+                                if (y > 1.5 && y <= 5.0 && x > 3.0 && x <= 3.5)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                            }
+                            // Set the free-space convex segment we belong to (if necessary)
+                            if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
+                            {
+                                // There are 2 convex regions, we can belong to multiple regions, so we check for each
+                                if (z > 3.0)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                }
+                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                }
+
+                            }
+                        }
+                    }
+                }
+                return grid;
+            }
             else if (environment_id == "inset_peg_in_hole")
             {
                 double grid_x_size = 10.0;
@@ -756,6 +821,10 @@ namespace nomdp_planning_tools
                 ;
             }
             else if (environment_id == "peg_in_hole")
+            {
+                ;
+            }
+            else if (environment_id == "blocked_peg_in_hole")
             {
                 ;
             }
@@ -1241,7 +1310,7 @@ namespace nomdp_planning_tools
                                 // Project the interaction force back on the desired point motion, basically scale down motion that would increase the interation force
                                 // Take the projection of the motion onto the interaction force, scale it down, and subtract it from the motion
                                 const double RIFdotRIF = raw_interaction_force.dot(raw_interaction_force);
-                                const Eigen::Vector3d PMprojonRIF = (PMdotRIF / RIFdotRIF) * point_motion;
+                                const Eigen::Vector3d PMprojonRIF = (PMdotRIF / RIFdotRIF) * raw_interaction_force;
                                 const double PMprojonRIFmag = PMprojonRIF.norm();
                                 const double desiredPMprojonRIFmag = (PMprojonRIFmag > environment_sdf_.GetResolution()) ? environment_sdf_.GetResolution() : PMprojonRIFmag;
                                 const Eigen::Vector3d scaledPMprojonRIF = (PMprojonRIFmag > environment_sdf_.GetResolution()) ? (Eigen::Vector3d)((1.0 - (desiredPMprojonRIFmag / PMprojonRIFmag)) * PMprojonRIF) : PMprojonRIF;
@@ -1629,15 +1698,18 @@ namespace nomdp_planning_tools
                 robot.ApplyControlInput(control_input_step, rng);
                 std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, robot_links_points, control_input_step);
                 std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map = collision_check.second;
-                collided = collision_check.first;
+                bool in_collision = collision_check.first;
+                if (in_collision)
+                {
+                    collided = true;
+                }
                 if (enable_tracing)
                 {
                     trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(robot.GetPosition());
                 }
                 // Now, we know if a collision has happened
-                if (collided)
+                if (in_collision)
                 {
-                    bool in_collision = true;
                     uint32_t resolver_iterations = 0;
                     while (in_collision)
                     {
@@ -1666,7 +1738,7 @@ namespace nomdp_planning_tools
                         }
                         if (resolver_iterations > 150)
                         {
-                            std::cerr << "Resolver iterations > 150, terminating microstep+resolver and returning previous configuration" << std::endl;
+                            //std::cerr << "Resolver iterations > 150, terminating microstep+resolver and returning previous configuration" << std::endl;
                             if (enable_tracing)
                             {
                                 trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(previous_configuration);
@@ -1676,7 +1748,7 @@ namespace nomdp_planning_tools
                         }
                         else if (resolver_iterations == 100)
                         {
-                            std::cerr << "Resolver iterations = " << resolver_iterations << ", is the simulator stuck? Correction: " << PrettyPrint::PrettyPrint(real_correction_step) << std::endl;
+                            //std::cerr << "Resolver iterations = " << resolver_iterations << ", is the simulator stuck? Correction: " << PrettyPrint::PrettyPrint(real_correction_step) << std::endl;
                         }
                     }
                 }

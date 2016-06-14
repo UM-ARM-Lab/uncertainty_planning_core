@@ -241,7 +241,7 @@ namespace proper6dof_robot_helpers
 
     public:
 
-        static inline double ComputeMaxMotionPerStep() const
+        inline double ComputeMaxMotionPerStep() const
         {
             double max_motion = 0.0;
             const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = GetRawLinksPoints();
