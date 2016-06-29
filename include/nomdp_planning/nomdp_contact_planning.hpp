@@ -62,6 +62,54 @@ namespace nomdp_contact_planning
 {
     enum SPATIAL_FEATURE_CLUSTERING_TYPE {CONVEX_REGION_SIGNATURE, ACTUATION_CENTER_CONNECTIVITY, POINT_TO_POINT_MOVEMENT, COMPARE};
 
+    inline SPATIAL_FEATURE_CLUSTERING_TYPE ParseSpatialFeatureClusteringType(const std::string& typestr)
+    {
+        if (typestr == "CRS" || typestr == "crs")
+        {
+            return CONVEX_REGION_SIGNATURE;
+        }
+        else if (typestr == "AC" || typestr == "ac")
+        {
+            return ACTUATION_CENTER_CONNECTIVITY;
+        }
+        else if (typestr == "PTPM" || typestr == "ptpm")
+        {
+            return POINT_TO_POINT_MOVEMENT;
+        }
+        else if (typestr == "COMPARE" || typestr == "compare")
+        {
+            return COMPARE;
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+
+    inline std::string PrintSpatialFeatureClusteringType(const SPATIAL_FEATURE_CLUSTERING_TYPE& clustering_type)
+    {
+        if (clustering_type == CONVEX_REGION_SIGNATURE)
+        {
+            return std::string("CRS");
+        }
+        else if (clustering_type == ACTUATION_CENTER_CONNECTIVITY)
+        {
+            return std::string("AC");
+        }
+        else if (clustering_type == POINT_TO_POINT_MOVEMENT)
+        {
+            return std::string("PTPM");
+        }
+        else if (clustering_type == COMPARE)
+        {
+            return std::string("COMPARE");
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+
     template<typename Robot, typename Sampler, typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename InterpolateFn, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
     class NomdpPlanningSpace
     {

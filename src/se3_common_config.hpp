@@ -27,6 +27,7 @@ namespace se3_common_config
     inline common_config::OPTIONS GetDefaultOptions()
     {
         common_config::OPTIONS options;
+        options.clustering_type = nomdp_contact_planning::CONVEX_REGION_SIGNATURE;
         options.environment_resolution = 0.125;
         options.planner_time_limit = 600.0;
         options.goal_bias = 0.1;
@@ -58,102 +59,12 @@ namespace se3_common_config
 #ifdef USE_ROS
     inline common_config::OPTIONS GetOptions(const common_config::OPTIONS::TYPE& type)
     {
-        common_config::OPTIONS options = GetDefaultOptions();
-        // Get options via ROS params
-        ros::NodeHandle nhp("~");
-        if (type == common_config::OPTIONS::PLANNING)
-        {
-            options.planner_time_limit = nhp.param(std::string("planning_time"), options.planner_time_limit);
-            options.num_particles = (uint32_t)nhp.param(std::string("num_particles"), (int)options.num_particles);
-            options.actuator_error = nhp.param(std::string("actuator_error"), options.actuator_error);
-            options.sensor_error = nhp.param(std::string("sensor_error"), options.sensor_error);
-            options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
-            options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
-        }
-        else if (type == common_config::OPTIONS::EXECUTION)
-        {
-            options.num_policy_simulations = (uint32_t)nhp.param(std::string("num_policy_simulations"), (int)options.num_policy_simulations);
-            options.num_policy_executions = (uint32_t)nhp.param(std::string("num_policy_executions"), (int)options.num_policy_executions);
-            options.actuator_error = nhp.param(std::string("actuator_error"), options.actuator_error);
-            options.sensor_error = nhp.param(std::string("sensor_error"), options.sensor_error);
-            options.policy_log_file = nhp.param(std::string("policy_log_file"), options.policy_log_file);
-            options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
-            options.executed_policy_file = nhp.param(std::string("executed_policy_file"), options.executed_policy_file);
-        }
-        else
-        {
-            throw std::invalid_argument("Unsupported options type");
-        }
-        return options;
+        return common_config::GetOptions(GetDefaultOptions(), type);
     }
 #else
     inline common_config::OPTIONS GetOptions(int argc, char** argv, const common_config::OPTIONS::TYPE& type)
     {
-        common_config::OPTIONS options = GetDefaultOptions();
-        // Get options via arguments
-        if (type == common_config::OPTIONS::PLANNING)
-        {
-            if (argc >= 2)
-            {
-                options.planner_time_limit = atof(argv[1]);
-            }
-            if (argc >= 3)
-            {
-                options.num_particles = (uint32_t)atoi(argv[2]);
-            }
-            if (argc >= 4)
-            {
-                options.actuator_error = atof(argv[3]);
-            }
-            if (argc >= 5)
-            {
-                options.sensor_error = atof(argv[4]);
-            }
-            if (argc >= 6)
-            {
-                options.planner_log_file = std::string(argv[5]);
-            }
-            if (argc >= 7)
-            {
-                options.planned_policy_file = std::string(argv[6]);
-            }
-        }
-        else if (type == common_config::OPTIONS::EXECUTION)
-        {
-            if (argc >= 2)
-            {
-                options.num_policy_simulations = (uint32_t)atoi(argv[1]);
-            }
-            if (argc >= 3)
-            {
-                options.num_policy_executions = (uint32_t)atoi(argv[2]);
-            }
-            if (argc >= 4)
-            {
-                options.actuator_error = atof(argv[3]);
-            }
-            if (argc >= 5)
-            {
-                options.sensor_error = atof(argv[4]);
-            }
-            if (argc >= 6)
-            {
-                options.policy_log_file = std::string(argv[5]);
-            }
-            if (argc >= 7)
-            {
-                options.planned_policy_file = std::string(argv[6]);
-            }
-            if (argc >= 7)
-            {
-                options.executed_policy_file = std::string(argv[6]);
-            }
-        }
-        else
-        {
-            throw std::invalid_argument("Unsupported options type");
-        }
-        return options;
+        return common_config::GetOptions(GetDefaultOptions(), argc, argv, type);
     }
 #endif
 
