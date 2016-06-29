@@ -12,6 +12,26 @@
 
 namespace simplese2_robot_helpers
 {
+    class EigenMatrixD31Serializer
+    {
+    public:
+
+        static inline std::string TypeName()
+        {
+            return std::string("EigenMatrixD31Serializer");
+        }
+
+        static inline uint64_t Serialize(const Eigen::Matrix<double, 3, 1>& value, std::vector<uint8_t>& buffer)
+        {
+            return EigenHelpers::Serialize(value, buffer);
+        }
+
+        static inline std::pair<Eigen::Matrix<double, 3, 1>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return EigenHelpers::Deserialize<Eigen::Matrix<double, 3, 1>>(buffer, current);
+        }
+    };
+
     class SimpleSE2BaseSampler
     {
     protected:
@@ -41,6 +61,11 @@ namespace simplese2_robot_helpers
             state << x, y, zr;
             return state;
         }
+
+        static std::string TypeName()
+        {
+            return std::string("SimpleSE2BaseSampler");
+        }
     };
 
     class SimpleSE2Interpolator
@@ -59,6 +84,11 @@ namespace simplese2_robot_helpers
             interpolated(1) = EigenHelpers::Interpolate(t1(1), t2(1), ratio);
             interpolated(2) = EigenHelpers::InterpolateContinuousRevolute(t1(2), t2(2), ratio);
             return interpolated;
+        }
+
+        static std::string TypeName()
+        {
+            return std::string("SimpleSE2Interpolator");
         }
     };
 
@@ -98,6 +128,11 @@ namespace simplese2_robot_helpers
                 return Eigen::Matrix<double, 3, 1>::Zero();
             }
         }
+
+        static std::string TypeName()
+        {
+            return std::string("SimpleSE2Averager");
+        }
     };
 
     class SimpleSE2DimDistancer
@@ -122,6 +157,11 @@ namespace simplese2_robot_helpers
             dim_distances(2) = EigenHelpers::ContinuousRevoluteSignedDistance(t1(2), t2(2));;
             return dim_distances;
         }
+
+        static std::string TypeName()
+        {
+            return std::string("SimpleSE2DimDistancer");
+        }
     };
 
     class SimpleSE2Distancer
@@ -139,6 +179,11 @@ namespace simplese2_robot_helpers
             const double trans_dist = sqrt((dim_distances(0) * dim_distances(0)) + (dim_distances(1) * dim_distances(1)));
             const double rots_dist = fabs(dim_distances(2));
             return trans_dist + rots_dist;
+        }
+
+        static std::string TypeName()
+        {
+            return std::string("SimpleSE2Distancer");
         }
     };
 
@@ -324,6 +369,17 @@ namespace simplese2_robot_helpers
             return config_;
         }
 
+        template<typename PRNG>
+        inline Eigen::Matrix<double, 3, 1> GetPosition(PRNG& rng) const
+        {
+            const Eigen::Matrix<double, 3, 1> current_config = GetPosition();
+            Eigen::Matrix<double, 3, 1> noisy_config = Eigen::Matrix<double, 3, 1>::Zero();
+            noisy_config(0) = x_axis_sensor_.GetSensorValue(current_config(0), rng);
+            noisy_config(1) = y_axis_sensor_.GetSensorValue(current_config(1), rng);
+            noisy_config(2) = zr_axis_sensor_.GetSensorValue(current_config(2), rng);
+            return noisy_config;
+        }
+
         inline double ComputeDistanceTo(const Eigen::Matrix<double, 3, 1>& target) const
         {
             return SimpleSE2Distancer::Distance(GetPosition(), target);
@@ -333,7 +389,7 @@ namespace simplese2_robot_helpers
         inline Eigen::VectorXd GenerateControlAction(const Eigen::Matrix<double, 3, 1>& target, PRNG& rng)
         {
             // Get the current position
-            const Eigen::Matrix<double, 3, 1> current = GetPosition();
+            const Eigen::Matrix<double, 3, 1> current = GetPosition(rng);
             // Get the current error
             const Eigen::VectorXd current_error = SimpleSE2DimDistancer::RawDistance(current, target);
             // Compute feedback terms
@@ -341,9 +397,9 @@ namespace simplese2_robot_helpers
             const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), 1.0);
             const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(current_error(2), 1.0);
             // Make the control action
-            const double x_axis_control = x_axis_actuator_.GetControlValue(x_term, rng);
-            const double y_axis_control = y_axis_actuator_.GetControlValue(y_term, rng);
-            const double zr_axis_control = zr_axis_actuator_.GetControlValue(zr_term, rng);
+            const double x_axis_control = x_axis_actuator_.GetControlValue(x_term);
+            const double y_axis_control = y_axis_actuator_.GetControlValue(y_term);
+            const double zr_axis_control = zr_axis_actuator_.GetControlValue(zr_term);
             Eigen::VectorXd control_action(3);
             control_action(0) = x_axis_control;
             control_action(1) = y_axis_control;
@@ -355,22 +411,26 @@ namespace simplese2_robot_helpers
         inline void ApplyControlInput(const Eigen::VectorXd& input, PRNG& rng)
         {
             assert(input.size() == 3);
-            // Compute new config
-            const Eigen::Matrix<double, 3, 1> new_config = config_ + input;
             // Sense new noisy config
-            Eigen::Matrix<double, 3, 1> noisy_config = Eigen::Matrix<double, 3, 1>::Zero();
-            noisy_config(0) = x_axis_sensor_.GetSensorValue(new_config(0), rng);
-            noisy_config(1) = y_axis_sensor_.GetSensorValue(new_config(1), rng);
-            noisy_config(2) = zr_axis_sensor_.GetSensorValue(new_config(2), rng);
+            Eigen::Matrix<double, 3, 1> noisy_input = Eigen::Matrix<double, 3, 1>::Zero();
+            noisy_input(0) = x_axis_actuator_.GetControlValue(input(0), rng);
+            noisy_input(1) = y_axis_actuator_.GetControlValue(input(1), rng);
+            noisy_input(2) = zr_axis_actuator_.GetControlValue(input(2), rng);
+            // Compute new config
+            const Eigen::Matrix<double, 3, 1> new_config = GetPosition() + noisy_input;
             // Update config
-            SetConfig(noisy_config);
+            SetConfig(new_config);
         }
 
         inline void ApplyControlInput(const Eigen::VectorXd& input)
         {
             assert(input.size() == 3);
+            Eigen::Matrix<double, 3, 1> real_input = Eigen::Matrix<double, 3, 1>::Zero();
+            real_input(0) = x_axis_actuator_.GetControlValue(input(0));
+            real_input(1) = y_axis_actuator_.GetControlValue(input(1));
+            real_input(2) = zr_axis_actuator_.GetControlValue(input(2));
             // Compute new config
-            const Eigen::Matrix<double, 3, 1> new_config = config_ + input;
+            const Eigen::Matrix<double, 3, 1> new_config = GetPosition() + real_input;
             // Update config
             SetConfig(new_config);
         }
@@ -379,9 +439,10 @@ namespace simplese2_robot_helpers
         {
             if (link_name == "robot")
             {
+                const Eigen::Matrix<double, 3, 1> current_config = GetPosition();
                 // Transform the point into world frame
-                const Eigen::Affine3d current_transform = pose_;
-                const Eigen::Vector3d current_position(config_(0), config_(1), 0.0);
+                const Eigen::Affine3d current_transform = GetLinkTransform("robot");
+                const Eigen::Vector3d current_position(current_config(0), current_config(1), 0.0);
                 const Eigen::Vector3d world_point = current_transform * link_relative_point;
                 // Make the jacobian
                 Eigen::Matrix<double, 3, 3> jacobian = Eigen::Matrix<double, 3, 3>::Zero();
@@ -403,33 +464,11 @@ namespace simplese2_robot_helpers
             }
         }
 
-        inline Eigen::Matrix<double, 6, Eigen::Dynamic> ComputeJacobian() const
-        {
-            // Transform the point into world frame
-            const Eigen::Affine3d current_transform = pose_;
-            const Eigen::Vector3d current_position(config_(0), config_(1), 0.0);
-            const Eigen::Vector3d link_relative_point(0.0, 0.0, 0.0);
-            const Eigen::Vector3d world_point = current_transform * link_relative_point;
-            // Make the jacobian
-            Eigen::Matrix<double, 6, 3> jacobian = Eigen::Matrix<double, 6, 3>::Zero();
-            // Prismatic joints
-            // X joint
-            jacobian.block<3,1>(0, 0) = jacobian.block<3,1>(0, 0) + Eigen::Vector3d::UnitX();
-            // Y joint
-            jacobian.block<3,1>(0, 1) = jacobian.block<3,1>(0, 1) + Eigen::Vector3d::UnitY();
-            // Rotatational joints
-            // Compute Z-axis joint axis
-            const Eigen::Affine3d z_joint_transform = current_transform;
-            const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
-            jacobian.block<3,1>(0, 2) = jacobian.block<3,1>(0, 2) + z_joint_axis.cross(world_point - current_position);
-            jacobian.block<3,1>(3, 2) = jacobian.block<3,1>(3, 2) + z_joint_axis;
-            return jacobian;
-        }
-
         inline Eigen::Affine3d ComputePose() const
         {
-            const Eigen::Translation3d current_position(config_(0), config_(1), 0.0);
-            const double current_z_angle = config_(2);
+            const Eigen::Matrix<double, 3, 1> current_config = GetPosition();
+            const Eigen::Translation3d current_position(current_config(0), current_config(1), 0.0);
+            const double current_z_angle = current_config(2);
             const Eigen::Affine3d z_joint_transform = current_position * Eigen::Quaterniond::Identity();
             const Eigen::Affine3d body_transform = z_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_z_angle, Eigen::Vector3d::UnitZ())));
             return body_transform;

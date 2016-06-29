@@ -5,6 +5,7 @@
 #include <Eigen/Geometry>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/pretty_print.hpp>
 #include <nomdp_planning/simple_pid_controller.hpp>
 #include <nomdp_planning/simple_uncertainty_models.hpp>
 
@@ -143,6 +144,30 @@ namespace simplelinked_robot_helpers
             }
         }
 
+        inline std::string GetTypeString() const
+        {
+            if (IsContinuous())
+            {
+                return std::string("Continuous");
+            }
+            else if (IsRevolute())
+            {
+                return std::string("Revolute");
+            }
+            else if (IsPrismatic())
+            {
+                return std::string("Prismatic");
+            }
+            else if (IsFixed())
+            {
+                return std::string("Fixed");
+            }
+            else
+            {
+                assert(false);
+            }
+        }
+
         inline double GetValue() const
         {
             return value_;
@@ -174,6 +199,8 @@ namespace simplelinked_robot_helpers
 
         inline double EnforceLimits(const double value) const
         {
+            assert(isnan(value) == false);
+            assert(isinf(value) == false);
             if (IsContinuous())
             {
                 return EigenHelpers::EnforceContinuousRevoluteBounds(value);
@@ -233,7 +260,17 @@ namespace simplelinked_robot_helpers
             return SimpleJointModel(limits_, value, type_);
         }
     };
+}
 
+std::ostream& operator<<(std::ostream& strm, const simplelinked_robot_helpers::SimpleJointModel& joint_model)
+{
+    const std::pair<double, double> limits = joint_model.GetLimits();
+    strm << joint_model.GetValue() << "[" << limits.first << "," << limits.second << ")";
+    return strm;
+}
+
+namespace simplelinked_robot_helpers
+{
     class SimpleLinkedConfigurationSerializer
     {
     public:
@@ -591,6 +628,7 @@ namespace simplelinked_robot_helpers
 
         inline void SetConfig(const SimpleLinkedConfiguration& new_config)
         {
+            //std::cout << "Setting new config\nCurrent: " << PrettyPrint::PrettyPrint(GetPosition()) << "\nNew: " << PrettyPrint::PrettyPrint(new_config) << std::endl;
             assert(new_config.size() == num_active_joints_);
             size_t config_idx = 0u;
             for (size_t idx = 0; idx < joints_.size(); idx++)
@@ -609,6 +647,7 @@ namespace simplelinked_robot_helpers
                     config_idx++;
                 }
             }
+            //std::cout << "Set: " << PrettyPrint::PrettyPrint(GetPosition()) << std::endl;
             // Update forward kinematics
             UpdateTransforms();
         }
@@ -706,19 +745,19 @@ namespace simplelinked_robot_helpers
             return allowed_self_collision_map;
         }
 
-        static inline double ComputeMaxMotionPerStep(SimpleLinkedRobot robot)
+        inline double ComputeMaxMotionPerStep() const
         {
             double max_motion = 0.0;
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = GetRawLinksPoints();
             // Generate motion primitives
             std::vector<Eigen::VectorXd> motion_primitives;
-            motion_primitives.reserve(robot.GetNumActiveJoints() * 2);
-            for (size_t joint_idx = 0; joint_idx < robot.GetNumActiveJoints(); joint_idx++)
+            motion_primitives.reserve(GetNumActiveJoints() * 2);
+            for (size_t joint_idx = 0; joint_idx < GetNumActiveJoints(); joint_idx++)
             {
-                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(robot.GetNumActiveJoints());
+                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(GetNumActiveJoints());
                 raw_motion_plus(joint_idx) = 1.0;
                 motion_primitives.push_back(raw_motion_plus);
-                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(robot.GetNumActiveJoints());
+                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(GetNumActiveJoints());
                 raw_motion_neg(joint_idx) = -1.0;
                 motion_primitives.push_back(raw_motion_neg);
             }
@@ -733,7 +772,7 @@ namespace simplelinked_robot_helpers
                 {
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = ComputeLinkPointJacobian(link_name, link_relative_point);
                     // Compute max point motion
                     for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
                     {
@@ -760,10 +799,10 @@ namespace simplelinked_robot_helpers
                 throw std::invalid_argument("Attempted to construct a SimpleLinkedRobot with an invalid robot model");
             }
             num_active_joints_ = GetNumActiveJoints();
-            max_motion_per_unit_step_ = ComputeMaxMotionPerStep(*this);
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             UpdatePosition(initial_position);
+            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
@@ -781,6 +820,7 @@ namespace simplelinked_robot_helpers
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             UpdatePosition(initial_position);
+            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
@@ -798,7 +838,7 @@ namespace simplelinked_robot_helpers
             {
                 return true;
             }
-            int32_t stored = self_collision_map_((int64_t)link1_index, (int64_t)link2_index);
+            const int32_t stored = self_collision_map_((int64_t)link1_index, (int64_t)link2_index);
             if (stored > 0)
             {
                 return true;
@@ -862,6 +902,30 @@ namespace simplelinked_robot_helpers
             return configuration;
         }
 
+        template<typename PRNG>
+        inline SimpleLinkedConfiguration GetPosition(PRNG& rng) const
+        {
+            SimpleLinkedConfiguration configuration;
+            configuration.reserve(num_active_joints_);
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    const double current_val = current_joint.joint_model.GetValue();
+                    const double sensed_val = current_joint.joint_controller.sensor.GetSensorValue(current_val, rng);
+                    configuration.push_back(current_joint.joint_model.CopyWithNewValue(sensed_val));
+                }
+            }
+            configuration.shrink_to_fit();
+            return configuration;
+        }
+
         inline double ComputeDistanceTo(const SimpleLinkedConfiguration& target) const
         {
             return SimpleLinkedDistancer::Distance(GetPosition(), target);
@@ -871,7 +935,7 @@ namespace simplelinked_robot_helpers
         inline Eigen::VectorXd GenerateControlAction(const SimpleLinkedConfiguration& target, PRNG& rng)
         {
             // Get the current position
-            const SimpleLinkedConfiguration current = GetPosition();
+            const SimpleLinkedConfiguration current = GetPosition(rng);
             // Get the current error
             const Eigen::VectorXd current_error = SimpleLinkedDimDistancer::RawDistance(current, target);
             // Make the control action
@@ -889,7 +953,7 @@ namespace simplelinked_robot_helpers
                 {
                     const double joint_error = current_error(control_idx);
                     const double joint_term = current_joint.joint_controller.controller.ComputeFeedbackTerm(joint_error, 1.0);
-                    const double joint_control = current_joint.joint_controller.actuator.GetControlValue(joint_term, rng);
+                    const double joint_control = current_joint.joint_controller.actuator.GetControlValue(joint_term);
                     control_action(control_idx) = joint_control;
                     control_idx++;
                 }
@@ -916,9 +980,9 @@ namespace simplelinked_robot_helpers
                 {
                     assert(input_idx < input.size());
                     const double input_val = input(input_idx);
+                    const double noisy_input_val = current_joint.joint_controller.actuator.GetControlValue(input_val, rng);
                     const double current_val = current_joint.joint_model.GetValue();
-                    const double raw_new_val = current_val + input_val;
-                    const double noisy_new_val = current_joint.joint_controller.sensor.GetSensorValue(raw_new_val, rng);
+                    const double noisy_new_val = current_val + noisy_input_val;
                     new_config.push_back(current_joint.joint_model.CopyWithNewValue(noisy_new_val));
                     input_idx++;
                 }
@@ -946,8 +1010,9 @@ namespace simplelinked_robot_helpers
                 {
                     assert(input_idx < input.size());
                     const double input_val = input(input_idx);
+                    const double real_input_val = current_joint.joint_controller.actuator.GetControlValue(input_val);
                     const double current_val = current_joint.joint_model.GetValue();
-                    const double raw_new_val = current_val + input_val;
+                    const double raw_new_val = current_val + real_input_val;
                     new_config.push_back(current_joint.joint_model.CopyWithNewValue(raw_new_val));
                     input_idx++;
                 }

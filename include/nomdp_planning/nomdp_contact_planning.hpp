@@ -60,6 +60,8 @@
 
 namespace nomdp_contact_planning
 {
+    enum SPATIAL_FEATURE_CLUSTERING_TYPE {CONVEX_REGION_SIGNATURE, ACTUATION_CENTER_CONNECTIVITY, POINT_TO_POINT_MOVEMENT, COMPARE};
+
     template<typename Robot, typename Sampler, typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename InterpolateFn, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
     class NomdpPlanningSpace
     {
@@ -90,6 +92,35 @@ namespace nomdp_contact_planning
             }
         };
 
+        struct SpatialClusteringPerformance
+        {
+            std::vector<uint32_t> clustering_splits;
+            std::vector<double> crs_similarities;
+            std::vector<double> ac_similarities;
+
+            SpatialClusteringPerformance()
+            {
+                clustering_splits.clear();;
+                crs_similarities.clear();
+                ac_similarities.clear();
+            }
+
+            void ExportResults() const
+            {
+                const std::string log_file_name("/tmp/spatial_clustering_performance.csv");
+                std::ofstream log_file(log_file_name, std::ios_base::out | std::ios_base::app);
+                if (!log_file.is_open())
+                {
+                    std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << log_file_name << "\x1b[37m \n";
+                    throw std::invalid_argument("Log filename must be write-openable");
+                }
+                log_file << PrettyPrint::PrettyPrint(clustering_splits, false, ",") << std::endl;
+                log_file << PrettyPrint::PrettyPrint(crs_similarities, false, ",") << std::endl;
+                log_file << PrettyPrint::PrettyPrint(ac_similarities, false, ",") << std::endl;
+                log_file.close();
+            }
+        };
+
         // Typedef so we don't hate ourselves
         typedef nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
         typedef execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningPolicy;
@@ -100,6 +131,7 @@ namespace nomdp_contact_planning
 
         bool resample_particles_;
         bool simulate_with_individual_jacobians_;
+        SPATIAL_FEATURE_CLUSTERING_TYPE spatial_feature_clustering_type_;
         size_t num_particles_;
         double step_size_;
         double goal_distance_threshold_;
@@ -118,11 +150,17 @@ namespace nomdp_contact_planning
         mutable uint64_t split_id_;
         mutable uint64_t cluster_calls_;
         mutable uint64_t cluster_fallback_calls_;
+        mutable uint64_t particles_stored_;
+        mutable uint64_t particles_simulated_;
         mutable double total_goal_reached_probability_;
         mutable double time_to_first_solution_;
         mutable std::unordered_map<uint64_t, SplitProbabilityTable> split_probability_tables_;
         mutable NomdpPlanningTree nearest_neighbors_storage_;
+        mutable SpatialClusteringPerformance clustering_performance_;
 
+        /*
+         * Private helper function - needs well-formed inputs, so it isn't safe to expose to external code
+         */
         inline static void ExtractChildStates(const NomdpPlanningTree& raw_planner_tree, const int64_t raw_parent_index, const int64_t pruned_parent_index, NomdpPlanningTree& pruned_planner_tree)
         {
             assert((raw_parent_index >= 0) && (raw_parent_index < (int64_t)raw_planner_tree.size()));
@@ -155,6 +193,9 @@ namespace nomdp_contact_planning
 
     public:
 
+        /*
+         * Serialization/deserialization helpers
+         */
         static inline uint64_t SerializePlannerTree(const NomdpPlanningTree& planner_tree, std::vector<uint8_t>& buffer)
         {
             std::cout << "Serializing planner tree..." << std::endl;
@@ -266,7 +307,10 @@ namespace nomdp_contact_planning
             return NomdpPlanningPolicy::Deserialize(decompressed_serialized_policy, 0u).first;
         }
 
-        inline NomdpPlanningSpace(const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_objects, environment_resolution)
+        /*
+         * Constructors
+         */
+        inline NomdpPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_objects, environment_resolution)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -286,6 +330,7 @@ namespace nomdp_contact_planning
             {
                 rngs_.push_back(PRNG(seed_dist(rng_)));
             }
+            spatial_feature_clustering_type_ = spatial_feature_clustering_type;
             simulate_with_individual_jacobians_ = simulate_with_individual_jacobians;
             num_particles_ = num_particles;
             step_size_ = step_size;
@@ -300,11 +345,13 @@ namespace nomdp_contact_planning
             split_id_ = 0;
             cluster_calls_ = 0;
             cluster_fallback_calls_ = 0;
+            particles_stored_ = 0;
+            particles_simulated_ = 0;
             nearest_neighbors_storage_.clear();
             resample_particles_ = false;
         }
 
-        inline NomdpPlanningSpace(const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::string& environment_id, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_id, environment_resolution)
+        inline NomdpPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::string& environment_id, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_id, environment_resolution)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -324,6 +371,7 @@ namespace nomdp_contact_planning
             {
                 rngs_.push_back(PRNG(seed_dist(rng_)));
             }
+            spatial_feature_clustering_type_ = spatial_feature_clustering_type;
             simulate_with_individual_jacobians_ = simulate_with_individual_jacobians;
             num_particles_ = num_particles;
             step_size_ = step_size;
@@ -338,15 +386,15 @@ namespace nomdp_contact_planning
             split_id_ = 0;
             cluster_calls_ = 0;
             cluster_fallback_calls_ = 0;
+            particles_stored_ = 0;
+            particles_simulated_ = 0;
             nearest_neighbors_storage_.clear();
             resample_particles_ = false;
         }
 
-        inline const NomdpPlanningTree& GetTreeImmutable() const
-        {
-            return nearest_neighbors_storage_;
-        }
-
+        /*
+         * Test example to show the behavior of the lightweight simulator
+         */
 #ifdef USE_ROS
         inline nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> DemonstrateSimulator(const Configuration& start, const Configuration& goal, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub) const
         {
@@ -452,8 +500,11 @@ namespace nomdp_contact_planning
         }
 #endif
 
+        /*
+         * Planning functions
+         */
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
+        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
         {
             // Draw the simulation environment
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -493,12 +544,12 @@ namespace nomdp_contact_planning
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, planner_action_try_attempts, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, planner_action_try_attempts, start_time);
+            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, action_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, action_attempt_count, start_time);
             std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
-            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, planner_action_try_attempts, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
+            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, action_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
             std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
@@ -508,17 +559,20 @@ namespace nomdp_contact_planning
             std::cout << "Planner terminated with goal reached probability: " << total_goal_reached_probability_ << std::endl;
             planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
             planning_results.second["Time to first solution"] = time_to_first_solution_;
+            clustering_performance_.ExportResults();
             std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
             const std::pair<uint64_t, uint64_t> simulator_resolve_statistics = simulator_.GetResolveStatistics();
             planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first;
             planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.second;
+            planning_results.second["Particles stored"] = (double)particles_stored_;
+            planning_results.second["Particles simulated"] = (double)particles_simulated_;
             std::cout << "Simulator statistics: " << simulator_resolve_statistics.first << " successful resolves, " << simulator_resolve_statistics.second << " unsuccessful resolves" << std::endl;
             if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
                 const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, planner_action_try_attempts, policy_action_attempt_count);
+                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, action_attempt_count, action_attempt_count);
                 planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
                 // Draw the final path(s)
                 for (size_t pidx = 0; pidx < planning_results.first.size(); pidx++)
@@ -578,19 +632,19 @@ namespace nomdp_contact_planning
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment)
+        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment)
         {
             NomdpPlanningState start_state(start);
             NomdpPlanningState goal_state(goal);
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, planner_action_try_attempts, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, planner_action_try_attempts, start_time);
+            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, action_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, action_attempt_count, start_time);
             std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
-            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, planner_action_try_attempts, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
+            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, action_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
             std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
@@ -605,12 +659,14 @@ namespace nomdp_contact_planning
             const std::pair<uint64_t, uint64_t> simulator_resolve_statistics = simulator_.GetResolveStatistics();
             planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first;
             planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.second;
+            planning_results.second["Particles stored"] = (double)particles_stored_;
+            planning_results.second["Particles simulated"] = (double)particles_simulated_;
             std::cout << "Simulator statistics: " << simulator_resolve_statistics.first << " successful resolves, " << simulator_resolve_statistics.second << " unsuccessful resolves" << std::endl;
             if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
                 const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, planner_action_try_attempts, policy_action_attempt_count);
+                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, action_attempt_count, action_attempt_count);
                 planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
                 return std::pair<NomdpPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
             }
@@ -622,6 +678,9 @@ namespace nomdp_contact_planning
             }
         }
 
+        /*
+         * Solution tree post-processing functions
+         */
         inline NomdpPlanningTree PostProcessTree(const NomdpPlanningTree& planner_tree) const
         {
             std::cout << "Postprocessing planner tree in preparation for policy extraction..." << std::endl;
@@ -648,10 +707,35 @@ namespace nomdp_contact_planning
                 // If we are a non-goal child of a goal branch state
                 else if (parent_state.GetValueImmutable().GetGoalPfeasibility() > 0.0)
                 {
-                    // Update P(goal reached) based on our ability to reverse to the goal branch
-                    const double parent_pgoalreached = parent_state.GetValueImmutable().GetGoalPfeasibility();
-                    const double new_pgoalreached = -(parent_pgoalreached * current_state.GetValueImmutable().GetReverseEdgePfeasibility()); // We use negative goal reached probabilities to signal probability due to reversing
-                    current_state.GetValueMutable().SetGoalPfeasibility(new_pgoalreached);
+                    // Make sure we're a child of a split where at least one child reaches the goal
+                    const uint64_t transition_id = current_state.GetValueImmutable().GetTransitionId();
+                    const uint64_t state_id = current_state.GetValueImmutable().GetStateId();
+                    bool result_of_goal_reaching_split = false;
+                    const std::vector<int64_t>& other_children = parent_state.GetChildIndices();
+                    for (size_t idx = 0; idx < other_children.size(); idx++)
+                    {
+                        const int64_t other_child_index = other_children[idx];
+                        const NomdpPlanningTreeState& other_child_state = postprocessed_planner_tree[other_child_index];
+                        const uint64_t other_child_transition_id = other_child_state.GetValueImmutable().GetTransitionId();
+                        const uint64_t other_child_state_id = other_child_state.GetValueImmutable().GetStateId();
+                        // If it's a child of the same split that produced us
+                        if ((state_id != other_child_state_id) && (transition_id == other_child_transition_id))
+                        {
+                            const double other_child_goal_probability = other_child_state.GetValueImmutable().GetGoalPfeasibility();
+                            if (other_child_goal_probability > 0.0)
+                            {
+                                result_of_goal_reaching_split = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (result_of_goal_reaching_split)
+                    {
+                        // Update P(goal reached) based on our ability to reverse to the goal branch
+                        const double parent_pgoalreached = parent_state.GetValueImmutable().GetGoalPfeasibility();
+                        const double new_pgoalreached = -(parent_pgoalreached * current_state.GetValueImmutable().GetReverseEdgePfeasibility()); // We use negative goal reached probabilities to signal probability due to reversing
+                        current_state.GetValueMutable().SetGoalPfeasibility(new_pgoalreached);
+                    }
                 }
             }
             std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
@@ -720,25 +804,9 @@ namespace nomdp_contact_planning
             return pruned_planner_tree;
         }
 
-        inline std::pair<uint32_t, uint32_t> ComputeReverseEdgeProbability(const NomdpPlanningState& parent, const NomdpPlanningState& child, const bool enable_contact_manifold_target_adjustment) const
-        {
-            std::vector<std::pair<Configuration, bool>> simulation_result = ForwardSimulateParticles(child, parent, 80, enable_contact_manifold_target_adjustment).second;
-            uint32_t reached_parent = 0u;
-            // Get the target position
-            const Configuration target_position = parent.GetExpectation();
-            for (size_t ndx = 0; ndx < simulation_result.size(); ndx++)
-            {
-                const Configuration& current_particle = simulation_result[ndx].first;
-                // Check if the particle got close enough
-                const double particle_distance = DistanceFn::Distance(current_particle, target_position);
-                if (particle_distance <= goal_distance_threshold_)
-                {
-                    reached_parent++;
-                }
-            }
-            return std::make_pair(num_particles_, reached_parent);
-        }
-
+        /*
+         * Policy generation wrapper function
+         */
         inline NomdpPlanningPolicy ExtractPolicy(const NomdpPlanningTree& planner_tree, const Configuration& goal, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count) const
         {
             const double marginal_edge_weight = 0.05;
@@ -746,8 +814,11 @@ namespace nomdp_contact_planning
             return policy;
         }
 
+        /*
+         * Policy simulation and execution functions
+         */
 #ifdef USE_ROS
-        inline std::pair<std::pair<NomdpPlanningPolicy, double>, std::pair<double, double>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub, const bool wait_for_user, const bool show_tracks) const
+        inline std::pair<std::pair<NomdpPlanningPolicy, double>, std::pair<double, double>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             simulator_.ResetResolveStatistics();
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
@@ -776,7 +847,7 @@ namespace nomdp_contact_planning
             }
             for (size_t idx = 0; idx < num_executions; idx++)
             {
-                DrawParticlePolicyExecution((uint32_t)idx, particle_executions[idx], display_pub, show_tracks);
+                DrawParticlePolicyExecution((uint32_t)idx, particle_executions[idx], display_pub, draw_wait, show_tracks);
             }
             const double policy_success = (double)reached_goal / (double)num_executions;
             const std::pair<uint64_t, uint64_t> resolve_stats = simulator_.GetResolveStatistics();
@@ -809,14 +880,14 @@ namespace nomdp_contact_planning
         }
 
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, double> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const bool show_tracks) const
+        inline std::pair<NomdpPlanningPolicy, double> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
-                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, config_dist_fn, exec_step_limit, display_pub, wait_for_user);
+                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit, display_pub, wait_for_user);
                 particle_executions[idx] = particle_execution.first;
                 policy = particle_execution.second.first;
                 if (particle_execution.second.second)
@@ -838,20 +909,20 @@ namespace nomdp_contact_planning
             }
             for (size_t idx = 0; idx < num_executions; idx++)
             {
-                DrawParticlePolicyExecution((uint32_t)idx, particle_executions[idx], display_pub, show_tracks);
+                DrawParticlePolicyExecution((uint32_t)idx, particle_executions[idx], display_pub, draw_wait, show_tracks);
             }
             const double policy_success = (double)reached_goal / (double)num_executions;
             return std::pair<NomdpPlanningPolicy, double>(policy, policy_success);
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, double> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn, const uint32_t num_executions, const uint32_t exec_step_limit) const
+        inline std::pair<NomdpPlanningPolicy, double> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit) const
         {
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
-                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, config_dist_fn, exec_step_limit);
+                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit);
                 policy = particle_execution.second.first;
                 if (particle_execution.second.second)
                 {
@@ -895,8 +966,9 @@ namespace nomdp_contact_planning
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
             }
             // Let's do this
-            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, DistanceFn::Distance); };
-            std::vector<Configuration, ConfigAlloc> particle_trajectory = {start};
+            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
+            std::vector<Configuration, ConfigAlloc> particle_trajectory;
+            particle_trajectory.push_back(start);
             int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
@@ -955,7 +1027,7 @@ namespace nomdp_contact_planning
                     std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
                 }
                 // Simulate fowards
-                const std::vector<Configuration, ConfigAlloc> execution_states = ExecutePolicyStep(current_config, action, enable_contact_manifold_target_adjustment, rng);
+                const std::vector<Configuration, ConfigAlloc> execution_states = SimulatePolicyStep(current_config, action, enable_contact_manifold_target_adjustment, rng);
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
                 const Configuration result_config = particle_trajectory.back();
                 // Check if we've reached the goal
@@ -974,8 +1046,9 @@ namespace nomdp_contact_planning
 
         inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> SimulateSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
         {
-            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, DistanceFn::Distance); };
-            std::vector<Configuration, ConfigAlloc> particle_trajectory = {start};
+            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
+            std::vector<Configuration, ConfigAlloc> particle_trajectory;
+            particle_trajectory.push_back(start);
             int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
@@ -992,7 +1065,7 @@ namespace nomdp_contact_planning
                 //std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
                 std::cout << "----------\nReceived new action for parent state index " << parent_state_idx << " and transition ID " << desired_transition_id << "\n==========" << std::endl;
                 // Simulate fowards
-                const std::vector<Configuration, ConfigAlloc> execution_states = ExecutePolicyStep(current_config, action, enable_contact_manifold_target_adjustment, rng);
+                const std::vector<Configuration, ConfigAlloc> execution_states = SimulatePolicyStep(current_config, action, enable_contact_manifold_target_adjustment, rng);
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
                 const Configuration result_config = particle_trajectory.back();
                 // Check if we've reached the goal
@@ -1009,7 +1082,7 @@ namespace nomdp_contact_planning
         }
 
 #ifdef USE_ROS
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user) const
         {
             std::cout << "Drawing environment..." << std::endl;
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -1036,12 +1109,13 @@ namespace nomdp_contact_planning
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
             }
             // Let's do this
-            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, config_dist_fn); };
+            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
             // Reset the robot first
             std::cout << "Reseting before policy execution..." << std::endl;
             move_fn(start, true);
             std::cout << "Executing policy..." << std::endl;
-            std::vector<Configuration, ConfigAlloc> particle_trajectory = {start};
+            std::vector<Configuration, ConfigAlloc> particle_trajectory;
+            particle_trajectory.push_back(start);
             int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
@@ -1116,16 +1190,17 @@ namespace nomdp_contact_planning
         }
 #endif
 
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn, const uint32_t exec_step_limit) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit) const
         {
-            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, config_dist_fn); };
+            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
             // Reset the robot first
             std::cout << "Reseting before policy execution..." << std::endl;
             const std::vector<Configuration, ConfigAlloc> start_move = move_fn(start, true);
             assert(start_move.size() > 0);
             assert(DistanceFn::Distance(start_move.back(), start) <= goal_distance_threshold_);
             std::cout << "Executing policy..." << std::endl;
-            std::vector<Configuration, ConfigAlloc> particle_trajectory = {start};
+            std::vector<Configuration, ConfigAlloc> particle_trajectory;
+            particle_trajectory.push_back(start);
             int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
@@ -1157,7 +1232,7 @@ namespace nomdp_contact_planning
             return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, false));
         }
 
-        inline std::vector<Configuration, ConfigAlloc> ExecutePolicyStep(const Configuration& current_config, const Configuration& action, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
+        inline std::vector<Configuration, ConfigAlloc> SimulatePolicyStep(const Configuration& current_config, const Configuration& action, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
         {
             nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(current_config, action);
@@ -1185,32 +1260,11 @@ namespace nomdp_contact_planning
             return execution_trace;
         }
 
-        inline std::vector<std::vector<size_t>> PolicyParticleClusteringFn(const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& current_config, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn) const
-        {
-            // Collect all the particles and our current config together
-            std::vector<std::pair<Configuration, bool>> all_particles;
-            all_particles.reserve(particles.size() + 1);
-            for (size_t idx = 0; idx < particles.size(); idx++)
-            {
-                const Configuration& current_particle = particles[idx];
-                all_particles.push_back(std::make_pair(current_particle, false));
-            }
-            all_particles.push_back(std::make_pair(current_config, false));
-            all_particles.shrink_to_fit();
-            //std::cout << "All configs to consider for clustering: " << PrettyPrint::PrettyPrint(all_particles) << std::endl;
-            // Do clustering magic
-            // Collect the signatures for each particle
-            const std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures = GenerateRegionSignatures(all_particles);
-            //std::cout << "Region signatures: " << PrettyPrint::PrettyPrint(particle_region_signatures) << std::endl;
-            // We attempt to "grow" a region cluster from every particle. Yes, this is O(n^2), but we can parallelize it
-            const std::vector<std::vector<size_t>> initial_clusters = GenerateInitialRegionSignatureClusters(particle_region_signatures);
-            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
-            const std::vector<std::vector<size_t>> final_index_clusters = RunDistanceClusteringOnInitialClusters(initial_clusters, all_particles, config_dist_fn);
-            return final_index_clusters;
-        }
-
+        /*
+         * Drawing functions
+         */
 #ifdef USE_ROS
-        inline void DrawParticlePolicyExecution(const uint32_t particle_idx, const std::vector<Configuration, ConfigAlloc>& trajectory, ros::Publisher& display_pub, const bool show_track) const
+        inline void DrawParticlePolicyExecution(const uint32_t particle_idx, const std::vector<Configuration, ConfigAlloc>& trajectory, ros::Publisher& display_pub, const double draw_wait, const bool show_track) const
         {
             if (trajectory.size() > 1)
             {
@@ -1240,7 +1294,7 @@ namespace nomdp_contact_planning
                     display_markers.markers.push_back(current_marker);
                     display_pub.publish(display_markers);
                     // Wait for a bit
-                    std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+                    std::this_thread::sleep_for(std::chrono::duration<double>(draw_wait));
                 }
             }
             else
@@ -1334,843 +1388,6 @@ namespace nomdp_contact_planning
             display_pub.publish(policy_markers);
         }
 #endif
-
-        inline double ComputeGoalReachedProbability(const NomdpPlanningState& state, const Configuration& goal) const
-        {
-            size_t within_distance = 0;
-            std::pair<const std::vector<Configuration, ConfigAlloc>&, bool> particle_check = state.GetParticlePositionsImmutable();
-            const std::vector<Configuration, ConfigAlloc>& particles = particle_check.first;
-            for (size_t idx = 0; idx < particles.size(); idx++)
-            {
-                const double distance = DistanceFn::Distance(particles[idx], goal);
-                if (distance < goal_distance_threshold_)
-                {
-                    within_distance++;
-                }
-            }
-            double percent_in_range = (double)within_distance / (double)particles.size();
-            return percent_in_range;
-        }
-
-        inline double StateDistance(const NomdpPlanningState& state1, const NomdpPlanningState& state2) const
-        {
-            // Get the "space independent" expectation distance
-            double expectation_distance = DistanceFn::Distance(state1.GetExpectation(), state2.GetExpectation()) / step_size_;
-            // Get the Pfeasibility(start -> state1)
-            double feasibility_weight = (1.0 - state1.GetMotionPfeasibility()) * feasibility_alpha_ + (1.0 - feasibility_alpha_);
-            // Get the "space independent" variance of state1
-            Eigen::VectorXd raw_variances = state1.GetSpaceIndependentVariances();
-            double raw_variance = raw_variances.lpNorm<1>();
-            // Turn the variance into a weight
-            double variance_weight = erf(raw_variance) * variance_alpha_ + (1.0 - variance_alpha_);
-            // Compute the actual distance
-            double distance = (feasibility_weight * expectation_distance * variance_weight);
-            return distance;
-        }
-
-        inline int64_t GetNearestNeighbor(const NomdpPlanningTree& planner_nodes, const NomdpPlanningState& random_state) const
-        {
-            UNUSED(planner_nodes);
-            // Get the nearest neighbor (ignoring the disabled states)
-        #ifdef ENABLE_PARALLEL
-            std::vector<std::pair<int64_t, double>> per_thread_bests(get_num_omp_threads(), std::pair<int64_t, double>(-1, INFINITY));
-            #pragma omp parallel for schedule(guided)
-        #else
-            int64_t best_index = -1;
-            double best_distance = INFINITY;
-        #endif
-            for (size_t idx = 0; idx < nearest_neighbors_storage_.size(); idx++)
-            {
-                const NomdpPlanningTreeState& current_state = nearest_neighbors_storage_[idx];
-                // Only check against states enabled for NN checks
-                if (current_state.GetValueImmutable().UseForNearestNeighbors())
-                {
-                    const double state_distance = StateDistance(current_state.GetValueImmutable(), random_state);
-        #ifdef ENABLE_PARALLEL
-                    const uint32_t current_thread_id = (uint32_t)omp_get_thread_num();
-                    if (state_distance < per_thread_bests[current_thread_id].second)
-                    {
-                        per_thread_bests[current_thread_id].first = idx;
-                        per_thread_bests[current_thread_id].second = state_distance;
-                    }
-        #else
-                    if (state_distance < best_distance)
-                    {
-                        best_distance = state_distance;
-                        best_index = idx;
-                    }
-        #endif
-                }
-            }
-        #ifdef ENABLE_PARALLEL
-            int64_t best_index = -1;
-            double best_distance = INFINITY;
-            for (size_t idx = 0; idx < per_thread_bests.size(); idx++)
-            {
-                const double& thread_minimum_distance = per_thread_bests[idx].second;
-                if (thread_minimum_distance < best_distance)
-                {
-                    best_index = per_thread_bests[idx].first;
-                    best_distance = thread_minimum_distance;
-                }
-            }
-        #endif
-            std::cout << "Selected node " << best_index << " as nearest neighbor (Qnear)" << std::endl;
-            return best_index;
-        }
-
-        inline NomdpPlanningState SampleRandomTargetState()
-        {
-            const Configuration random_point = sampler_.Sample(rng_);
-            const NomdpPlanningState random_state(random_point);
-            return random_state;
-        }
-
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> ForwardSimulateParticles(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const uint32_t num_simulation_steps, const bool enable_contact_manifold_target_adjustment) const
-        {
-            // First, compute a target state
-            const Configuration target_point = target.GetExpectation();
-            // Get the initial particles
-            std::vector<Configuration, ConfigAlloc> initial_particles;
-            // We'd like to use the particles of the parent directly
-            if (nearest.GetNumParticles() == num_particles_)
-            {
-                initial_particles = nearest.CollectParticles(num_particles_);
-            }
-            // Otherwise, we resample from the parent
-            else
-            {
-                initial_particles = nearest.ResampleParticles(num_particles_, rng_);
-            }
-            // Forward propagate each of the particles
-            std::vector<std::pair<Configuration, bool>> propagated_points(num_particles_);
-            // We want to parallelize this as much as possible!
-#ifdef ENABLE_PARALLEL
-            #pragma omp parallel for schedule(guided)
-#endif
-            for (size_t idx = 0; idx < num_particles_; idx++)
-            {
-                const Configuration& initial_particle = initial_particles[idx];
-                nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
-#ifdef ENABLE_PARALLEL
-                int th_id = omp_get_thread_num();
-                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, false);
-#else
-                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rng_, num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, false);
-#endif
-            }
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points);
-        }
-
-        inline std::pair<std::vector<std::pair<NomdpPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> ForwardSimulateStates(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const uint32_t num_simulation_steps, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const bool enable_contact_manifold_target_adjustment) const
-        {
-            // Increment the transition ID
-            transition_id_++;
-            const uint64_t current_forward_transition_id = transition_id_;
-            const Configuration control_input = target.GetExpectation();
-            // Forward propagate each of the particles
-            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> simulation_result = ForwardSimulateParticles(nearest, target, num_simulation_steps, enable_contact_manifold_target_adjustment);
-            std::vector<Configuration, ConfigAlloc>& initial_particles = simulation_result.first;
-            std::vector<std::pair<Configuration, bool>>& propagated_points = simulation_result.second;
-            // Cluster the live particles into (potentially) multiple states
-            std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable> clustering_result = ClusterParticles(propagated_points, allow_contacts);
-            const std::vector<std::vector<std::pair<Configuration, bool>>>& particle_clusters = clustering_result.first;
-            bool is_split_child = false;
-            if (particle_clusters.size() > 1)
-            {
-                //std::cout << "Transition produced " << particle_clusters.size() << " split states" << std::endl;
-                is_split_child = true;
-                split_id_++;
-                split_probability_tables_[split_id_] = clustering_result.second;
-            }
-            // Build the forward-propagated states
-            std::vector<std::pair<NomdpPlanningState, int64_t>> result_states(particle_clusters.size());
-            for (size_t idx = 0; idx < particle_clusters.size(); idx++)
-            {
-                const std::vector<std::pair<Configuration, bool>>& current_cluster = particle_clusters[idx];
-                if (particle_clusters[idx].size() > 0)
-                {
-                    state_counter_++;
-                    const uint32_t attempt_count = (uint32_t)num_particles_;
-                    const uint32_t reached_count = (uint32_t)current_cluster.size();
-                    // Check if any of the particles in the current cluster collided with the environment during simulation.
-                    // If all are collision-free, we can safely assume the edge is trivially reversible
-                    std::vector<Configuration, ConfigAlloc> particle_locations(current_cluster.size());
-                    bool did_collide = false;
-                    for (size_t pdx = 0; pdx < current_cluster.size(); pdx++)
-                    {
-                        particle_locations[pdx] = current_cluster[pdx].first;
-                        if (current_cluster[pdx].second)
-                        {
-                            did_collide = true;
-                        }
-                    }
-                    uint32_t reverse_attempt_count = (uint32_t)num_particles_;
-                    uint32_t reverse_reached_count = (uint32_t)num_particles_;
-                    if (did_collide)
-                    {
-                        //std::cout << "Simulation resulted in collision, defering reversibility check to post-processing" << std::endl;
-                        reverse_attempt_count = (uint32_t)num_particles_;
-                        reverse_reached_count = 0u;
-                    }
-                    else if (is_split_child)
-                    {
-                        //std::cout << "Simulation resulted in split, defering reversibility check to post-processing" << std::endl;
-                        reverse_attempt_count = (uint32_t)num_particles_;
-                        reverse_reached_count = 0u;
-                    }
-                    const double effective_edge_feasibility = (double)reached_count / (double)attempt_count;
-                    transition_id_++;
-                    const uint64_t new_state_reverse_transtion_id = transition_id_;
-                    NomdpPlanningState propagated_state(state_counter_, particle_locations, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_input, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u));
-                    // Store the state
-                    result_states[idx].first = propagated_state;
-                    result_states[idx].second = -1;
-                }
-            }
-            // Now that we've built the forward-propagated states, we compute their reverse edge P(feasibility)
-            uint32_t computed_reversibility = 0u;
-            for (size_t idx = 0; idx < result_states.size(); idx++)
-            {
-                NomdpPlanningState& current_state = result_states[idx].first;
-                if (include_reverse_actions)
-                {
-                    // In some cases, we already know the reverse edge P(feasibility) so we don't need to compute it again
-                    if (current_state.GetReverseEdgePfeasibility() < 1.0)
-                    {
-                        const std::pair<uint32_t, uint32_t> reverse_edge_check = ComputeReverseEdgeProbability(nearest, current_state, enable_contact_manifold_target_adjustment);
-                        current_state.UpdateReverseAttemptAndReachedCounts(reverse_edge_check.first, reverse_edge_check.second);
-                        computed_reversibility++;
-                    }
-                }
-                else
-                {
-                    current_state.UpdateReverseAttemptAndReachedCounts((uint32_t)num_particles_, 0u);
-                }
-            }
-            std::cout << "Forward simultation produced " << result_states.size() << " states, needed to compute reversibility for " << computed_reversibility << " of them" << std::endl;
-            // We only do further processing if a split happened
-            if (result_states.size() > 1)
-            {
-                // Now that we have the forward-propagated states, we go back and update their effective edge P(feasibility)
-                for (size_t idx = 0; idx < result_states.size(); idx++)
-                {
-                    NomdpPlanningState& current_state = result_states[idx].first;
-                    double percent_active = 1.0;
-                    double p_reached = 0.0;
-                    for (uint32_t try_attempt = 0; try_attempt < planner_action_try_attempts; try_attempt++)
-                    {
-                        // How many particles got to our state on this attempt?
-                        p_reached += (percent_active * current_state.GetRawEdgePfeasibility());
-                        // Update the percent of particles that are still usefully active
-                        double updated_percent_active = 0.0;
-                        for (size_t other_idx = 0; other_idx < result_states.size(); other_idx++)
-                        {
-                            if (other_idx != idx)
-                            {
-                                const NomdpPlanningState& other_state = result_states[other_idx].first;
-                                const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
-                                const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
-                                updated_percent_active += p_returned_to_parent;
-                            }
-                        }
-                        percent_active = updated_percent_active;
-                    }
-                    assert(p_reached > 0.0);
-                    if (p_reached > 1.0)
-                    {
-                        assert(p_reached <= 1.001);
-                        p_reached = 1.0;
-                    }
-                    assert(p_reached <= 1.0);
-                    std::cout << "Computed effective edge P(feasibility) of " << p_reached << " for " << planner_action_try_attempts << " try/retry attempts" << std::endl;
-                    current_state.SetEffectiveEdgePfeasibility(p_reached);
-                    // INSTEAD, what we're going to do is compute effective P(reached) for each child given a max try/retry count
-                    // Some splits can be handled as retry loops (and pretend that the bad children don't exist)
-                    // Some splits probably can't, and we'll need to figure out what to do with them
-                    //      Maybe if the ability to return is too low, we say it's a split?
-                    // Problem here is that we end up with more probability mass in the children than the parent (we'll figure this out later)
-                }
-            }
-            return std::pair<std::vector<std::pair<NomdpPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>(result_states, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points));
-        }
-
-        /* OLD NON-DISJOINT CLUSTER CODE
-        inline std::vector<std::vector<double>> ComputeConfigurationConvexRegionSignature(Robot robot, const Configuration configuration) const
-        {
-            // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
-            // Update the position of the robot
-            robot.UpdatePosition(configuration);
-            std::vector<std::vector<double>> link_region_signatures(robot_links_points.size());
-            // Now, go through the links and points of the robot for collision checking
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-            {
-                std::vector<double> region_signature(32, 0.0);
-                // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = robot_links_points[link_idx].second;
-                // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
-                // Now, go through the points of the link
-                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                {
-                    // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    std::pair<const sdf_tools::TAGGED_OBJECT_COLLISION_CELL&, bool> query = simulator_.GetEnvironment().GetImmutable(environment_relative_point);
-                    if (query.second)
-                    {
-                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& environment_cell = query.first;
-                        for (uint32_t region = 1; region <=32; region++)
-                        {
-                            if (environment_cell.IsPartOfConvexSegment(region))
-                            {
-                                region_signature[region - 1]++;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        std::cerr << "WARNING - ROBOT POINT OUTSIDE ENVIRONMENT BOUNDS" << std::endl;
-                    }
-                }
-                // "Normalize"
-                std::vector<double> normalized_region_signature(32, 0.0);
-                for (size_t idx = 0; idx < region_signature.size(); idx++)
-                {
-                    normalized_region_signature[idx] = region_signature[idx] * (double)link_points.size();
-                }
-                link_region_signatures[link_idx] = region_signature;
-            }
-            return link_region_signatures;
-        }
-
-        inline bool DoLinkConvexRegionSignaturesMatch(const std::vector<double>& signature_1, const std::vector<double>& signature_2) const
-        {
-            assert(signature_1.size() == signature_2.size());
-            // Two link signatures match if they share >threshold points in the same region
-            for (size_t idx = 0; idx < signature_1.size(); idx++)
-            {
-                const double signature_1_region_value = signature_1[idx];
-                const double signature_2_region_value = signature_2[idx];
-                if ((signature_1_region_value >= signature_matching_threshold_) && (signature_2_region_value >= signature_matching_threshold_))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        inline bool DoConvexRegionSignaturesMatch(const std::vector<std::vector<double>>& signature_1, const std::vector<std::vector<double>>& signature_2) const
-        {
-            assert(signature_1.size() == signature_2.size());
-            for (size_t idx = 0; idx < signature_1.size(); idx++)
-            {
-                const std::vector<double>& link_signature_1 = signature_1[idx];
-                const std::vector<double>& link_signature_2 = signature_2[idx];
-                if (DoLinkConvexRegionSignaturesMatch(link_signature_1, link_signature_2) == false)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        inline bool IsClusterSubset(const std::vector<size_t>& candidate_superset, const std::vector<size_t>& candidate_subset) const
-        {
-            if (candidate_subset.size() > candidate_superset.size())
-            {
-                return false;
-            }
-            // We add every element in the superset to a hashmap
-            std::unordered_map<size_t, uint8_t> superset_map(candidate_superset.size());
-            for (size_t idx = 0; idx < candidate_superset.size(); idx++)
-            {
-                const size_t candidate_superset_idx = candidate_superset[idx];
-                superset_map[candidate_superset_idx] = 1u;
-            }
-            // Now, we go through the subset and make sure every element is in the superset
-            for (size_t idx = 0; idx < candidate_subset.size(); idx++)
-            {
-                const size_t candidate_subset_idx = candidate_subset[idx];
-                auto found_itr = superset_map.find(candidate_subset_idx);
-                // If the subset element is not in the superset, then we're done
-                if (found_itr == superset_map.end())
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        inline std::vector<std::vector<size_t>> GenerateParticleClusterPermutations(const std::vector<size_t>& particle_clusters) const
-        {
-            assert(particle_clusters.size() > 0);
-            assert(particle_clusters.size() <= 8);
-            // Reserve the space we need up front
-            std::vector<std::vector<size_t>> particle_clusters_permutations;
-            particle_clusters_permutations.reserve((size_t)ceil(pow(2.0, (double)particle_clusters.size())) - 1);
-            // Now, we need to actually generate all subsets of the set defined by particle_clusters (excluding the empty set)
-            // We're going to use the loop iteration variable as a binary counter
-#ifdef ENABLE_PARALLEL
-            #pragma omp parallel for schedule(guided)
-#endif
-            for (uint32_t counter = 1; counter <= (uint32_t)particle_clusters_permutations.size(); counter++)
-            {
-                std::vector<size_t> current_permutation;
-                current_permutation.reserve(32);
-                const uint32_t current_counter_val = counter;
-                // Use the current counter as a binary bitmask that tells us which particle clusters to add to the current permutation
-                for (size_t idx = 0; idx < particle_clusters.size(); idx++)
-                {
-                    const uint32_t new_counter_val = current_counter_val >> idx;
-                    if ((new_counter_val & 0x00000001) == 1)
-                    {
-                        const size_t corresponding_cluster_id = particle_clusters[idx];
-                        current_permutation.push_back(corresponding_cluster_id);
-                    }
-                }
-                current_permutation.shrink_to_fit();
-                // MAKE SURE EACH PERMUTATION IS SORTED - this ensures that equivalent permutations are identical
-                std::sort(current_permutation.begin(), current_permutation.end());
-                particle_clusters_permutations.push_back(current_permutation);
-            }
-            // This shouldn't affect anything
-            particle_clusters_permutations.shrink_to_fit();
-            return particle_clusters_permutations;
-        }
-
-        inline std::vector<std::vector<std::vector<double>>> GenerateRegionSignatures(const std::vector<std::pair<Configuration, bool>>& particles) const
-        {
-            // Collect the signatures for each particle
-            std::vector<std::vector<std::vector<double>>> particle_region_signatures(particles.size());
-            // Loop through all the particles
-#ifdef ENABLE_PARALLEL
-            #pragma omp parallel for schedule(guided)
-#endif
-            for (size_t idx = 0; idx < particles.size(); idx++)
-            {
-                const std::pair<Configuration, bool>& particle = particles[idx];
-                particle_region_signatures[idx] = ComputeConfigurationConvexRegionSignature(robot_, particle.first);
-            }
-            return particle_region_signatures;
-        }
-
-        inline std::vector<std::vector<size_t>> GenerateInitialRegionSignatureClusters(const std::vector<std::pair<Configuration, bool>>& particles, const std::vector<std::vector<std::vector<double>>>& particle_region_signatures) const
-        {
-            // We attempt to "grow" a region cluster from every particle. Yes, this is O(n^2), but we can parallelize it
-            std::vector<std::vector<size_t>> initial_clusters(particles.size());
-#ifdef ENABLE_PARALLEL
-            #pragma omp parallel for schedule(guided)
-#endif
-            for (size_t cluster_idx = 0; cluster_idx < initial_clusters.size(); cluster_idx++)
-            {
-                const std::vector<std::vector<double>>& initial_cluster_region_signature = particle_region_signatures[cluster_idx];
-                std::vector<size_t> cluster_particles;
-                cluster_particles.reserve(particles.size());
-                for (size_t particle_idx = 0; particle_idx < particles.size(); particle_idx++)
-                {
-                    if (cluster_idx != particle_idx)
-                    {
-                        const std::vector<std::vector<double>>& particle_region_signature = particle_region_signatures[particle_idx];
-                        if (DoConvexRegionSignaturesMatch(initial_cluster_region_signature, particle_region_signature))
-                        {
-                            cluster_particles.push_back(particle_idx);
-                        }
-                    }
-                    else
-                    {
-                        cluster_particles.push_back(particle_idx);
-                    }
-                }
-                cluster_particles.shrink_to_fit();
-                initial_clusters[cluster_idx] = cluster_particles;
-            }
-            return initial_clusters;
-        }
-
-        inline std::vector<std::vector<size_t>> RunDistanceClusteringOnInitialClusters(const std::vector<std::vector<size_t>>& initial_clusters, const std::vector<std::pair<Configuration, bool>>& particles) const
-        {
-            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
-            std::vector<std::vector<size_t>> intermediate_clusters;
-            intermediate_clusters.reserve(initial_clusters.size());
-            // Let's build the distance function
-            // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
-            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return DistanceFn::Distance(particles[idx1].first, particles[idx2].first); };
-            for (size_t cluster_idx = 0; cluster_idx < initial_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& current_cluster = initial_clusters[cluster_idx];
-                // First, we build the distance matrix
-                const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(current_cluster, distance_fn);
-                // Check the max element of the distance matrix
-                const double max_distance = distance_matrix.maxCoeff();
-                if (max_distance <= step_size_)
-                {
-                    intermediate_clusters.push_back(current_cluster);
-                }
-                else
-                {
-                    cluster_fallback_calls_++;
-                    std::cout << "Cluster by convex region of " << current_cluster.size() << " elements exceeds distance threshold, performing additional hierarchical clustering" << std::endl;
-                    const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, step_size_).first;
-                    std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
-                    for (size_t ndx = 0; ndx < new_clustering.size(); ndx++)
-                    {
-                        intermediate_clusters.push_back(new_clustering[ndx]);
-                    }
-                }
-            }
-            return intermediate_clusters;
-        }
-
-        inline std::vector<std::vector<size_t>> RemoveDuplicateClusters(std::vector<std::vector<size_t>> intermediate_clusters) const
-        {
-            // Now that we have the intermediate clusters, we need to go through and remove duplicate clusters
-            // THIS MUTATES THE CLUSTERS AS IT GOES - THIS CANNOT BE PARALLELIZED!!!
-            for (size_t cluster_idx = 0; cluster_idx < intermediate_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& our_cluster = intermediate_clusters[cluster_idx];
-                if (our_cluster.size() > 0)
-                {
-                    for (size_t other_cluster_idx = 0; other_cluster_idx < intermediate_clusters.size(); other_cluster_idx++)
-                    {
-                        if (other_cluster_idx != cluster_idx)
-                        {
-                            const std::vector<size_t>& other_cluster = intermediate_clusters[other_cluster_idx];
-                            if (other_cluster.size() > 0)
-                            {
-                                // We check if out cluster is a subset of the other cluster
-                                if (IsClusterSubset(other_cluster, our_cluster))
-                                {
-                                    // If we are a subset, then our cluster is unnecessary, and can be removed
-                                    intermediate_clusters[cluster_idx].clear();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Now, extract the final index clusters (removing emptied clusters from before)
-            std::vector<std::vector<size_t>> final_index_clusters;
-            final_index_clusters.reserve(intermediate_clusters.size());
-            for (size_t cluster_idx = 0; cluster_idx < intermediate_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& cluster = intermediate_clusters[cluster_idx];
-                if (cluster.size() > 0)
-                {
-                    final_index_clusters.push_back(cluster);
-                }
-            }
-            final_index_clusters.shrink_to_fit();
-            return final_index_clusters;
-        }
-
-        inline SplitProbabilityTable GenerateSplitProbabilityTable(const std::vector<std::vector<size_t>>& final_index_clusters, const std::vector<std::pair<Configuration, bool>>& particles) const
-        {
-            // Now that we have completed the clustering, we need to build the probability table
-            // First, we build a table of particle index -> clusters the particle is in
-            std::unordered_map<size_t, std::vector<size_t>> particle_cluster_map(particles.size());
-            for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
-                for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
-                {
-                    const size_t particle_idx = cluster[element_idx];
-                    particle_cluster_map[particle_idx].push_back(cluster_idx);
-                }
-            }
-            // Now, we want to invert that table, to make a clusters -> particle count table
-            std::map<std::vector<size_t>, uint32_t> outcome_counts;
-            for (auto cluster_map_itr = particle_cluster_map.begin(); cluster_map_itr != particle_cluster_map.end(); ++cluster_map_itr)
-            {
-                const std::vector<size_t> particle_clusters = cluster_map_itr->second;
-                // Now, we need to generate *all* permutations of the particle clusters
-                const std::vector<std::vector<size_t>> particle_clusters_permutations = GenerateParticleClusterPermutations(particle_clusters);
-                // Now, for each permutation, we increment the outcome count
-                for (size_t idx = 0; idx < particle_clusters_permutations.size(); idx++)
-                {
-                    const std::vector<size_t>& permutation = particle_clusters_permutations[idx];
-                    outcome_counts[permutation]++;
-                }
-            }
-            // Now that we have a table mapping outcomes to counts, we can build the split probability table
-            std::vector<SplitProbabilityEntry> table_entries;
-            table_entries.reserve(outcome_counts.size());
-            for (auto outcome_counts_itr = outcome_counts.begin(); outcome_counts_itr != outcome_counts.end(); ++outcome_counts_itr)
-            {
-                const std::vector<size_t>& outcome_clusters = outcome_counts_itr->first;
-                const uint32_t outcome_count = outcome_counts_itr->second;
-                if (outcome_count > 0)
-                {
-                    // Compute the outcome probability
-                    const double raw_outcome_probability = (double)outcome_count / (double)particles.size();
-                    // In the final probability computation, some intersections are excluded (i.e. subtracted)
-                    // and we handle that here by computing a negative probability
-                    double outcome_probability = raw_outcome_probability;
-                    if ((outcome_clusters.size() % 2) == 0)
-                    {
-                        outcome_probability = -1.0 * outcome_probability;
-                    }
-                    // Make the list of outcome states
-                    std::vector<uint64_t> outcome_states;
-                    outcome_states.reserve(outcome_clusters.size());
-                    const uint64_t next_state_id = state_counter_ + 1;
-                    for (size_t idx = 0; idx < outcome_clusters.size(); idx++)
-                    {
-                        const size_t outcome_cluster_index = outcome_clusters[idx];
-                        uint64_t outcome_state_id = next_state_id + outcome_cluster_index;
-                        outcome_states.push_back(outcome_state_id);
-                    }
-                    outcome_states.shrink_to_fit();
-                    SplitProbabilityEntry entry(outcome_probability, outcome_states);
-                    table_entries.push_back(entry);
-                }
-            }
-            table_entries.shrink_to_fit();
-            return SplitProbabilityTable (table_entries);
-        }
-
-        inline std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable> ClusterParticles(const std::vector<std::pair<Configuration, bool>>& particles) const
-        {
-            // Make sure there are particles to cluster
-            if (particles.size() == 0)
-            {
-                return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(std::vector<std::vector<std::pair<Configuration, bool>>>(), SplitProbabilityTable());
-            }
-            else if (particles.size() == 1)
-            {
-                return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(std::vector<std::vector<std::pair<Configuration, bool>>>{particles}, SplitProbabilityTable());
-            }
-            cluster_calls_++;
-            // Collect the signatures for each particle
-            const std::vector<std::vector<std::vector<double>>> particle_region_signatures = GenerateRegionSignatures(particles);
-            // We attempt to "grow" a region cluster from every particle. Yes, this is O(n^2), but we can parallelize it
-            const std::vector<std::vector<size_t>> initial_clusters = GenerateInitialRegionSignatureClusters(particles, particle_region_signatures);
-            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
-            const std::vector<std::vector<size_t>> intermediate_clusters = RunDistanceClusteringOnInitialClusters(initial_clusters, particles);
-            // Now that we have the intermediate clusters, we need to go through and remove duplicate clusters
-            const std::vector<std::vector<size_t>> final_index_clusters = RemoveDuplicateClusters(intermediate_clusters);
-            // Now that we have completed the clustering, we need to build the probability table
-            const SplitProbabilityTable split_probability_table = GenerateSplitProbabilityTable(final_index_clusters, particles);
-            // Before we return, we need to convert the index clusters to configuration clusters
-            std::vector<std::vector<std::pair<Configuration, bool>>> final_clusters(final_index_clusters.size());
-#ifdef ENABLE_PARALLEL
-            #pragma omp parallel for schedule(guided)
-#endif
-            for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
-                std::vector<std::pair<Configuration, bool>> final_cluster(cluster.size());
-                for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
-                {
-                    const size_t particle_idx = cluster[element_idx];
-                    assert(particle_idx < particles.size());
-                    const std::pair<Configuration, bool>& particle = particles[particle_idx];
-                    final_cluster[element_idx] = particle;
-                }
-                final_clusters[cluster_idx] = final_cluster;
-            }
-            // Now, return the clusters and probability table
-            return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(final_clusters, split_probability_table);
-        }
-        */
-
-        inline std::vector<std::vector<std::vector<uint32_t>>> GenerateRegionSignatures(const std::vector<std::pair<Configuration, bool>>& particles) const
-        {
-            // Collect the signatures for each particle
-            std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures(particles.size());
-            // Loop through all the particles
-#ifdef ENABLE_PARALLEL
-            #pragma omp parallel for schedule(guided)
-#endif
-            for (size_t idx = 0; idx < particles.size(); idx++)
-            {
-                const std::pair<Configuration, bool>& particle = particles[idx];
-                particle_region_signatures[idx] = ComputeConfigurationConvexRegionSignature(robot_, particle.first);
-            }
-            return particle_region_signatures;
-        }
-
-        inline std::vector<std::vector<uint32_t>> ComputeConfigurationConvexRegionSignature(Robot robot, const Configuration& configuration) const
-        {
-            // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
-            // Update the position of the robot
-            robot.UpdatePosition(configuration);
-            std::vector<std::vector<uint32_t>> link_region_signatures(robot_links_points.size());
-            // Now, go through the links and points of the robot for collision checking
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-            {
-                // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = robot_links_points[link_idx].second;
-                std::vector<uint32_t> link_region_signature(link_points.size());
-                // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
-                // Now, go through the points of the link
-                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                {
-                    // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    std::pair<const sdf_tools::TAGGED_OBJECT_COLLISION_CELL&, bool> query = simulator_.GetEnvironment().GetImmutable(environment_relative_point);
-                    if (query.second)
-                    {
-                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& environment_cell = query.first;
-                        link_region_signature[point_idx] = environment_cell.convex_segment;
-                    }
-                    else
-                    {
-                        link_region_signature[point_idx] = 0u;
-                        //std::cerr << "WARNING - ROBOT POINT OUTSIDE ENVIRONMENT BOUNDS" << std::endl;
-                    }
-                }
-                link_region_signatures[link_idx] = link_region_signature;
-            }
-            return link_region_signatures;
-        }
-
-        inline double ComputeConvexRegionSignatureDistance(const std::vector<std::vector<uint32_t>>& signature_1, const std::vector<std::vector<uint32_t>>& signature_2) const
-        {
-            assert(signature_1.size() == signature_2.size());
-            size_t total_points = 0u;
-            size_t non_matching_points = 0u;
-            for (size_t link_idx = 0; link_idx < signature_1.size(); link_idx++)
-            {
-                const std::vector<uint32_t>& signature_1_link = signature_1[link_idx];
-                const std::vector<uint32_t>& signature_2_link = signature_2[link_idx];
-                assert(signature_1_link.size() == signature_2_link.size());
-                for (size_t point_idx = 0; point_idx < signature_1_link.size(); point_idx++)
-                {
-                    total_points++;
-                    const uint32_t signature_1_point = signature_1_link[point_idx];
-                    const uint32_t signature_2_point = signature_2_link[point_idx];
-                    if (signature_1_point == 0u || signature_2_point == 0u)
-                    {
-                        continue;
-                    }
-                    if ((signature_1_point & signature_2_point) == 0u)
-                    {
-                        non_matching_points++;
-                    }
-                }
-            }
-            assert(total_points > 0u);
-            const double distance = (double)non_matching_points / (double)total_points;
-            return distance;
-        }
-
-        inline std::vector<std::vector<size_t>> GenerateInitialRegionSignatureClusters(const std::vector<std::vector<std::vector<uint32_t>>>& particle_region_signatures) const
-        {
-            // Generate an initial "cluster" with everything in it
-            std::vector<size_t> initial_cluster(particle_region_signatures.size());
-            for (size_t idx = 0; idx < initial_cluster.size(); idx++)
-            {
-                initial_cluster[idx] = idx;
-            }
-            // Let's build the distance function
-            // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
-            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return ComputeConvexRegionSignatureDistance(particle_region_signatures[idx1], particle_region_signatures[idx2]); };
-            const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(initial_cluster, distance_fn);
-            //std::cout << "Region signature distance matrix " << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
-            // Check the max element of the distance matrix
-            const double max_distance = distance_matrix.maxCoeff();
-            if (max_distance <= signature_matching_threshold_)
-            {
-                return std::vector<std::vector<size_t>>{initial_cluster};
-            }
-            else
-            {
-                return simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(initial_cluster, distance_matrix, signature_matching_threshold_).first;
-            }
-        }
-
-        inline std::vector<std::vector<size_t>> RunDistanceClusteringOnInitialClusters(const std::vector<std::vector<size_t>>& initial_clusters, const std::vector<std::pair<Configuration, bool>>& particles, const std::function<double(const Configuration&, const Configuration&)>& config_dist_fn) const
-        {
-            const double distance_threshold = distance_clustering_threshold_;
-            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
-            std::vector<std::vector<size_t>> intermediate_clusters;
-            intermediate_clusters.reserve(initial_clusters.size());
-            // Let's build the distance function
-            // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
-            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return config_dist_fn(particles[idx1].first, particles[idx2].first); };
-            for (size_t cluster_idx = 0; cluster_idx < initial_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& current_cluster = initial_clusters[cluster_idx];
-                // First, we build the distance matrix
-                const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(current_cluster, distance_fn);
-                // Check the max element of the distance matrix
-                const double max_distance = distance_matrix.maxCoeff();
-                if (max_distance <= distance_threshold)
-                {
-                    intermediate_clusters.push_back(current_cluster);
-                }
-                else
-                {
-                    //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
-                    cluster_fallback_calls_++;
-                    std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " exceeding distance threshold " << distance_threshold << ", performing additional hierarchical clustering" << std::endl;
-                    const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, distance_threshold).first;
-                    std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
-                    for (size_t ndx = 0; ndx < new_clustering.size(); ndx++)
-                    {
-                        //std::cout << "Resulting cluster " << ndx << ":\n" << PrettyPrint::PrettyPrint(new_clustering[ndx]) << std::endl;
-                        intermediate_clusters.push_back(new_clustering[ndx]);
-                    }
-                }
-            }
-            return intermediate_clusters;
-        }
-
-        inline std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable> ClusterParticles(const std::vector<std::pair<Configuration, bool>>& particles, const bool allow_contacts) const
-        {
-            // Make sure there are particles to cluster
-            if (particles.size() == 0)
-            {
-                return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(std::vector<std::vector<std::pair<Configuration, bool>>>(), SplitProbabilityTable());
-            }
-            else if (particles.size() == 1)
-            {
-                return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(std::vector<std::vector<std::pair<Configuration, bool>>>{particles}, SplitProbabilityTable());
-            }
-            cluster_calls_++;
-            // Collect the signatures for each particle
-            const std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures = GenerateRegionSignatures(particles);
-            // We attempt to "grow" a region cluster from every particle. Yes, this is O(n^2), but we can parallelize it
-            const std::vector<std::vector<size_t>> initial_clusters = GenerateInitialRegionSignatureClusters(particle_region_signatures);
-            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
-            const std::vector<std::vector<size_t>> final_index_clusters = RunDistanceClusteringOnInitialClusters(initial_clusters, particles, DistanceFn::Distance);
-            // Now that we have completed the clustering, we need to build the probability table
-            const SplitProbabilityTable split_probability_table;
-            // Before we return, we need to convert the index clusters to configuration clusters
-            std::vector<std::vector<std::pair<Configuration, bool>>> final_clusters;
-            final_clusters.reserve(final_index_clusters.size());
-            int64_t total_particles = 0;
-            for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
-            {
-                const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
-                std::vector<std::pair<Configuration, bool>> final_cluster;
-                final_cluster.reserve(cluster.size());
-                for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
-                {
-                    total_particles++;
-                    const size_t particle_idx = cluster[element_idx];
-                    assert(particle_idx < particles.size());
-                    const std::pair<Configuration, bool>& particle = particles[particle_idx];
-                    if ((particle.second == false) || allow_contacts)
-                    {
-                        final_cluster.push_back(particle);
-                    }
-                }
-                final_cluster.shrink_to_fit();
-                final_clusters.push_back(final_cluster);
-            }
-            final_clusters.shrink_to_fit();
-            assert(total_particles == particles.size());
-            // Now, return the clusters and probability table
-            return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(final_clusters, split_probability_table);
-        }
 
 #ifdef USE_ROS
         inline visualization_msgs::Marker DrawRobotConfiguration(Robot robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
@@ -2283,6 +1500,757 @@ namespace nomdp_contact_planning
         }
 #endif
 
+        /*
+         * Nearest-neighbors functions
+         */
+        inline double StateDistance(const NomdpPlanningState& state1, const NomdpPlanningState& state2) const
+        {
+            // Get the "space independent" expectation distance
+            const double expectation_distance = DistanceFn::Distance(state1.GetExpectation(), state2.GetExpectation()) / step_size_;
+            // Get the Pfeasibility(start -> state1)
+            const double feasibility_weight = (1.0 - state1.GetMotionPfeasibility()) * feasibility_alpha_ + (1.0 - feasibility_alpha_);
+            // Get the "space independent" variance of state1
+            const Eigen::VectorXd raw_variances = state1.GetSpaceIndependentVariances();
+            const double raw_variance = raw_variances.lpNorm<1>();
+            // Turn the variance into a weight
+            const double variance_weight = erf(raw_variance) * variance_alpha_ + (1.0 - variance_alpha_);
+            // Compute the actual distance
+            const double distance = (feasibility_weight * expectation_distance * variance_weight);
+            return distance;
+        }
+
+        inline int64_t GetNearestNeighbor(const NomdpPlanningTree& planner_nodes, const NomdpPlanningState& random_state) const
+        {
+            UNUSED(planner_nodes);
+            // Get the nearest neighbor (ignoring the disabled states)
+        #ifdef ENABLE_PARALLEL
+            std::vector<std::pair<int64_t, double>> per_thread_bests(get_num_omp_threads(), std::pair<int64_t, double>(-1, INFINITY));
+            #pragma omp parallel for schedule(guided)
+        #else
+            int64_t best_index = -1;
+            double best_distance = INFINITY;
+        #endif
+            for (size_t idx = 0; idx < nearest_neighbors_storage_.size(); idx++)
+            {
+                const NomdpPlanningTreeState& current_state = nearest_neighbors_storage_[idx];
+                // Only check against states enabled for NN checks
+                if (current_state.GetValueImmutable().UseForNearestNeighbors())
+                {
+                    const double state_distance = StateDistance(current_state.GetValueImmutable(), random_state);
+        #ifdef ENABLE_PARALLEL
+                    const uint32_t current_thread_id = (uint32_t)omp_get_thread_num();
+                    if (state_distance < per_thread_bests[current_thread_id].second)
+                    {
+                        per_thread_bests[current_thread_id].first = idx;
+                        per_thread_bests[current_thread_id].second = state_distance;
+                    }
+        #else
+                    if (state_distance < best_distance)
+                    {
+                        best_distance = state_distance;
+                        best_index = idx;
+                    }
+        #endif
+                }
+            }
+        #ifdef ENABLE_PARALLEL
+            int64_t best_index = -1;
+            double best_distance = INFINITY;
+            for (size_t idx = 0; idx < per_thread_bests.size(); idx++)
+            {
+                const double& thread_minimum_distance = per_thread_bests[idx].second;
+                if (thread_minimum_distance < best_distance)
+                {
+                    best_index = per_thread_bests[idx].first;
+                    best_distance = thread_minimum_distance;
+                }
+            }
+        #endif
+            std::cout << "Selected node " << best_index << " as nearest neighbor (Qnear)" << std::endl;
+            return best_index;
+        }
+
+        /*
+         * State sampling wrapper
+         */
+        inline NomdpPlanningState SampleRandomTargetState()
+        {
+            const Configuration random_point = sampler_.Sample(rng_);
+            std::cout << "Sampled config: " << PrettyPrint::PrettyPrint(random_point) << std::endl;
+            const NomdpPlanningState random_state(random_point);
+            return random_state;
+        }
+
+        /*
+         * Particle clustering function used in policy execution
+         */
+        inline std::vector<std::vector<size_t>> PolicyParticleClusteringFn(const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& current_config) const
+        {
+            assert(particles.size() >= 1);
+            // Collect all the particles and our current config together
+            std::vector<std::pair<Configuration, bool>> all_particles;
+            all_particles.reserve(particles.size() + 1);
+            for (size_t idx = 0; idx < particles.size(); idx++)
+            {
+                const Configuration& current_particle = particles[idx];
+                //std::cout << "Particle configuration " << PrettyPrint::PrettyPrint(current_particle) << " with distance " << DistanceFn::Distance(current_particle, current_config) << std::endl;
+                all_particles.push_back(std::make_pair(current_particle, false));
+            }
+            all_particles.push_back(std::make_pair(current_config, false));
+            all_particles.shrink_to_fit();
+            // Do clustering magic
+            // Perform a first pass of clustering using spatial features
+            const std::vector<std::vector<size_t>> initial_clusters = PerformSpatialFeatureClustering(all_particles);
+            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
+            const std::vector<std::vector<size_t>> final_index_clusters = RunDistanceClusteringOnInitialClusters(initial_clusters, all_particles);
+            return final_index_clusters;
+        }
+
+        /*
+         * Particle clustering functions
+         */
+        inline std::vector<std::vector<std::vector<uint32_t>>> GenerateRegionSignatures(const std::vector<std::pair<Configuration, bool>>& particles) const
+        {
+            // Collect the signatures for each particle
+            std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures(particles.size());
+            // Loop through all the particles
+#ifdef ENABLE_PARALLEL
+            #pragma omp parallel for schedule(guided)
+#endif
+            for (size_t idx = 0; idx < particles.size(); idx++)
+            {
+                const std::pair<Configuration, bool>& particle = particles[idx];
+                particle_region_signatures[idx] = ComputeConfigurationConvexRegionSignature(robot_, particle.first);
+            }
+            return particle_region_signatures;
+        }
+
+        inline std::vector<std::vector<uint32_t>> ComputeConfigurationConvexRegionSignature(Robot robot, const Configuration& configuration) const
+        {
+            // Get the list of link name + link points for all the links of the robot
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
+            // Update the position of the robot
+            robot.UpdatePosition(configuration);
+            std::vector<std::vector<uint32_t>> link_region_signatures(robot_links_points.size());
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                const EigenHelpers::VectorVector3d& link_points = robot_links_points[link_idx].second;
+                std::vector<uint32_t> link_region_signature(link_points.size());
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    std::pair<const sdf_tools::TAGGED_OBJECT_COLLISION_CELL&, bool> query = simulator_.GetEnvironment().GetImmutable(environment_relative_point);
+                    if (query.second)
+                    {
+                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& environment_cell = query.first;
+                        link_region_signature[point_idx] = environment_cell.convex_segment;
+                    }
+                    else
+                    {
+                        link_region_signature[point_idx] = 0u;
+                        //std::cerr << "WARNING - ROBOT POINT OUTSIDE ENVIRONMENT BOUNDS" << std::endl;
+                    }
+                }
+                link_region_signatures[link_idx] = link_region_signature;
+            }
+            return link_region_signatures;
+        }
+
+        inline double ComputeConvexRegionSignatureDistance(const std::vector<std::vector<uint32_t>>& signature_1, const std::vector<std::vector<uint32_t>>& signature_2) const
+        {
+            assert(signature_1.size() == signature_2.size());
+            size_t total_points = 0u;
+            size_t non_matching_points = 0u;
+            for (size_t link_idx = 0; link_idx < signature_1.size(); link_idx++)
+            {
+                const std::vector<uint32_t>& signature_1_link = signature_1[link_idx];
+                const std::vector<uint32_t>& signature_2_link = signature_2[link_idx];
+                assert(signature_1_link.size() == signature_2_link.size());
+                for (size_t point_idx = 0; point_idx < signature_1_link.size(); point_idx++)
+                {
+                    total_points++;
+                    const uint32_t signature_1_point = signature_1_link[point_idx];
+                    const uint32_t signature_2_point = signature_2_link[point_idx];
+                    if ((signature_1_point != 0u) && (signature_2_point != 0u) && ((signature_1_point & signature_2_point) == 0u))
+                    {
+                        non_matching_points++;
+                    }
+                }
+            }
+            assert(total_points > 0u);
+            const double distance = (double)non_matching_points / (double)total_points;
+            return distance;
+        }
+
+        inline std::vector<std::vector<size_t>> GenerateRegionSignatureClusters(const std::vector<std::vector<std::vector<uint32_t>>>& particle_region_signatures) const
+        {
+            // Generate an initial "cluster" with everything in it
+            std::vector<size_t> initial_cluster(particle_region_signatures.size());
+            for (size_t idx = 0; idx < initial_cluster.size(); idx++)
+            {
+                initial_cluster[idx] = idx;
+            }
+            // Let's build the distance function
+            // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
+            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return ComputeConvexRegionSignatureDistance(particle_region_signatures[idx1], particle_region_signatures[idx2]); };
+            const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(initial_cluster, distance_fn);
+            //std::cout << "Region signature distance matrix " << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
+            // Check the max element of the distance matrix
+            const double max_distance = distance_matrix.maxCoeff();
+            if (max_distance <= signature_matching_threshold_)
+            {
+                return std::vector<std::vector<size_t>>{initial_cluster};
+            }
+            else
+            {
+                return simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(initial_cluster, distance_matrix, signature_matching_threshold_).first;
+            }
+        }
+
+        inline std::vector<std::vector<size_t>> PerformConvexRegionSignatureClustering(const std::vector<std::pair<Configuration, bool>>& particles) const
+        {
+            // Collect the signatures for each particle
+            const std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures = GenerateRegionSignatures(particles);
+            // We attempt to "grow" a region cluster from every particle. Yes, this is O(n^2), but we can parallelize it
+            const std::vector<std::vector<size_t>> initial_clusters = GenerateRegionSignatureClusters(particle_region_signatures);
+            return initial_clusters;
+        }
+
+        inline bool CheckStraightLine3DPath(const Eigen::Vector3d& start, const Eigen::Vector3d& end) const
+        {
+            // Get a reference to the environment grid
+            const sdf_tools::TaggedObjectCollisionMapGrid& environment = simulator_.GetEnvironment();
+            const double simulator_resolution = environment.GetResolution();
+            const double distance = (end - start).norm();
+            const uint32_t steps = std::max(1u, (uint32_t)ceil(distance / simulator_resolution));
+            for (uint32_t step = 1u; step <= steps; step++)
+            {
+                const double percent = (double)step / (double)steps;
+                const Eigen::Vector3d intermediate_point = EigenHelpers::Interpolate(start, end, percent);
+                const float occupancy = environment.GetImmutable(intermediate_point).first.occupancy;
+                if (occupancy > 0.5f)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        inline bool CheckActuationCenterStraightLinePath(Robot robot, const Configuration& start, const Configuration& end) const
+        {
+            // Get the list of link name + link points for all the links of the robot
+            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
+            EigenHelpers::VectorVector3d start_config_actuation_centers(robot_links_points.size());
+            EigenHelpers::VectorVector3d end_config_actuation_centers(robot_links_points.size());
+            // Update the position of the robot
+            robot.UpdatePosition(start);
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Vector3d link_point = link_transform.translation();
+                start_config_actuation_centers[link_idx] = link_point;
+            }
+            // Update the position of the robot
+            robot.UpdatePosition(end);
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first;
+                // Get the transform of the current link
+                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Vector3d link_point = link_transform.translation();
+                end_config_actuation_centers[link_idx] = link_point;
+            }
+            // Now that we've collected the actuation centers, check the straight-line paths between them
+            bool actuation_centers_feasible = true;
+            for (size_t idx = 0; idx < robot_links_points.size(); idx++)
+            {
+                const Eigen::Vector3d& start_link_actuation_center = start_config_actuation_centers[idx];
+                const Eigen::Vector3d& end_link_actuation_center = end_config_actuation_centers[idx];
+                if (CheckStraightLine3DPath(start_link_actuation_center, end_link_actuation_center) == false)
+                {
+                    actuation_centers_feasible = false;
+                    break;
+                }
+            }
+            return actuation_centers_feasible;
+        }
+
+        inline std::vector<std::vector<size_t>> PerformActuationCenterClustering(const std::vector<std::pair<Configuration, bool>>& particles) const
+        {
+            assert(particles.size() > 1);
+            // Assemble the actuation center to actuation center feasibility matrix
+            Eigen::MatrixXd distance_matrix = Eigen::MatrixXd::Zero(particles.size(), particles.size());
+#ifdef ENABLE_PARALLEL
+            #pragma omp parallel for schedule(guided)
+#endif
+            for (size_t idx = 0; idx < particles.size(); idx++)
+            {
+                for (size_t jdx = idx; jdx < particles.size(); jdx++)
+                {
+                    if (idx != jdx)
+                    {
+                        const double distance = CheckActuationCenterStraightLinePath(robot_, particles[idx].first, particles[jdx].first) ? 0.0 : 1.0;
+                        distance_matrix(idx, jdx) = distance;
+                        distance_matrix(jdx, idx) = distance;
+                    }
+                }
+            }
+            // Generate an initial "cluster" with everything in it
+            std::vector<size_t> initial_cluster(particles.size());
+            for (size_t idx = 0; idx < initial_cluster.size(); idx++)
+            {
+                initial_cluster[idx] = idx;
+            }
+            // Check the max element of the distance matrix
+            const double max_distance = distance_matrix.maxCoeff();
+            if (max_distance <= 0.0)
+            {
+                return std::vector<std::vector<size_t>>{initial_cluster};
+            }
+            else
+            {
+                return simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(initial_cluster, distance_matrix, 0.0).first;
+            }
+        }
+
+        inline bool CheckPointToPointMovement(Robot robot, const Configuration& start, const Configuration& end, PRNG& rng) const
+        {
+            nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+            const double target_distance = DistanceFn::Distance(start, end);
+            const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 80u;
+            const Configuration result = simulator_.ForwardSimulateRobot(robot, start, end, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, false, trace, false).first;
+            const double result_distance = DistanceFn::Distance(result, end);
+            if (result_distance <= goal_distance_threshold_)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline std::vector<std::vector<size_t>> PerformPointToPointMovementClustering(const std::vector<std::pair<Configuration, bool>>& particles) const
+        {
+            assert(particles.size() > 1);
+            // Assemble the point to point movement feasibility matrix
+            Eigen::MatrixXd distance_matrix = Eigen::MatrixXd::Zero(particles.size(), particles.size());
+#ifdef ENABLE_PARALLEL
+            #pragma omp parallel for schedule(guided)
+#endif
+            for (size_t idx = 0; idx < particles.size(); idx++)
+            {
+                for (size_t jdx = idx; jdx < particles.size(); jdx++)
+                {
+                    if (idx != jdx)
+                    {
+#ifdef ENABLE_PARALLEL
+                        int th_id = omp_get_thread_num();
+                        const bool forward_feasible = CheckPointToPointMovement(robot_, particles[idx].first, particles[jdx].first, rngs_[th_id]);
+                        const bool backward_feasible = CheckPointToPointMovement(robot_, particles[jdx].first, particles[idx].first, rngs_[th_id]);
+#else
+                        const bool forward_feasible = CheckPointToPointMovement(robot_, particles[idx].first, particles[jdx].first, rng_);
+                        const bool backward_feasible = CheckPointToPointMovement(robot_, particles[jdx].first, particles[idx].first, rng_);
+#endif
+                        const double distance = (forward_feasible && backward_feasible) ? 0.0 : 1.0;
+                        distance_matrix(idx, jdx) = distance;
+                        distance_matrix(jdx, idx) = distance;
+                    }
+                }
+            }
+            // Generate an initial "cluster" with everything in it
+            std::vector<size_t> initial_cluster(particles.size());
+            for (size_t idx = 0; idx < initial_cluster.size(); idx++)
+            {
+                initial_cluster[idx] = idx;
+            }
+            // Check the max element of the distance matrix
+            const double max_distance = distance_matrix.maxCoeff();
+            if (max_distance <= 0.0)
+            {
+                return std::vector<std::vector<size_t>>{initial_cluster};
+            }
+            else
+            {
+                return simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(initial_cluster, distance_matrix, 0.0).first;
+            }
+        }
+
+        inline double ComputeClusterSimilarity(const std::vector<size_t>& cluster1, const std::vector<size_t>& cluster2) const
+        {
+            // Compute the Jaccard Similarity Coefficient (# of elements in intersection/# of elements in union)
+            // First, insert cluster1 into a map for fast lookups
+            std::map<size_t, uint8_t> cluster1_map;
+            for (size_t idx = 0; idx < cluster1.size(); idx++)
+            {
+                const size_t element = cluster1[idx];
+                cluster1_map[element] = 0x01;
+            }
+            // Now, go through cluster 2 and keep track of which are/aren't in cluster1
+            size_t in_intersection = 0.0;
+            size_t not_in_cluster1 = 0.0;
+            for (size_t idx = 0; idx < cluster2.size(); idx++)
+            {
+                const size_t element = cluster2[idx];
+                if (cluster1_map.find(element) != cluster1_map.end())
+                {
+                    in_intersection++;
+                }
+                else
+                {
+                    not_in_cluster1++;
+                }
+            }
+            const size_t in_union = cluster1.size() + not_in_cluster1;
+            const double similarity = (double)in_intersection / (double)in_union;
+            return similarity;
+        }
+
+        inline double ComputeClusteringSimilarity(const std::vector<std::vector<size_t>>& clustering1, const std::vector<std::vector<size_t>>& clustering2) const
+        {
+            // Implementation of "A Similarity Measure for Clustering and Its Applications" Torres et al
+            // Compute the clustering similarity matrix
+            Eigen::MatrixXd similarity_matrix = Eigen::MatrixXd::Zero(clustering1.size(), clustering2.size());
+            for (size_t idx = 0; idx < clustering1.size(); idx++)
+            {
+                for (size_t jdx = 0; jdx < clustering2.size(); jdx++)
+                {
+                    const std::vector<size_t>& cluster1 = clustering1[idx];
+                    const std::vector<size_t>& cluster2 = clustering2[jdx];
+                    const double cluster_similarity = ComputeClusterSimilarity(cluster1, cluster2);
+                    similarity_matrix((ssize_t)idx, (ssize_t)jdx) = cluster_similarity;
+                }
+            }
+            // Compute the similarity metric from the matrix
+            const double similarity = similarity_matrix.sum() / (double)std::max(clustering1.size(), clustering2.size());
+            return (similarity * similarity);
+        }
+
+        inline std::vector<std::vector<size_t>> PerformSpatialFeatureClustering(const std::vector<std::pair<Configuration, bool>>& particles) const
+        {
+            // We have three different options for spatial feature clustering
+            if (spatial_feature_clustering_type_ == CONVEX_REGION_SIGNATURE)
+            {
+                return PerformConvexRegionSignatureClustering(particles);
+            }
+            else if (spatial_feature_clustering_type_ == ACTUATION_CENTER_CONNECTIVITY)
+            {
+                return PerformActuationCenterClustering(particles);
+            }
+            else if (spatial_feature_clustering_type_ == POINT_TO_POINT_MOVEMENT)
+            {
+                return PerformPointToPointMovementClustering(particles);
+            }
+            else if (spatial_feature_clustering_type_ == COMPARE)
+            {
+                const std::vector<std::vector<size_t>> crs_clustering = PerformConvexRegionSignatureClustering(particles);
+                const std::vector<std::vector<size_t>> ac_clustering = PerformActuationCenterClustering(particles);
+                const std::vector<std::vector<size_t>> ptpm_clustering = PerformPointToPointMovementClustering(particles);
+                std::cout << "++++++++++++++++++++++++++++++++++++++++\nClustering results:\nCRS: " << PrettyPrint::PrettyPrint(crs_clustering, true) <<  "\nAC: " << PrettyPrint::PrettyPrint(ac_clustering, true) << "\nPTPM: " << PrettyPrint::PrettyPrint(ptpm_clustering, true) << std::endl;
+                clustering_performance_.clustering_splits.push_back((uint32_t)ptpm_clustering.size());
+                clustering_performance_.crs_similarities.push_back(ComputeClusteringSimilarity(ptpm_clustering, crs_clustering));
+                clustering_performance_.ac_similarities.push_back(ComputeClusteringSimilarity(ptpm_clustering, ac_clustering));
+                return ptpm_clustering;
+            }
+            else
+            {
+                assert(false);
+            }
+        }
+
+        inline std::vector<std::vector<size_t>> RunDistanceClusteringOnInitialClusters(const std::vector<std::vector<size_t>>& initial_clusters, const std::vector<std::pair<Configuration, bool>>& particles) const
+        {
+            const double distance_threshold = distance_clustering_threshold_;
+            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
+            std::vector<std::vector<size_t>> intermediate_clusters;
+            intermediate_clusters.reserve(initial_clusters.size());
+            // Let's build the distance function
+            // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
+            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return DistanceFn::Distance(particles[idx1].first, particles[idx2].first); };
+            for (size_t cluster_idx = 0; cluster_idx < initial_clusters.size(); cluster_idx++)
+            {
+                const std::vector<size_t>& current_cluster = initial_clusters[cluster_idx];
+                // First, we build the distance matrix
+                const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(current_cluster, distance_fn);
+                // Check the max element of the distance matrix
+                const double max_distance = distance_matrix.maxCoeff();
+                //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
+                if (max_distance <= distance_threshold)
+                {
+                    //std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " below distance threshold " << distance_threshold << ", not performing additional hierarchical clustering" << std::endl;
+                    intermediate_clusters.push_back(current_cluster);
+                }
+                else
+                {
+                    //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
+                    cluster_fallback_calls_++;
+                    std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " exceeding distance threshold " << distance_threshold << ", performing additional hierarchical clustering" << std::endl;
+                    const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, distance_threshold).first;
+                    std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
+                    for (size_t ndx = 0; ndx < new_clustering.size(); ndx++)
+                    {
+                        //std::cout << "Resulting cluster " << ndx << ":\n" << PrettyPrint::PrettyPrint(new_clustering[ndx]) << std::endl;
+                        intermediate_clusters.push_back(new_clustering[ndx]);
+                    }
+                }
+            }
+            return intermediate_clusters;
+        }
+
+        inline std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable> ClusterParticles(const std::vector<std::pair<Configuration, bool>>& particles, const bool allow_contacts) const
+        {
+            // Make sure there are particles to cluster
+            if (particles.size() == 0)
+            {
+                return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(std::vector<std::vector<std::pair<Configuration, bool>>>(), SplitProbabilityTable());
+            }
+            else if (particles.size() == 1)
+            {
+                return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(std::vector<std::vector<std::pair<Configuration, bool>>>{particles}, SplitProbabilityTable());
+            }
+            cluster_calls_++;
+            // Perform a first pass of clustering using spatial features
+            const std::vector<std::vector<size_t>> initial_clusters = PerformSpatialFeatureClustering(particles);
+            // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
+            const std::vector<std::vector<size_t>> final_index_clusters = RunDistanceClusteringOnInitialClusters(initial_clusters, particles);
+            // Now that we have completed the clustering, we need to build the probability table
+            const SplitProbabilityTable split_probability_table;
+            // Before we return, we need to convert the index clusters to configuration clusters
+            std::vector<std::vector<std::pair<Configuration, bool>>> final_clusters;
+            final_clusters.reserve(final_index_clusters.size());
+            size_t total_particles = 0;
+            for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
+            {
+                const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
+                std::vector<std::pair<Configuration, bool>> final_cluster;
+                final_cluster.reserve(cluster.size());
+                for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
+                {
+                    total_particles++;
+                    const size_t particle_idx = cluster[element_idx];
+                    assert(particle_idx < particles.size());
+                    const std::pair<Configuration, bool>& particle = particles[particle_idx];
+                    if ((particle.second == false) || allow_contacts)
+                    {
+                        final_cluster.push_back(particle);
+                    }
+                }
+                final_cluster.shrink_to_fit();
+                final_clusters.push_back(final_cluster);
+            }
+            final_clusters.shrink_to_fit();
+            assert(total_particles == particles.size());
+            // Now, return the clusters and probability table
+            return std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable>(final_clusters, split_probability_table);
+        }
+
+        /*
+         * Forward propagation functions
+         */
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> ForwardSimulateParticles(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const uint32_t num_simulation_steps, const bool enable_contact_manifold_target_adjustment) const
+        {
+            // First, compute a target state
+            const Configuration target_point = target.GetExpectation();
+            // Get the initial particles
+            std::vector<Configuration, ConfigAlloc> initial_particles;
+            // We'd like to use the particles of the parent directly
+            if (nearest.GetNumParticles() == num_particles_)
+            {
+                initial_particles = nearest.CollectParticles(num_particles_);
+            }
+            // Otherwise, we resample from the parent
+            else
+            {
+                initial_particles = nearest.ResampleParticles(num_particles_, rng_);
+            }
+            // Forward propagate each of the particles
+            std::vector<std::pair<Configuration, bool>> propagated_points(num_particles_);
+            // We want to parallelize this as much as possible!
+#ifdef ENABLE_PARALLEL
+            #pragma omp parallel for schedule(guided)
+#endif
+            for (size_t idx = 0; idx < num_particles_; idx++)
+            {
+                const Configuration& initial_particle = initial_particles[idx];
+                nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+#ifdef ENABLE_PARALLEL
+                int th_id = omp_get_thread_num();
+                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, false);
+#else
+                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rng_, num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, false);
+#endif
+            }
+            particles_simulated_ += num_particles_;
+            return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points);
+        }
+
+        inline std::pair<uint32_t, uint32_t> ComputeReverseEdgeProbability(const NomdpPlanningState& parent, const NomdpPlanningState& child, const bool enable_contact_manifold_target_adjustment) const
+        {
+            std::vector<std::pair<Configuration, bool>> simulation_result = ForwardSimulateParticles(child, parent, 80, enable_contact_manifold_target_adjustment).second;
+            uint32_t reached_parent = 0u;
+            // Get the target position
+            const Configuration target_position = parent.GetExpectation();
+            for (size_t ndx = 0; ndx < simulation_result.size(); ndx++)
+            {
+                const Configuration& current_particle = simulation_result[ndx].first;
+                // Check if the particle got close enough
+                const double particle_distance = DistanceFn::Distance(current_particle, target_position);
+                if (particle_distance <= goal_distance_threshold_)
+                {
+                    reached_parent++;
+                }
+            }
+            return std::make_pair(num_particles_, reached_parent);
+        }
+
+        inline std::pair<std::vector<std::pair<NomdpPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> ForwardSimulateStates(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const uint32_t num_simulation_steps, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const bool enable_contact_manifold_target_adjustment) const
+        {
+            // Increment the transition ID
+            transition_id_++;
+            const uint64_t current_forward_transition_id = transition_id_;
+            const Configuration control_input = target.GetExpectation();
+            // Forward propagate each of the particles
+            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> simulation_result = ForwardSimulateParticles(nearest, target, num_simulation_steps, enable_contact_manifold_target_adjustment);
+            std::vector<Configuration, ConfigAlloc>& initial_particles = simulation_result.first;
+            std::vector<std::pair<Configuration, bool>>& propagated_points = simulation_result.second;
+            // Cluster the live particles into (potentially) multiple states
+            std::pair<std::vector<std::vector<std::pair<Configuration, bool>>>, SplitProbabilityTable> clustering_result = ClusterParticles(propagated_points, allow_contacts);
+            const std::vector<std::vector<std::pair<Configuration, bool>>>& particle_clusters = clustering_result.first;
+            bool is_split_child = false;
+            if (particle_clusters.size() > 1)
+            {
+                //std::cout << "Transition produced " << particle_clusters.size() << " split states" << std::endl;
+                is_split_child = true;
+                split_id_++;
+                split_probability_tables_[split_id_] = clustering_result.second;
+            }
+            // Build the forward-propagated states
+            std::vector<std::pair<NomdpPlanningState, int64_t>> result_states(particle_clusters.size());
+            for (size_t idx = 0; idx < particle_clusters.size(); idx++)
+            {
+                const std::vector<std::pair<Configuration, bool>>& current_cluster = particle_clusters[idx];
+                if (particle_clusters[idx].size() > 0)
+                {
+                    state_counter_++;
+                    const uint32_t attempt_count = (uint32_t)num_particles_;
+                    const uint32_t reached_count = (uint32_t)current_cluster.size();
+                    // Check if any of the particles in the current cluster collided with the environment during simulation.
+                    // If all are collision-free, we can safely assume the edge is trivially reversible
+                    std::vector<Configuration, ConfigAlloc> particle_locations(current_cluster.size());
+                    bool did_collide = false;
+                    for (size_t pdx = 0; pdx < current_cluster.size(); pdx++)
+                    {
+                        particle_locations[pdx] = current_cluster[pdx].first;
+                        if (current_cluster[pdx].second)
+                        {
+                            did_collide = true;
+                        }
+                    }
+                    particles_stored_ += particle_locations.size();
+                    uint32_t reverse_attempt_count = (uint32_t)num_particles_;
+                    uint32_t reverse_reached_count = (uint32_t)num_particles_;
+                    if (did_collide)
+                    {
+                        //std::cout << "Simulation resulted in collision, defering reversibility check to post-processing" << std::endl;
+                        reverse_attempt_count = (uint32_t)num_particles_;
+                        reverse_reached_count = 0u;
+                    }
+                    else if (is_split_child)
+                    {
+                        //std::cout << "Simulation resulted in split, defering reversibility check to post-processing" << std::endl;
+                        reverse_attempt_count = (uint32_t)num_particles_;
+                        reverse_reached_count = 0u;
+                    }
+                    const double effective_edge_feasibility = (double)reached_count / (double)attempt_count;
+                    transition_id_++;
+                    const uint64_t new_state_reverse_transtion_id = transition_id_;
+                    NomdpPlanningState propagated_state(state_counter_, particle_locations, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_input, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u));
+                    // Store the state
+                    result_states[idx].first = propagated_state;
+                    result_states[idx].second = -1;
+                }
+            }
+            // Now that we've built the forward-propagated states, we compute their reverse edge P(feasibility)
+            uint32_t computed_reversibility = 0u;
+            for (size_t idx = 0; idx < result_states.size(); idx++)
+            {
+                NomdpPlanningState& current_state = result_states[idx].first;
+                if (include_reverse_actions)
+                {
+                    // In some cases, we already know the reverse edge P(feasibility) so we don't need to compute it again
+                    if (current_state.GetReverseEdgePfeasibility() < 1.0)
+                    {
+                        const std::pair<uint32_t, uint32_t> reverse_edge_check = ComputeReverseEdgeProbability(nearest, current_state, enable_contact_manifold_target_adjustment);
+                        current_state.UpdateReverseAttemptAndReachedCounts(reverse_edge_check.first, reverse_edge_check.second);
+                        computed_reversibility++;
+                    }
+                }
+                else
+                {
+                    current_state.UpdateReverseAttemptAndReachedCounts((uint32_t)num_particles_, 0u);
+                }
+            }
+            std::cout << "Forward simultation produced " << result_states.size() << " states, needed to compute reversibility for " << computed_reversibility << " of them" << std::endl;
+            // We only do further processing if a split happened
+            if (result_states.size() > 1)
+            {
+                // Now that we have the forward-propagated states, we go back and update their effective edge P(feasibility)
+                for (size_t idx = 0; idx < result_states.size(); idx++)
+                {
+                    NomdpPlanningState& current_state = result_states[idx].first;
+                    double percent_active = 1.0;
+                    double p_reached = 0.0;
+                    for (uint32_t try_attempt = 0; try_attempt < planner_action_try_attempts; try_attempt++)
+                    {
+                        // How many particles got to our state on this attempt?
+                        p_reached += (percent_active * current_state.GetRawEdgePfeasibility());
+                        // Update the percent of particles that are still usefully active
+                        double updated_percent_active = 0.0;
+                        for (size_t other_idx = 0; other_idx < result_states.size(); other_idx++)
+                        {
+                            if (other_idx != idx)
+                            {
+                                const NomdpPlanningState& other_state = result_states[other_idx].first;
+                                const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
+                                const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
+                                updated_percent_active += p_returned_to_parent;
+                            }
+                        }
+                        percent_active = updated_percent_active;
+                    }
+                    assert(p_reached > 0.0);
+                    if (p_reached > 1.0)
+                    {
+                        assert(p_reached <= 1.001);
+                        p_reached = 1.0;
+                    }
+                    assert(p_reached <= 1.0);
+                    std::cout << "Computed effective edge P(feasibility) of " << p_reached << " for " << planner_action_try_attempts << " try/retry attempts" << std::endl;
+                    current_state.SetEffectiveEdgePfeasibility(p_reached);
+                    // INSTEAD, what we're going to do is compute effective P(reached) for each child given a max try/retry count
+                    // Some splits can be handled as retry loops (and pretend that the bad children don't exist)
+                    // Some splits probably can't, and we'll need to figure out what to do with them
+                    //      Maybe if the ability to return is too low, we say it's a split?
+                    // Problem here is that we end up with more probability mass in the children than the parent (we'll figure this out later)
+                }
+            }
+            return std::pair<std::vector<std::pair<NomdpPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>(result_states, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points));
+        }
+
 #ifdef USE_ROS
         inline std::vector<std::pair<NomdpPlanningState, int64_t>> PropagateForwardsAndDraw(const NomdpPlanningState& nearest, const NomdpPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
         {
@@ -2361,7 +2329,7 @@ namespace nomdp_contact_planning
         {
             // First, check if we're going to use RRT-Connect or RRT-Extend
             // If we've already found a solution, we use RRT-Extend
-            if (total_goal_reached_probability_ > 0.0)
+            if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 // Compute a single target state
                 Configuration target_point = random.GetExpectation();
@@ -2399,6 +2367,12 @@ namespace nomdp_contact_planning
                         const double step_fraction = step_size_ / target_distance;
                         const Configuration interpolated_target_point = InterpolateFn::Interpolate(current.GetExpectation(), target_point, step_fraction);
                         current_target_point = interpolated_target_point;
+                    }
+                    // If we've reached the target state, stop
+                    else if (fabs(target_distance) < std::numeric_limits<double>::epsilon())
+                    {
+                        completed = true;
+                        break;
                     }
                     // If we're less than step size away, this is our last step
                     else
@@ -2439,7 +2413,26 @@ namespace nomdp_contact_planning
             }
         }
 
-        // The next step is to adapt this to handle low-probability solutions by attempting to improve their success probability
+        /*
+         * Goal check and solution handling functions
+         */
+        inline double ComputeGoalReachedProbability(const NomdpPlanningState& state, const Configuration& goal) const
+        {
+            size_t within_distance = 0;
+            std::pair<const std::vector<Configuration, ConfigAlloc>&, bool> particle_check = state.GetParticlePositionsImmutable();
+            const std::vector<Configuration, ConfigAlloc>& particles = particle_check.first;
+            for (size_t idx = 0; idx < particles.size(); idx++)
+            {
+                const double distance = DistanceFn::Distance(particles[idx], goal);
+                if (distance < goal_distance_threshold_)
+                {
+                    within_distance++;
+                }
+            }
+            double percent_in_range = (double)within_distance / (double)particles.size();
+            return percent_in_range;
+        }
+
         inline bool GoalReached(const NomdpPlanningState& state, const NomdpPlanningState& goal_state, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment) const
         {
             // *** WARNING ***
@@ -2497,7 +2490,7 @@ namespace nomdp_contact_planning
                         std::cout << "Goal reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << improved_goal_reached_probability << " and probability(start->goal): " << improved_goal_probability << std::endl;
                         return true;
                     }
-                    else if (improved_goal_probability > 0.0)
+                    else if (improved_goal_probability > goal_probability_threshold_)
                     {
                         // Update the state
                         goal_state_candidate.SetGoalPfeasibility(improved_goal_reached_probability);
@@ -2575,7 +2568,7 @@ namespace nomdp_contact_planning
             }
             // Get the goal reached probability that we use to decide when we're done
             total_goal_reached_probability_ = nearest_neighbors_storage_[0].GetValueImmutable().GetGoalPfeasibility();
-            //std::cout << "Updated goal reached probability to " << total_goal_reached_probability_ << std::endl;
+            std::cout << "Updated goal reached probability to " << total_goal_reached_probability_ << std::endl;
         }
 
         inline void BlacklistGoalBranch(const int64_t goal_branch_root_index) const
@@ -2621,7 +2614,7 @@ namespace nomdp_contact_planning
             {
                 const NomdpPlanningTreeState& parent_tree_state = nearest_neighbors_storage_[state.GetParentIndex()];
                 const NomdpPlanningState& parent_state = parent_tree_state.GetValueImmutable();
-                if (parent_state.GetGoalPfeasibility() >= goal_probability_threshold_)
+                if (parent_state.GetGoalPfeasibility() >= 1.0)
                 {
                     is_child_of_unresolved_split = false;
                 }
@@ -2664,7 +2657,6 @@ namespace nomdp_contact_planning
 
         inline void UpdateNodeGoalReachedProbability(NomdpPlanningTreeState& current_node, const uint32_t planner_action_try_attempts) const
         {
-
             // Check all the children of the current node, and update the node's goal reached probability accordingly
             //
             // Naively, the goal reached probability of a node is the maximum of the child goal reached probabilities;
@@ -2784,64 +2776,9 @@ namespace nomdp_contact_planning
             }
         }
 
-        /* OLD NON-DISJOINT CLUSTER CODE
-        inline double GetMaxChildGoalProbability(const std::vector<uint64_t>& child_state_ids) const
-        {
-            double best_child_goal_probability = 0.0;
-            for (size_t idx = 0; idx < child_state_ids.size(); idx++)
-            {
-                const uint64_t& current_child_index = child_state_ids[idx];
-                assert(current_child_index < nearest_neighbors_storage_.size());
-                const NomdpPlanningState& current_child = nearest_neighbors_storage_[current_child_index].GetValueImmutable();
-                const double child_goal_probability = current_child.GetGoalPfeasibility();
-                if (child_goal_probability > best_child_goal_probability)
-                {
-                    best_child_goal_probability = child_goal_probability;
-                }
-            }
-            return best_child_goal_probability;
-        }
-
-        inline double ComputeTransitionGoalProbability(const std::vector<int64_t>& child_node_indices) const
-        {
-            assert(child_node_indices.size() > 0);
-            // If no splits occurred, we take the simple path
-            if (child_node_indices.size() == 1)
-            {
-                const int64_t& current_child_index = child_node_indices[0];
-                const NomdpPlanningState& current_child = nearest_neighbors_storage_[current_child_index].GetValueImmutable();
-                return (current_child.GetGoalPfeasibility() * current_child.GetEdgePfeasibility());
-            }
-            // Otherwise, we lookup the corresponding split probability table
-            else
-            {
-                // Make sure we agree on the split ID
-                const uint64_t split_id = nearest_neighbors_storage_[child_node_indices[0]].GetValueImmutable().GetSplitId();
-                for (size_t idx = 0; idx < child_node_indices.size(); idx++)
-                {
-                    const int64_t& current_child_index = child_node_indices[idx];
-                    const NomdpPlanningState& current_child = nearest_neighbors_storage_[current_child_index].GetValueImmutable();
-                    assert(current_child.GetSplitId() == split_id);
-                }
-                // Get the split probability table
-                auto found_itr = split_probability_tables_.find(split_id);
-                assert(found_itr != split_probability_tables_.end());
-                const SplitProbabilityTable& split_probability_table = found_itr->second;
-                // Now, compute the total transition goal proability
-                double total_transition_goal_probability = 0.0;
-                for (size_t idx = 0; idx < split_probability_table.split_entries.size(); idx++)
-                {
-                    const SplitProbabilityEntry& current_entry = split_probability_table.split_entries[idx];
-                    const double transition_probability = current_entry.probability;
-                    const double goal_probability = GetMaxChildGoalProbability(current_entry.child_state_ids);
-                    const double outcome_probability = transition_probability * goal_probability;
-                    total_transition_goal_probability += outcome_probability;
-                }
-                return total_transition_goal_probability;
-            }
-        }
-        */
-
+        /*
+         * Check if we should stop planning (have we reached the time limit?)
+         */
         inline bool PlannerTerminationCheck(const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time, const std::chrono::duration<double>& time_limit) const
         {
 #ifdef FORCE_DEBUG

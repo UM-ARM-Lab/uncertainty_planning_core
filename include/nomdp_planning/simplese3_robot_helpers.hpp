@@ -8,22 +8,36 @@
 #include <nomdp_planning/simple_pid_controller.hpp>
 #include <nomdp_planning/simple_uncertainty_models.hpp>
 
-#ifndef PROPER6DOF_ROBOT_HELPERS_HPP
-#define PROPER6DOF_ROBOT_HELPERS_HPP
+#ifndef SIMPLESE3_ROBOT_HELPERS_HPP
+#define SIMPLESE3_ROBOT_HELPERS_HPP
 
-
-/*
- * FIX THIS TO USE PROPER SE(3) MODELS - USE AFFINE3D AND TWISTS AND GEOMETRIC JACOBIAN
- * SINGLE PID CONTROLLER FOR SE(3) + ADD NOISE TO TWIST & SENSE NOISE BY CONVERTING SO(3) TO TWIST AND ADDING NOISE
- */
-
-
-namespace proper6dof_robot_helpers
+namespace simplese3_robot_helpers
 {
     typedef Eigen::Affine3d ConfigType;
+    typedef Eigen::Matrix<double, 6, 1> ConfigDeltaType;
     typedef EigenHelpers::VectorAffine3d ConfigTypeVector;
 
-    class Proper6DOFBaseSampler
+    class EigenAffine3dSerializer
+    {
+    public:
+
+        static inline std::string TypeName()
+        {
+            return std::string("EigenAffine3dSerializer");
+        }
+
+        static inline uint64_t Serialize(const Eigen::Affine3d& value, std::vector<uint8_t>& buffer)
+        {
+            return EigenHelpers::Serialize(value, buffer);
+        }
+
+        static inline std::pair<Eigen::Affine3d, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return EigenHelpers::Deserialize<Eigen::Affine3d>(buffer, current);
+        }
+    };
+
+    class SimpleSE3BaseSampler
     {
     protected:
 
@@ -34,7 +48,7 @@ namespace proper6dof_robot_helpers
 
     public:
 
-        Proper6DOFBaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits)
+        SimpleSE3BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits)
         {
             assert(x_limits.first <= x_limits.second);
             assert(y_limits.first <= y_limits.second);
@@ -54,9 +68,14 @@ namespace proper6dof_robot_helpers
             const Eigen::Affine3d state = Eigen::Translation3d(x, y, z) * quat;
             return state;
         }
+
+        static std::string TypeName()
+        {
+            return std::string("Proper6DOFBaseSampler");
+        }
     };
 
-    class Proper6DOFInterpolator
+    class SimpleSE3Interpolator
     {
     public:
 
@@ -70,9 +89,14 @@ namespace proper6dof_robot_helpers
             const ConfigType interpolated = EigenHelpers::Interpolate(t1, t2, ratio);
             return interpolated;
         }
+
+        static std::string TypeName()
+        {
+            return std::string("Proper6DOFInterpolator");
+        }
     };
 
-    class Proper6DOFAverager
+    class SimpleSE3Averager
     {
     public:
 
@@ -92,9 +116,14 @@ namespace proper6dof_robot_helpers
                 return Eigen::Affine3d::Identity();
             }
         }
+
+        static std::string TypeName()
+        {
+            return std::string("Proper6DOFAverager");
+        }
     };
 
-    class Proper6DOFDimDistancer
+    class SimpleSE3DimDistancer
     {
     public:
 
@@ -110,6 +139,7 @@ namespace proper6dof_robot_helpers
 
         static Eigen::VectorXd RawDistance(const ConfigType& t1, const ConfigType& t2)
         {
+            // Get twist from affine3d difference
             const Eigen::Vector3d tt1 = t1.translation();
             const Eigen::Quaterniond qt1(t1.rotation());
             const Eigen::Vector3d tt2 = t2.translation();
@@ -121,9 +151,14 @@ namespace proper6dof_robot_helpers
             dim_distances(3) = EigenHelpers::Distance(qt1, qt2);
             return dim_distances;
         }
+
+        static std::string TypeName()
+        {
+            return std::string("Proper6DOFDimDistancer");
+        }
     };
 
-    class Proper6DOFDistancer
+    class SimpleSE3Distancer
     {
     public:
 
@@ -135,6 +170,11 @@ namespace proper6dof_robot_helpers
         static double Distance(const ConfigType& t1, const ConfigType& t2)
         {
             return (EigenHelpers::Distance(t1, t2, 0.5) * 2.0);
+        }
+
+        static std::string TypeName()
+        {
+            return std::string("Proper6DOFDistancer");
         }
     };
 
@@ -192,12 +232,7 @@ namespace proper6dof_robot_helpers
         }
     };
 
-    /*
-     * Fix to use twists for control actions and geometric jacobian for SE(3). Almost everything else remains unchanged.
-     * Change to use a single PID controller for all 6 DOF, applied to the twists.
-     * Add noise to the twists for actuation noise, and add noise to the orientation by converting to twist/euler angles, add noise, then convert back.
-     */
-    class Proper6DOFRobot
+    class SimpleSE3Robot
     {
     protected:
 
@@ -221,22 +256,13 @@ namespace proper6dof_robot_helpers
         simple_uncertainty_models::SimpleUncertainVelocityActuator xr_axis_actuator_;
         simple_uncertainty_models::SimpleUncertainVelocityActuator yr_axis_actuator_;
         simple_uncertainty_models::SimpleUncertainVelocityActuator zr_axis_actuator_;
-        Eigen::Affine3d pose_;
-        Eigen::Matrix<double, 6, 1> config_;
+        Eigen::Affine3d config_;
         EigenHelpers::VectorVector3d link_points_;
 
-        inline void SetConfig(const Eigen::Matrix<double, 6, 1>& new_config)
+        inline void SetConfig(const Eigen::Affine3d& new_config)
         {
             //std::cout << "Raw config to set: " << new_config << std::endl;
-            config_(0) = new_config(0);
-            config_(1) = new_config(1);
-            config_(2) = new_config(2);
-            config_(3) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(3));
-            config_(4) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(4));
-            config_(5) = EigenHelpers::EnforceContinuousRevoluteBounds(new_config(5));
-            //std::cout << "Real config set: " << config_ << std::endl;
-            // Update pose
-            pose_ = ComputePose();
+            config_ = new_config;
         }
 
     public:
@@ -284,7 +310,7 @@ namespace proper6dof_robot_helpers
             return max_motion;
         }
 
-        inline Proper6DOFRobot(const EigenHelpers::VectorVector3d& robot_points, const Eigen::Matrix<double, 6, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline SimpleSE3Robot(const EigenHelpers::VectorVector3d& robot_points, const Eigen::Affine3d& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
         {
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -321,7 +347,7 @@ namespace proper6dof_robot_helpers
             return true;
         }
 
-        inline void UpdatePosition(const Eigen::Matrix<double, 6, 1>& position)
+        inline void UpdatePosition(const Eigen::Affine3d& position)
         {
             SetConfig(position);
             x_axis_controller_.Zero();
@@ -336,7 +362,7 @@ namespace proper6dof_robot_helpers
         {
             if (link_name == "robot")
             {
-                return pose_;
+                return GetPosition();
             }
             else
             {
@@ -344,37 +370,53 @@ namespace proper6dof_robot_helpers
             }
         }
 
-        inline Eigen::Matrix<double, 6, 1> GetPosition() const
+        inline Eigen::Affine3d GetPosition() const
         {
             return config_;
         }
 
-        inline double ComputeDistanceTo(const Eigen::Matrix<double, 6, 1>& target) const
+        template<typename PRNG>
+        inline Eigen::Affine3d GetPosition(PRNG& rng) const
         {
-            return Proper6DOFDistancer::Distance(GetPosition(), target);
+            const ConfigDeltaType twist = EigenHelpers::TwistBetweenTransforms(Eigen::Affine3d::Identity(), GetPosition());
+            Eigen::Matrix<double, 6, 1> noisy_twist = Eigen::Matrix<double, 6, 1>::Zero();
+            noisy_twist(0) = x_axis_sensor_.GetSensorValue(twist(0), rng);
+            noisy_twist(1) = y_axis_sensor_.GetSensorValue(twist(1), rng);
+            noisy_twist(2) = z_axis_sensor_.GetSensorValue(twist(2), rng);
+            noisy_twist(3) = xr_axis_sensor_.GetSensorValue(twist(3), rng);
+            noisy_twist(4) = yr_axis_sensor_.GetSensorValue(twist(4), rng);
+            noisy_twist(5) = zr_axis_sensor_.GetSensorValue(twist(5), rng);
+            // Compute the motion transform
+            const Eigen::Affine3d motion_transform = EigenHelpers::ExpTwist(noisy_twist, 1.0);
+            return motion_transform;
+        }
+
+        inline double ComputeDistanceTo(const Eigen::Affine3d& target) const
+        {
+            return SimpleSE3Distancer::Distance(GetPosition(), target);
         }
 
         template<typename PRNG>
-        inline Eigen::VectorXd GenerateControlAction(const Eigen::Matrix<double, 6, 1>& target, PRNG& rng)
+        inline Eigen::VectorXd GenerateControlAction(const Eigen::Affine3d& target, PRNG& rng)
         {
             // Get the current position
-            const Eigen::Matrix<double, 6, 1> current = GetPosition();
-            // Get the current error
-            const Eigen::VectorXd current_error = Proper6DOFDimDistancer::RawDistance(current, target);
+            const Eigen::Affine3d current = GetPosition(rng);
+            // Get the twist from the current position to the target position
+            const ConfigDeltaType twist = EigenHelpers::TwistBetweenTransforms(current, target);
             // Compute feedback terms
-            const double x_term = x_axis_controller_.ComputeFeedbackTerm(current_error(0), 1.0);
-            const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), 1.0);
-            const double z_term = z_axis_controller_.ComputeFeedbackTerm(current_error(2), 1.0);
-            const double xr_term = xr_axis_controller_.ComputeFeedbackTerm(current_error(3), 1.0);
-            const double yr_term = yr_axis_controller_.ComputeFeedbackTerm(current_error(4), 1.0);
-            const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(current_error(5), 1.0);
+            const double x_term = x_axis_controller_.ComputeFeedbackTerm(twist(0), 1.0);
+            const double y_term = y_axis_controller_.ComputeFeedbackTerm(twist(1), 1.0);
+            const double z_term = z_axis_controller_.ComputeFeedbackTerm(twist(2), 1.0);
+            const double xr_term = xr_axis_controller_.ComputeFeedbackTerm(twist(3), 1.0);
+            const double yr_term = yr_axis_controller_.ComputeFeedbackTerm(twist(4), 1.0);
+            const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(twist(5), 1.0);
             // Make the control action
-            const double x_axis_control = x_axis_actuator_.GetControlValue(x_term, rng);
-            const double y_axis_control = y_axis_actuator_.GetControlValue(y_term, rng);
-            const double z_axis_control = z_axis_actuator_.GetControlValue(z_term, rng);
-            const double xr_axis_control = xr_axis_actuator_.GetControlValue(xr_term, rng);
-            const double yr_axis_control = yr_axis_actuator_.GetControlValue(yr_term, rng);
-            const double zr_axis_control = zr_axis_actuator_.GetControlValue(zr_term, rng);
+            const double x_axis_control = x_axis_actuator_.GetControlValue(x_term);
+            const double y_axis_control = y_axis_actuator_.GetControlValue(y_term);
+            const double z_axis_control = z_axis_actuator_.GetControlValue(z_term);
+            const double xr_axis_control = xr_axis_actuator_.GetControlValue(xr_term);
+            const double yr_axis_control = yr_axis_actuator_.GetControlValue(yr_term);
+            const double zr_axis_control = zr_axis_actuator_.GetControlValue(zr_term);
             Eigen::VectorXd control_action(6);
             control_action(0) = x_axis_control;
             control_action(1) = y_axis_control;
@@ -389,25 +431,35 @@ namespace proper6dof_robot_helpers
         inline void ApplyControlInput(const Eigen::VectorXd& input, PRNG& rng)
         {
             assert(input.size() == 6);
-            // Compute new config
-            const Eigen::Matrix<double, 6, 1> new_config = config_ + input;
             // Sense new noisy config
-            Eigen::Matrix<double, 6, 1> noisy_config = Eigen::Matrix<double, 6, 1>::Zero();
-            noisy_config(0) = x_axis_sensor_.GetSensorValue(new_config(0), rng);
-            noisy_config(1) = y_axis_sensor_.GetSensorValue(new_config(1), rng);
-            noisy_config(2) = z_axis_sensor_.GetSensorValue(new_config(2), rng);
-            noisy_config(3) = xr_axis_sensor_.GetSensorValue(new_config(3), rng);
-            noisy_config(4) = yr_axis_sensor_.GetSensorValue(new_config(4), rng);
-            noisy_config(5) = zr_axis_sensor_.GetSensorValue(new_config(5), rng);
+            Eigen::Matrix<double, 6, 1> noisy_twist = Eigen::Matrix<double, 6, 1>::Zero();
+            noisy_twist(0) = x_axis_actuator_.GetControlValue(input(0), rng);
+            noisy_twist(1) = y_axis_actuator_.GetControlValue(input(1), rng);
+            noisy_twist(2) = z_axis_actuator_.GetControlValue(input(2), rng);
+            noisy_twist(3) = xr_axis_actuator_.GetControlValue(input(3), rng);
+            noisy_twist(4) = yr_axis_actuator_.GetControlValue(input(4), rng);
+            noisy_twist(5) = zr_axis_actuator_.GetControlValue(input(5), rng);
+            // Compute the motion transform
+            const Eigen::Affine3d motion_transform = EigenHelpers::ExpTwist(noisy_twist, 1.0);
+            const Eigen::Affine3d new_config = GetPosition() * motion_transform;
             // Update config
-            SetConfig(noisy_config);
+            SetConfig(new_config);
         }
 
         inline void ApplyControlInput(const Eigen::VectorXd& input)
         {
             assert(input.size() == 6);
-            // Compute new config
-            const Eigen::Matrix<double, 6, 1> new_config = config_ + input;
+            // Sense new noisy config
+            Eigen::Matrix<double, 6, 1> twist = Eigen::Matrix<double, 6, 1>::Zero();
+            twist(0) = x_axis_actuator_.GetControlValue(input(0));
+            twist(1) = y_axis_actuator_.GetControlValue(input(1));
+            twist(2) = z_axis_actuator_.GetControlValue(input(2));
+            twist(3) = xr_axis_actuator_.GetControlValue(input(3));
+            twist(4) = yr_axis_actuator_.GetControlValue(input(4));
+            twist(5) = zr_axis_actuator_.GetControlValue(input(5));
+            // Compute the motion transform
+            const Eigen::Affine3d motion_transform = EigenHelpers::ExpTwist(twist, 1.0);
+            const Eigen::Affine3d new_config = GetPosition() * motion_transform;
             // Update config
             SetConfig(new_config);
         }
@@ -416,88 +468,21 @@ namespace proper6dof_robot_helpers
         {
             if (link_name == "robot")
             {
-                // Transform the point into world frame
-                const Eigen::Affine3d current_transform = pose_;
-                const Eigen::Vector3d current_position(config_(0), config_(1), config_(2));
-                const Eigen::Vector3d current_angles(config_(3), config_(4), config_(5));
-                const Eigen::Vector3d world_point = current_transform * link_relative_point;
-                // Make the jacobian
-                Eigen::Matrix<double, 3, 6> jacobian = Eigen::Matrix<double, 3, 6>::Zero();
-                // Prismatic joints
-                // X joint
-                jacobian.block<3,1>(0, 0) = jacobian.block<3,1>(0, 0) + Eigen::Vector3d::UnitX();
-                // Y joint
-                jacobian.block<3,1>(0, 1) = jacobian.block<3,1>(0, 1) + Eigen::Vector3d::UnitY();
-                // Z joint
-                jacobian.block<3,1>(0, 2) = jacobian.block<3,1>(0, 2) + Eigen::Vector3d::UnitZ();
-                // Rotatational joints
-                // X joint
-                // Compute X-axis joint axis (this is basically a formality)
-                const Eigen::Affine3d x_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX()));
-                const Eigen::Vector3d x_joint_axis = (Eigen::Vector3d)(x_joint_transform.rotation() * Eigen::Vector3d::UnitX());
-                jacobian.block<3,1>(0, 3) = jacobian.block<3,1>(0, 3) + x_joint_axis.cross(world_point - current_position);
-                // Compute Y-axis joint axis
-                const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
-                const Eigen::Vector3d y_joint_axis = (Eigen::Vector3d)(y_joint_transform.rotation() * Eigen::Vector3d::UnitY());
-                jacobian.block<3,1>(0, 4) = jacobian.block<3,1>(0, 4) + y_joint_axis.cross(world_point - current_position);
-                // Compute Z-axis joint axis
-                const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.z(), Eigen::Vector3d::UnitZ())));
-                const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
-                jacobian.block<3,1>(0, 5) = jacobian.block<3,1>(0, 5) + z_joint_axis.cross(world_point - current_position);
+                const Eigen::Matrix3d rot_matrix = GetPosition().rotation();
+                const Eigen::Matrix3d hatted_link_relative_point = EigenHelpers::Skew(link_relative_point);
+                Eigen::Matrix<double, 3, 6> body_velocity_jacobian = Eigen::Matrix<double, 3, 6>::Zero();
+                body_velocity_jacobian.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
+                body_velocity_jacobian.block<3, 3>(0, 3) = -hatted_link_relative_point;
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wconversion"
+                const Eigen::Matrix<double, 3, 6> jacobian = rot_matrix * body_velocity_jacobian;
+                #pragma GCC diagnostic pop
                 return jacobian;
             }
             else
             {
                 throw std::invalid_argument("Invalid link_name");
             }
-        }
-
-        inline Eigen::Matrix<double, 6, Eigen::Dynamic> ComputeJacobian() const
-        {
-            // Transform the point into world frame
-            const Eigen::Affine3d current_transform = pose_;
-            const Eigen::Vector3d current_position(config_(0), config_(1), config_(2));
-            const Eigen::Vector3d current_angles(config_(3), config_(4), config_(5));
-            const Eigen::Vector3d link_relative_point(0.0, 0.0, 0.0);
-            const Eigen::Vector3d world_point = current_transform * link_relative_point;
-            // Make the jacobian
-            Eigen::Matrix<double, 6, 6> jacobian = Eigen::Matrix<double, 6, 6>::Zero();
-            // Prismatic joints
-            // X joint
-            jacobian.block<3,1>(0, 0) = jacobian.block<3,1>(0, 0) + Eigen::Vector3d::UnitX();
-            // Y joint
-            jacobian.block<3,1>(0, 1) = jacobian.block<3,1>(0, 1) + Eigen::Vector3d::UnitY();
-            // Z joint
-            jacobian.block<3,1>(0, 2) = jacobian.block<3,1>(0, 2) + Eigen::Vector3d::UnitZ();
-            // Rotatational joints
-            // X joint
-            // Compute X-axis joint axis (this is basically a formality)
-            const Eigen::Affine3d x_joint_transform = (Eigen::Translation3d)current_position * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX()));
-            const Eigen::Vector3d x_joint_axis = (Eigen::Vector3d)(x_joint_transform.rotation() * Eigen::Vector3d::UnitX());
-            jacobian.block<3,1>(0, 3) = jacobian.block<3,1>(0, 3) + x_joint_axis.cross(world_point - current_position);
-            jacobian.block<3,1>(3, 3) = jacobian.block<3,1>(3, 3) + x_joint_axis;
-            // Compute Y-axis joint axis
-            const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
-            const Eigen::Vector3d y_joint_axis = (Eigen::Vector3d)(y_joint_transform.rotation() * Eigen::Vector3d::UnitY());
-            jacobian.block<3,1>(0, 4) = jacobian.block<3,1>(0, 4) + y_joint_axis.cross(world_point - current_position);
-            jacobian.block<3,1>(3, 4) = jacobian.block<3,1>(3, 4) + y_joint_axis;
-            // Compute Z-axis joint axis
-            const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.z(), Eigen::Vector3d::UnitZ())));
-            const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
-            jacobian.block<3,1>(0, 5) = jacobian.block<3,1>(0, 5) + z_joint_axis.cross(world_point - current_position);
-            jacobian.block<3,1>(3, 5) = jacobian.block<3,1>(3, 5) + z_joint_axis;
-            return jacobian;
-        }
-
-        inline Eigen::Affine3d ComputePose() const
-        {
-            const Eigen::Translation3d current_position(config_(0), config_(1), config_(2));
-            const Eigen::Vector3d current_angles(config_(3), config_(4), config_(5));
-            const Eigen::Affine3d x_joint_transform = current_position * Eigen::Quaterniond::Identity();
-            const Eigen::Affine3d y_joint_transform = x_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.x(), Eigen::Vector3d::UnitX())));
-            const Eigen::Affine3d z_joint_transform = y_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.y(), Eigen::Vector3d::UnitY())));
-            const Eigen::Affine3d body_transform = z_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_angles.z(), Eigen::Vector3d::UnitZ())));
-            return body_transform;
         }
 
         inline Eigen::VectorXd ProcessCorrectionAction(const Eigen::VectorXd& raw_correction_action) const
@@ -528,4 +513,4 @@ namespace proper6dof_robot_helpers
     };
 }
 
-#endif // PROPER6DOF_ROBOT_HELPERS_HPP
+#endif // SIMPLESE3_ROBOT_HELPERS_HPP

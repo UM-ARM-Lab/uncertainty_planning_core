@@ -62,10 +62,10 @@ namespace execution_policy
         {
             assert(current < buffer.size());
             uint64_t current_position = current;
-            const std::pair<int64_t, uint64_t> deserialized_from_index = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<int64_t, uint64_t> deserialized_from_index = arc_helpers::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
             from_index_ = deserialized_from_index.first;
             current_position += deserialized_from_index.second;
-            const std::pair<int64_t, uint64_t> deserialized_to_index = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<int64_t, uint64_t> deserialized_to_index = arc_helpers::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
             to_index_ = deserialized_to_index.first;
             current_position += deserialized_to_index.second;
             const std::pair<double, uint64_t> deserialized_weight = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
@@ -161,6 +161,7 @@ namespace execution_policy
 
         inline uint64_t DeserializeSelf(const std::vector<uint8_t>& buffer, const uint64_t current, const std::function<std::pair<T, uint64_t>(const std::vector<uint8_t>&, const uint64_t)>& value_deserializer)
         {
+            assert(current < buffer.size());
             uint64_t current_position = current;
             // Deserialize the value
             const std::pair<T, uint64_t> value_deserialized = value_deserializer(buffer, current_position);
@@ -337,13 +338,13 @@ namespace execution_policy
                     const GraphEdge& current_edge = in_edges[in_edge_idx];
                     // Check from index to make sure it's in bounds
                     const int64_t from_index = current_edge.GetFromIndex();
-                    if (from_index < 0 || from_index >= nodes.size())
+                    if (from_index < 0 || from_index >= (int64_t)nodes.size())
                     {
                         return false;
                     }
                     // Check to index to make sure it matches our own index
                     const int64_t to_index = current_edge.GetToIndex();
-                    if (to_index != idx)
+                    if (to_index != (int64_t)idx)
                     {
                         return false;
                     }
@@ -353,14 +354,14 @@ namespace execution_policy
                         return false;
                     }
                     // Check to make sure that the from index node is linked to us
-                    const GraphNode<T, Allocator>& from_node = nodes[from_index];
+                    const GraphNode<T, Allocator>& from_node = nodes[(size_t)from_index];
                     const std::vector<GraphEdge>& from_node_out_edges = from_node.GetOutEdgesImmutable();
                     bool from_node_connection_valid = false;
                     // Make sure at least one out edge of the from index node corresponds to the current node
                     for (size_t from_node_out_edge_idx = 0; from_node_out_edge_idx < from_node_out_edges.size(); from_node_out_edge_idx++)
                     {
                         const GraphEdge& current_from_node_out_edge = from_node_out_edges[from_node_out_edge_idx];
-                        if (current_from_node_out_edge.GetToIndex() == idx)
+                        if (current_from_node_out_edge.GetToIndex() == (int64_t)idx)
                         {
                             from_node_connection_valid = true;
                         }
@@ -377,13 +378,13 @@ namespace execution_policy
                     const GraphEdge& current_edge = out_edges[out_edge_idx];
                     // Check from index to make sure it matches our own index
                     const int64_t from_index = current_edge.GetFromIndex();
-                    if (from_index != idx)
+                    if (from_index != (int64_t)idx)
                     {
                         return false;
                     }
                     // Check to index to make sure it's in bounds
                     const int64_t to_index = current_edge.GetToIndex();
-                    if (to_index < 0 || to_index >= nodes.size())
+                    if (to_index < 0 || to_index >= (int64_t)nodes.size())
                     {
                         return false;
                     }
@@ -393,14 +394,14 @@ namespace execution_policy
                         return false;
                     }
                     // Check to make sure that the to index node is linked to us
-                    const GraphNode<T, Allocator>& to_node = nodes[to_index];
+                    const GraphNode<T, Allocator>& to_node = nodes[(size_t)to_index];
                     const std::vector<GraphEdge>& to_node_in_edges = to_node.GetInEdgesImmutable();
                     bool to_node_connection_valid = false;
                     // Make sure at least one in edge of the to index node corresponds to the current node
                     for (size_t to_node_in_edge_idx = 0; to_node_in_edge_idx < to_node_in_edges.size(); to_node_in_edge_idx++)
                     {
                         const GraphEdge& current_to_node_in_edge = to_node_in_edges[to_node_in_edge_idx];
-                        if (current_to_node_in_edge.GetFromIndex() == idx)
+                        if (current_to_node_in_edge.GetFromIndex() == (int64_t)idx)
                         {
                             to_node_connection_valid = true;
                         }
@@ -427,14 +428,14 @@ namespace execution_policy
         inline const GraphNode<T, Allocator>& GetNodeImmutable(const int64_t index) const
         {
             assert(index >= 0);
-            assert(index < nodes_.size());
-            return nodes_[index];
+            assert(index < (int64_t)nodes_.size());
+            return nodes_[(size_t)index];
         }
 
         inline GraphNode<T, Allocator>& GetNodeMutable(const int64_t index)
         {
             assert(index >= 0);
-            assert(index < nodes_.size());
+            assert(index < (int64_t)nodes_.size());
             return nodes_[index];
         }
 
@@ -447,9 +448,9 @@ namespace execution_policy
         inline void AddEdgeBetweenNodes(const int64_t from_index, const int64_t to_index, const double edge_weight)
         {
             assert(from_index >= 0);
-            assert(from_index < nodes_.size());
+            assert(from_index < (int64_t)nodes_.size());
             assert(to_index >= 0);
-            assert(to_index < nodes_.size());
+            assert(to_index < (int64_t)nodes_.size());
             assert(from_index != to_index);
             const GraphEdge new_edge(from_index, to_index, edge_weight);
             GetNodeMutable(from_index).AddOutEdge(new_edge);
@@ -459,9 +460,9 @@ namespace execution_policy
         inline void AddEdgesBetweenNodes(const int64_t first_index, const int64_t second_index, const double edge_weight)
         {
             assert(first_index >= 0);
-            assert(first_index < nodes_.size());
+            assert(first_index < (int64_t)nodes_.size());
             assert(second_index >= 0);
-            assert(second_index < nodes_.size());
+            assert(second_index < (int64_t)nodes_.size());
             assert(first_index != second_index);
             const GraphEdge first_edge(first_index, second_index, edge_weight);
             GetNodeMutable(first_index).AddOutEdge(first_edge);
@@ -493,22 +494,22 @@ namespace execution_policy
 
         inline static std::pair<Graph<T, Allocator>, std::pair<std::vector<int64_t>, std::vector<double>>> PerformDijkstrasAlgorithm(const Graph<T, Allocator>& graph, const int64_t start_index)
         {
-            assert(start_index >= 0);
-            assert(start_index < graph.GetNodesImmutable().size());
+            assert(start_index >= (int64_t)0);
+            assert(start_index < (int64_t)graph.GetNodesImmutable().size());
             Graph<T, Allocator> working_copy = graph;
             // Setup
             std::vector<int64_t> previous_index_map(working_copy.GetNodesImmutable().size(), -1);
             std::vector<double> distances(working_copy.GetNodesImmutable().size(), INFINITY);
             std::priority_queue<std::pair<int64_t, double>, std::vector<std::pair<int64_t, double>>, CompareIndexFn> queue;
-            std::unordered_map<int64_t, uint32_t> explored(graph.GetNodesImmutable().size());
+            std::unordered_map<int64_t, uint32_t> explored(working_copy.GetNodesImmutable().size());
             for (size_t idx = 0; idx < working_copy.GetNodesImmutable().size(); idx++)
             {
-                working_copy.GetNodeMutable(idx).SetDistance(INFINITY);
+                working_copy.GetNodeMutable((int64_t)idx).SetDistance(INFINITY);
                 queue.push(std::make_pair((int64_t)idx, INFINITY));
             }
             working_copy.GetNodeMutable(start_index).SetDistance(0.0);
-            previous_index_map[start_index] = start_index;
-            distances[start_index] = 0.0;
+            previous_index_map[(size_t)start_index] = start_index;
+            distances[(size_t)start_index] = 0.0;
             queue.push(std::make_pair(start_index, 0.0));
             while (queue.size() > 0)
             {
@@ -551,8 +552,8 @@ namespace execution_policy
                                 queue.push(std::make_pair(neighbor_index, new_neighbor_distance));
                             }
                             // Update that we're the best previous node
-                            previous_index_map[neighbor_index] = top_node_index;
-                            distances[neighbor_index] = new_neighbor_distance;
+                            previous_index_map[(size_t)neighbor_index] = top_node_index;
+                            distances[(size_t)neighbor_index] = new_neighbor_distance;
                         }
                         else
                         {
@@ -631,8 +632,8 @@ namespace execution_policy
             // First, safety checks to make sure the graph + edge are valid
             const int64_t from_index = current_edge.GetFromIndex();
             const int64_t to_index = current_edge.GetToIndex();
-            assert(from_index >= 0 && from_index < graph.GetNodesImmutable().size());
-            assert(to_index >= 0 && to_index < graph.GetNodesImmutable().size());
+            assert(from_index >= 0 && from_index < (int64_t)graph.GetNodesImmutable().size());
+            assert(to_index >= 0 && to_index < (int64_t)graph.GetNodesImmutable().size());
             assert(from_index != to_index);
             // Now, we estimate the number of executions of the edge necessary to reach (1) the conformant planning threshold or (2) we reach the edge repeat threshold
             // If we're going forwards
@@ -741,14 +742,14 @@ namespace execution_policy
         inline static std::pair<PolicyGraph, std::vector<int64_t>> ComputeNodeDistances(const PolicyGraph& initial_graph, const int64_t start_index)
         {
             assert(start_index >= 0);
-            assert(start_index < initial_graph.GetNodesImmutable().size());
+            assert(start_index < (int64_t)initial_graph.GetNodesImmutable().size());
             const std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> complete_search_results = SimpleDijkstrasAlgorithm<NomdpPlanningState, std::allocator<NomdpPlanningState>>::PerformDijkstrasAlgorithm(initial_graph, start_index);
             const std::pair<PolicyGraph, std::vector<int64_t>> search_results = std::make_pair(complete_search_results.first, complete_search_results.second.first);
             //std::cout << "Previous index map: " << PrettyPrint::PrettyPrint(search_results.second) << std::endl;
             for (size_t idx = 0; idx < search_results.second.size(); idx++)
             {
                 const int64_t previous_index = search_results.second[idx];
-                assert(previous_index >= 0 && previous_index < search_results.second.size());
+                assert(previous_index >= 0 && previous_index < (int64_t)search_results.second.size());
             }
             return search_results;
         }
@@ -962,6 +963,9 @@ namespace execution_policy
             }
         }
 
+        // Make sure that all possible result state are being considered:
+        // For example, a failed return-to-parent will produce a new child state with the reverse transition ID
+        // If the next action fails and a reverse is triggered, we need to make sure that the original parent state is considered in the possible result states
         // We need to update the parent_motion_pfesibility?
         inline std::pair<std::pair<int64_t, uint64_t>, Configuration> QueryNormalBestAction(const int64_t previous_state_index, const uint64_t desired_transition_id, const Configuration& current_config, const std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
@@ -982,14 +986,31 @@ namespace execution_policy
             // - recursively call query
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             assert(previous_state_index >= 0);
-            assert(previous_state_index < planner_tree_.size());
+            assert(previous_state_index < (int64_t)planner_tree_.size());
             // Get the previous state
             NomdpPlanningTreeState& previous_index_tree_state = planner_tree_[previous_state_index];
             const int64_t parent_index = previous_index_tree_state.GetParentIndex();
             NomdpPlanningState& previous_index_state = previous_index_tree_state.GetValueMutable();
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Collect the expected result states
-            std::vector<int64_t> expected_possible_result_states;
+            std::vector<std::pair<int64_t, bool>> expected_possible_result_states;
+            // Go through the entire tree and retrieve all states with matching transition IDs
+            for (int64_t idx = 0; idx < planner_tree_.size(); idx++)
+            {
+                const NomdpPlanningTreeState& candidate_tree_state = planner_tree_[idx];
+                const NomdpPlanningState& candidate_state = candidate_tree_state.GetValueImmutable();
+                if (candidate_state.GetTransitionId() == desired_transition_id)
+                {
+                    expected_possible_result_states.push_back(std::make_pair(idx, false));
+                }
+                else if (candidate_state.GetReverseTransitionId() == desired_transition_id)
+                {
+                    expected_possible_result_states.push_back(std::make_pair(idx, true));
+                }
+            }
+            /*
+             * THIS IS WRONG - IT DOESN'T COVER ALL CASES !!!
+             *
             // If the transition is a reverse transition, then the parent is also a result state
             if (desired_transition_id == previous_index_state.GetReverseTransitionId())
             {
@@ -1029,6 +1050,29 @@ namespace execution_policy
                     expected_result_state_matches.push_back(child_state_idx);
                 }
             }
+            */
+            assert(expected_possible_result_states.size() > 0);
+            std::cout << "Result state could match " << expected_possible_result_states.size() << " states" << std::endl;
+            std::cout << "Expected possible result states: " << PrettyPrint::PrettyPrint(expected_possible_result_states) << std::endl;
+            /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Check if the current config matches one or more of the expected result states
+            std::vector<std::pair<int64_t, bool>> expected_result_state_matches;
+            for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
+            {
+                const std::pair<int64_t, bool>& possible_match = expected_possible_result_states[idx];
+                const int64_t possible_match_state_idx = (possible_match.second) ? planner_tree_[possible_match.first].GetParentIndex() : possible_match.first;
+                const NomdpPlanningTreeState& possible_match_tree_state = planner_tree_[possible_match_state_idx];
+                const NomdpPlanningState& possible_match_state = possible_match_tree_state.GetValueImmutable();
+                const std::vector<Configuration, ConfigAlloc>& possible_match_node_particles = possible_match_state.GetParticlePositionsImmutable().first;
+                const std::vector<std::vector<size_t>> possible_match_check_clusters = particle_clustering_fn(possible_match_node_particles, current_config);
+                // If the current config is part of the cluster
+                if (possible_match_check_clusters.size() == 1)
+                {
+                    const Configuration possible_match_state_expectation = possible_match_state.GetExpectation();
+                    std::cout << "Possible result state matches with distance " << DistanceFn::Distance(current_config, possible_match_state_expectation) << " and expectation " << PrettyPrint::PrettyPrint(possible_match_state_expectation) << std::endl;
+                    expected_result_state_matches.push_back(possible_match);
+                }
+            }
             std::cout << "Result state matches: " << PrettyPrint::PrettyPrint(expected_result_state_matches) << std::endl;
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // If any child states matched
@@ -1048,7 +1092,8 @@ namespace execution_policy
                 std::cout << "Result state matched none of the " << expected_possible_result_states.size() << " expected results, adding a new state" << std::endl;
                 // Compute the parameters of the new node
                 const uint64_t new_child_state_id = planner_tree_.size() + 1000000000lu;
-                const std::vector<Configuration, ConfigAlloc> new_child_particles = {current_config};
+                std::vector<Configuration, ConfigAlloc> new_child_particles;
+                new_child_particles.push_back(current_config);
                 // These will get updated in the recursive call
                 uint32_t attempt_count = 0u;
                 const uint32_t reached_count = 0u;
@@ -1078,7 +1123,9 @@ namespace execution_policy
                 // If not, then grab the expectation & split ID from one of the children
                 else
                 {
-                    const int64_t child_state_idx = expected_possible_result_states.front();
+                    const std::pair<int64_t, bool>& first_possible_match = expected_possible_result_states.front();
+                    assert(first_possible_match.second == false);
+                    const int64_t child_state_idx = first_possible_match.first;
                     const NomdpPlanningTreeState& child_tree_state = planner_tree_[child_state_idx];
                     const NomdpPlanningState& child_state = child_tree_state.GetValueImmutable();
                     command = child_state.GetCommand();
@@ -1101,14 +1148,41 @@ namespace execution_policy
             }
         }
 
-        inline int64_t UpdateNodeCountsAndTree(const PolicyGraph& policy_graph, NomdpPlanningTree& planning_tree, NomdpPlanningState& previous_index_state, const int64_t previous_state_index, const int64_t parent_index, const uint64_t desired_transition_id, const std::vector<int64_t>& expected_possible_result_states, const std::vector<int64_t>& expected_result_state_matches, const uint32_t edge_attempt_threshold) const
+        inline int64_t UpdateNodeCountsAndTree(const PolicyGraph& policy_graph, NomdpPlanningTree& planning_tree, NomdpPlanningState& previous_index_state, const int64_t previous_state_index, const int64_t parent_index, const uint64_t desired_transition_id, const std::vector<std::pair<int64_t, bool>>& expected_possible_result_states, const std::vector<std::pair<int64_t, bool>>& expected_result_state_matches, const uint32_t edge_attempt_threshold) const
         {
+            UNUSED(desired_transition_id);
             int64_t result_state_index = -1;
             // If there was one possible result state and it matches
             // This should be the most likely case, and requires the least editing of the tree
             if (expected_possible_result_states.size() == 1 && expected_result_state_matches.size() == 1)
             {
                 std::cout << "Result state matched single expected result" << std::endl;
+                const std::pair<int64_t, bool>& result_match = expected_result_state_matches[0];
+                // Update the attempt/reached counts
+                // If the transition was a forward transition, we update the result state
+                if (result_match.second == false)
+                {
+                    NomdpPlanningTreeState& result_tree_state = planning_tree[result_match.first];
+                    NomdpPlanningState& result_state = result_tree_state.GetValueMutable();
+                    const std::pair<uint32_t, uint32_t> counts = result_state.GetAttemptAndReachedCounts();
+                    const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
+                    const uint32_t reached_count = counts.second + policy_action_attempt_count_;
+                    result_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
+                    std::cout << "Forward motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(result_state.GetAttemptAndReachedCounts()) << std::endl;
+                    result_state_index = result_match.first;
+                }
+                else
+                {
+                    NomdpPlanningTreeState& result_child_tree_state = planning_tree[result_match.first];
+                    NomdpPlanningState& result_child_state = result_child_tree_state.GetValueMutable();
+                    const std::pair<uint32_t, uint32_t> counts = result_child_state.GetReverseAttemptAndReachedCounts();
+                    const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
+                    const uint32_t reached_count = counts.second + policy_action_attempt_count_;
+                    result_child_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
+                    std::cout << "Reverse motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(result_child_state.GetReverseAttemptAndReachedCounts()) << std::endl;
+                    result_state_index = result_child_tree_state.GetParentIndex();
+                }
+                /*
                 result_state_index = expected_result_state_matches[0];
                 // Update the attempt/reached counts
                 // If the transition was a forward transition, we update the result state
@@ -1131,6 +1205,7 @@ namespace execution_policy
                     previous_index_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
                     std::cout << "Reverse motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(previous_index_state.GetReverseAttemptAndReachedCounts()) << std::endl;
                 }
+                */
                 // Since these counts won't change the probability (by definition it must be 1!)
                 // we don't need to update anything else in the tree
                 // We still update the policy, because we can and should to remain consistent
@@ -1141,91 +1216,70 @@ namespace execution_policy
                 std::cout << "Result state matched " << expected_result_state_matches.size() << " of " << expected_possible_result_states.size() << " expected results" << std::endl;
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Select the current best-distance result state as THE result state
-                int64_t best_child_index = -1;
+                std::pair<int64_t, bool> best_result_state(-1, false);
                 double best_distance = INFINITY;
                 for (size_t idx = 0; idx < expected_result_state_matches.size(); idx++)
                 {
-                    const int64_t child_state_idx = expected_result_state_matches[idx];
-                    const PolicyGraphNode& child_state_node = policy_graph.GetNodeImmutable(child_state_idx);
-                    const double child_state_distance = child_state_node.GetDistance();
-                    if (child_state_distance < best_distance)
+                    const std::pair<int64_t, bool>& result_match = expected_result_state_matches[idx];
+                    const int64_t result_match_state_idx = (result_match.second) ? planner_tree_[result_match.first].GetParentIndex() : result_match.first;
+                    const PolicyGraphNode& result_match_node = policy_graph.GetNodeImmutable(result_match_state_idx);
+                    const double result_match_distance = result_match_node.GetDistance();
+                    if (result_match_distance < best_distance)
                     {
-                        best_child_index = child_state_idx;
-                        best_distance = child_state_distance;
+                        best_result_state = result_match;
+                        best_distance = result_match_distance;
                     }
                 }
-                assert(best_child_index >= 0);
-                result_state_index = best_child_index;
-                std::cout << "Selected best match result state: " << result_state_index << std::endl;
+                assert(best_result_state.first >= 0);
+                result_state_index = (best_result_state.second) ? planner_tree_[best_result_state.first].GetParentIndex() : best_result_state.first;
+                if (best_result_state.second == false)
+                {
+                    std::cout << "Selected best match result state (forward movement): " << result_state_index << std::endl;
+                }
+                else
+                {
+                    std::cout << "Selected best match result state (reverse movement): " << result_state_index << std::endl;
+                }
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Update the attempt/reached counts for all *POSSIBLE* result states
-                // If the transition was a forward transition, we update just the result state
-                if (desired_transition_id != previous_index_state.GetReverseTransitionId())
+                for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
                 {
-                    for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
+                    const std::pair<int64_t, bool>& possible_result_match = expected_possible_result_states[idx];
+                    NomdpPlanningTreeState& possible_result_tree_state = planning_tree[possible_result_match.first];
+                    NomdpPlanningState& possible_result_state = possible_result_tree_state.GetValueMutable();
+                    if (possible_result_match.second == false)
                     {
-                        const int64_t child_state_idx = expected_possible_result_states[idx];
-                        NomdpPlanningTreeState& child_tree_state = planning_tree[child_state_idx];
-                        NomdpPlanningState& child_state = child_tree_state.GetValueMutable();
-                        const std::pair<uint32_t, uint32_t> counts = child_state.GetAttemptAndReachedCounts();
-                        if (child_state_idx == result_state_index)
+                        const std::pair<uint32_t, uint32_t> counts = possible_result_state.GetAttemptAndReachedCounts();
+                        if ((possible_result_match.first == best_result_state.first) && (possible_result_match.second == best_result_state.second))
                         {
                             const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
                             const uint32_t reached_count = counts.second + policy_action_attempt_count_;
-                            child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
+                            possible_result_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                         }
                         else
                         {
                             const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
                             const uint32_t reached_count = counts.second + 0u;
-                            child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
+                            possible_result_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                         }
-                        std::cout << "Forward motion - updated counts for state " << child_state_idx << " from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(child_state.GetAttemptAndReachedCounts()) << std::endl;
+                        std::cout << "Updated forward counts for state " << possible_result_match.first << " from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(possible_result_state.GetAttemptAndReachedCounts()) << std::endl;
                     }
-                }
-                // If the transition was a reverse transition, we update the previous state and any non-parent matches
-                else
-                {
-                    const std::pair<uint32_t, uint32_t> previous_state_counts = previous_index_state.GetReverseAttemptAndReachedCounts();
-                    // If the result state was the parent state, add to the counts of the previous
-                    if (result_state_index == parent_index)
-                    {
-                        const uint32_t attempt_count = previous_state_counts.first + policy_action_attempt_count_;
-                        const uint32_t reached_count = previous_state_counts.second + policy_action_attempt_count_;
-                        previous_index_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
-                    }
-                    // If the result state was not the parent state, adjust the counts of the previous
                     else
                     {
-                        const uint32_t attempt_count = previous_state_counts.first + policy_action_attempt_count_;
-                        const uint32_t reached_count = previous_state_counts.second + 0u;
-                        previous_index_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
-                    }
-                    std::cout << "Reverse motion - updated counts for previous state " << previous_state_index << " from " << PrettyPrint::PrettyPrint(previous_state_counts) << " to " << PrettyPrint::PrettyPrint(previous_index_state.GetReverseAttemptAndReachedCounts()) << std::endl;
-                    // Loop through all the possible result states
-                    for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
-                    {
-                        const int64_t child_state_idx = expected_possible_result_states[idx];
-                        // We skip the parent state, since that probability is stored in the previous state
-                        if (child_state_idx != parent_index)
+                        const std::pair<uint32_t, uint32_t> reverse_counts = possible_result_state.GetReverseAttemptAndReachedCounts();
+                        if ((possible_result_match.first == best_result_state.first) && (possible_result_match.second == best_result_state.second))
                         {
-                            NomdpPlanningTreeState& child_tree_state = planning_tree[child_state_idx];
-                            NomdpPlanningState& child_state = child_tree_state.GetValueMutable();
-                            const std::pair<uint32_t, uint32_t> counts = child_state.GetAttemptAndReachedCounts();
-                            if (child_state_idx == result_state_index)
-                            {
-                                const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
-                                const uint32_t reached_count = counts.second + policy_action_attempt_count_;
-                                child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
-                            }
-                            else
-                            {
-                                const uint32_t attempt_count = counts.first + policy_action_attempt_count_;
-                                const uint32_t reached_count = counts.second + 0u;
-                                child_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
-                            }
-                            std::cout << "Reverse motion - updated counts for state " << child_state_idx << " from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(child_state.GetAttemptAndReachedCounts()) << std::endl;
+                            const uint32_t attempt_count = reverse_counts.first + policy_action_attempt_count_;
+                            const uint32_t reached_count = reverse_counts.second + policy_action_attempt_count_;
+                            possible_result_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
                         }
+                        else
+                        {
+                            const uint32_t attempt_count = reverse_counts.first + policy_action_attempt_count_;
+                            const uint32_t reached_count = reverse_counts.second + 0u;
+                            possible_result_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
+                        }
+                        std::cout << "Updated reverse counts for state " << possible_result_match.first << " from " << PrettyPrint::PrettyPrint(reverse_counts) << " to " << PrettyPrint::PrettyPrint(possible_result_state.GetReverseAttemptAndReachedCounts()) << std::endl;
                     }
                 }
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1238,15 +1292,18 @@ namespace execution_policy
             return result_state_index;
         }
 
-        inline void UpdateTransitionProbabilities(NomdpPlanningTree& planning_tree, const NomdpPlanningState& previous_index_state, const std::vector<int64_t>& expected_possible_result_states, const int64_t parent_index, const double edge_attempt_threshold) const
+        inline void UpdateTransitionProbabilities(NomdpPlanningTree& planning_tree, const NomdpPlanningState& previous_index_state, const std::vector<std::pair<int64_t, bool>>& expected_possible_result_states, const int64_t parent_index, const double edge_attempt_threshold) const
         {
+            UNUSED(previous_index_state);
+            UNUSED(parent_index);
             //std::cout << "Updating effective edge probabilities for " << expected_possible_result_states.size() << " states..." << std::endl;
             for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
             {
-                const int64_t child_state_idx = expected_possible_result_states[idx];
-                // We skip the parent state, since we don't store an effective edge probability for state->parent
-                if (child_state_idx != parent_index)
+                const std::pair<int64_t, bool>& possible_result_state = expected_possible_result_states[idx];
+                // We skip all reverse state options, since we don't store an effective edge probability for state->parent
+                if (possible_result_state.second == false)
                 {
+                    const int64_t child_state_idx = possible_result_state.first;
                     //std::cout << "Updating effective edge probability for state " << child_state_idx << std::endl;
                     NomdpPlanningTreeState& child_tree_state = planning_tree[child_state_idx];
                     NomdpPlanningState& child_state = child_tree_state.GetValueMutable();
@@ -1260,21 +1317,22 @@ namespace execution_policy
                         double updated_percent_active = 0.0;
                         for (size_t other_idx = 0; other_idx < expected_possible_result_states.size(); other_idx++)
                         {
-                            const int64_t other_state_idx = expected_possible_result_states[other_idx];
-                            if (other_state_idx != child_state_idx)
+                            const std::pair<int64_t, bool>& other_possible_result_state = expected_possible_result_states[other_idx];
+                            if ((possible_result_state.first != other_possible_result_state.first) || (possible_result_state.second != other_possible_result_state.second))
                             {
-                                if (other_state_idx != parent_index)
+                                const int64_t other_state_idx = other_possible_result_state.first;
+                                const NomdpPlanningTreeState& other_tree_state = planning_tree[other_state_idx];
+                                const NomdpPlanningState& other_state = other_tree_state.GetValueImmutable();
+                                if (other_possible_result_state.second == false)
                                 {
-                                    const NomdpPlanningTreeState& other_tree_state = planning_tree[other_state_idx];
-                                    const NomdpPlanningState& other_state = other_tree_state.GetValueImmutable();
                                     const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
                                     const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
                                     updated_percent_active += p_returned_to_parent;
                                 }
                                 else
                                 {
-                                    const double p_reached_other = percent_active * previous_index_state.GetReverseEdgePfeasibility();
-                                    const double p_returned_to_parent = p_reached_other * previous_index_state.GetRawEdgePfeasibility();
+                                    const double p_reached_other = percent_active * other_state.GetReverseEdgePfeasibility();
+                                    const double p_returned_to_parent = p_reached_other * other_state.GetRawEdgePfeasibility();
                                     updated_percent_active += p_returned_to_parent;
                                 }
                             }
@@ -1298,7 +1356,7 @@ namespace execution_policy
         inline std::pair<std::pair<int64_t, uint64_t>, Configuration> QueryNextAction(const int64_t current_state_index) const
         {
             assert(current_state_index >= 0);
-            assert(current_state_index < previous_index_map_.size());
+            assert(current_state_index < (int64_t)previous_index_map_.size());
             const PolicyGraphNode& result_state_policy_node = policy_graph_.GetNodeImmutable(current_state_index);
             const NomdpPlanningState& result_state = result_state_policy_node.GetValueImmutable();
             // Get the action to take

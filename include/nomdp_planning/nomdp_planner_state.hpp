@@ -213,7 +213,8 @@ namespace nomdp_planning_tools
             state_id_ = 0u;
             step_size_ = 0.0;
             expectation_ = expectation;
-            particles_ = std::vector<Configuration, ConfigAlloc>{expectation_};
+            particles_.clear();
+            particles_.push_back(expectation_);
             UpdateStatistics();
             attempt_count_ = 1u;
             reached_count_ = 1u;
@@ -225,6 +226,7 @@ namespace nomdp_planning_tools
             initialized_ = true;
             has_particles_ = false;
             use_for_nearest_neighbors_ = true;
+            command_ = expectation_;
             split_id_ = 0u;
             transition_id_ = 0;
             reverse_transition_id_ = 0;

@@ -298,7 +298,6 @@ namespace nomdp_planning_tools
             RawCellSurfaceNormal() : normal(Eigen::Vector3d(0.0, 0.0, 0.0)), entry_direction(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
         };
 
-
         bool initialized_;
         double contact_distance_threshold_;
         sdf_tools::TaggedObjectCollisionMapGrid environment_;
@@ -506,6 +505,11 @@ namespace nomdp_planning_tools
                                     const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
+                                else if (z <= resolution)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
                             }
                             // Set the free-space convex segment we belong to (if necessary)
                             if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
@@ -515,7 +519,7 @@ namespace nomdp_planning_tools
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
                                 }
-                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5)
+                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5 && z > resolution)
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
                                 }
@@ -563,6 +567,11 @@ namespace nomdp_planning_tools
                                     const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
+                                else if (z <= resolution)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
                             }
                             else if (z <= 4.5)
                             {
@@ -580,7 +589,7 @@ namespace nomdp_planning_tools
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
                                 }
-                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5)
+                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5 && z > resolution)
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
                                 }
@@ -628,6 +637,11 @@ namespace nomdp_planning_tools
                                     const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
+                                else if (z <= resolution)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
                             }
                             // Set the free-space convex segment we belong to (if necessary)
                             if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
@@ -637,7 +651,7 @@ namespace nomdp_planning_tools
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
                                 }
-                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5)
+                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5 && z > resolution)
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
                                 }
@@ -647,6 +661,72 @@ namespace nomdp_planning_tools
                     }
                 }
                 return grid;
+            }
+            else if (environment_id == "se2_maze")
+            {
+                double grid_x_size = 10.0;
+                double grid_y_size = 10.0;
+                double grid_z_size = 1.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(0.0, 0.0, -0.5);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 1u); // Everything is filled by default
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            //const double& z = location.z();
+                            // Check if the cell belongs to any of the regions of freespace
+                            if (x > 0.5 && y > 0.5 && x <= 3.0 && y <= 9.5)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 3.5 && y > 0.5 && x <= 6.5 && y <= 9.5)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 7.0 && y > 0.5 && x <= 9.5 && y <= 9.5)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 0.5 && y > 7.0 && x <= 9.5 && y <= 9.0)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 0.5 && y > 1.0 && x <= 9.5 && y <= 3.0)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                        }
+                    }
+                }
+                return grid;
+            }
+            else if (environment_id == "se2_cluttered")
+            {
+                throw std::invalid_argument("Not implemented yet");
+            }
+            else if (environment_id == "noisy_arm_cluttered")
+            {
+                throw std::invalid_argument("Not implemented yet");
             }
             else
             {
@@ -829,6 +909,18 @@ namespace nomdp_planning_tools
                 ;
             }
             else if (environment_id == "inset_peg_in_hole")
+            {
+                ;
+            }
+            else if (environment_id == "se3_cluttered")
+            {
+                ;
+            }
+            else if (environment_id == "se2_maze")
+            {
+                ;
+            }
+            else if (environment_id == "noisy_arm_cluttered")
             {
                 ;
             }
@@ -1229,6 +1321,8 @@ namespace nomdp_planning_tools
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
         inline std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const uint32_t forward_simulation_steps, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
         {
+            //std::cout << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
+            UNUSED(enable_contact_manifold_target_adjustment);
             // Configure the robot
             robot.UpdatePosition(start_position);
             // Forward simulate for the provided number of steps
@@ -1237,9 +1331,8 @@ namespace nomdp_planning_tools
             {
                 // Step forward via the simulator
                 // Have robot compute next control input first
-                // Then, in a second funtion *not* in a callback, apply that control input
-                const Eigen::VectorXd initial_control_action = robot.GenerateControlAction(target_position, rng);
-                const Eigen::VectorXd control_action = enable_contact_manifold_target_adjustment ? PerformContactManifoldTargetAdjustment(robot, initial_control_action) : initial_control_action;
+                // Then, in a second function *not* in a callback, apply that control input
+                const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, rng);
                 const std::pair<Configuration, bool> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, use_individual_jacobians, trace, enable_tracing);
                 robot.UpdatePosition(result.first);
                 // Check if we've collided with the environment
@@ -1255,105 +1348,9 @@ namespace nomdp_planning_tools
                 }
             }
             // Return the ending position of the robot and if it has collided during simulation
-            return std::pair<Configuration, bool>(robot.GetPosition(), collided);
-        }
-
-        template<typename Robot>
-        inline Eigen::VectorXd PerformContactManifoldTargetAdjustment(const Robot& robot, const Eigen::VectorXd& initial_control_action) const
-        {
-            // Basically, we do J(q) * qdot = xdot --adjust target--> x'dot --> J(q)+ * x'dot = q'dot (actually, we don't because J(q)+ for everything is expensive!)
-            // Instead, we do J(q) * qdot = xdot --adjust some points xs in x--> xs'dot --> J(q)+ * xs'dot = qdotadjustment --> q'dot = qdot + qdotadjustment
-            // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
-            // Make space for the xgradient and Jacobian
-            Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians;
-            Eigen::Matrix<double, Eigen::Dynamic, 1> point_corrections;
-            // Now, go through the links and points of the robot to build up the xgradient and Jacobian
-            bool cmta_needed = false;
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-            {
-                // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
-                // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
-                // Now, go through the points of the link
-                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                {
-                    // Check for interaction forces
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
-                    // xdot = J(q, p) * qdot
-                    const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * initial_control_action;
-                    const Eigen::Vector3d point_motion = raw_point_motion.col(0);
-                    //std::cout << "Point jacobian: " << point_jacobian << std::endl;
-                    // Transform the link point into the environment frame
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    // We only work with points in the SDF
-                    if (environment_sdf_.CheckInBounds(environment_relative_point))
-                    {
-                        const float distance = environment_sdf_.Get(environment_relative_point);
-                        // We only work with points in contact
-                        if (distance <= (environment_sdf_.GetResolution() * 1.5))
-                        {
-                            cmta_needed = true;
-                            // Get the interaction force (approximate) from the SDF
-                            const std::vector<double> sdf_gradient_query = environment_sdf_.GetGradient(environment_relative_point, true);
-                            assert(sdf_gradient_query.size() == 3);
-                            const Eigen::Vector3d raw_interaction_force = EigenHelpers::StdVectorDoubleToEigenVector3d(sdf_gradient_query);
-                            // Check if we need to worry about the interaction force
-                            const double PMdotRIF = point_motion.dot(raw_interaction_force);
-                            if (PMdotRIF < -0.0)
-                            {
-                                // Now, adjust the desired point motion so we don't increase the interaction force
-                                // Project the interaction force back on the desired point motion, basically scale down motion that would increase the interation force
-                                // Take the projection of the motion onto the interaction force, scale it down, and subtract it from the motion
-                                const double RIFdotRIF = raw_interaction_force.dot(raw_interaction_force);
-                                const Eigen::Vector3d PMprojonRIF = (PMdotRIF / RIFdotRIF) * raw_interaction_force;
-                                const double PMprojonRIFmag = PMprojonRIF.norm();
-                                const double desiredPMprojonRIFmag = (PMprojonRIFmag > environment_sdf_.GetResolution()) ? environment_sdf_.GetResolution() : PMprojonRIFmag;
-                                const Eigen::Vector3d scaledPMprojonRIF = (PMprojonRIFmag > environment_sdf_.GetResolution()) ? (Eigen::Vector3d)((1.0 - (desiredPMprojonRIFmag / PMprojonRIFmag)) * PMprojonRIF) : PMprojonRIF;
-                                const Eigen::Vector3d corrected_point_motion = point_motion - scaledPMprojonRIF;
-                                const Eigen::Vector3d desired_point_motion = corrected_point_motion;
-                                std::cout << "Adjusted point motion from " << PrettyPrint::PrettyPrint(point_motion) << " to " << PrettyPrint::PrettyPrint(desired_point_motion) << " to reduce interaction forces" << std::endl;
-                                // Append the new point jacobian to the matrix of jacobians
-                                Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> extended_robot_jacobians;
-                                extended_robot_jacobians.resize(robot_jacobians.rows() + 3, point_jacobian.cols());
-                                if (robot_jacobians.cols() > 0)
-                                {
-                                    extended_robot_jacobians << robot_jacobians,point_jacobian;
-                                }
-                                else
-                                {
-                                    extended_robot_jacobians << point_jacobian;
-                                }
-                                robot_jacobians = extended_robot_jacobians;
-                                Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_corrections;
-                                extended_point_corrections.resize(point_corrections.rows() + 3, Eigen::NoChange);
-                                extended_point_corrections << point_corrections,desired_point_motion;
-                                point_corrections = extended_point_corrections;
-                            }
-                        }
-                    }
-                }
-            }
-            if (cmta_needed)
-            {
-                std::cout << "+++++ Performing Contact Manifold Target Adjustment +++++" << std::endl;
-                std::cout << "Adjusting control action via J(q,p) * qdot = pdot --> J(q,p)+ * p'dot" << std::endl;
-                // We could use the naive Pinv(J) * pdot, but instead we solve the Ax = b (Jqdot = pdot) problem directly using one of the solvers in Eigen
-                const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = robot_jacobians.colPivHouseholderQr().solve(point_corrections);
-                // Extract the c-space correction
-                const Eigen::VectorXd new_control_action_adjustment = raw_correction.col(0);
-                const Eigen::VectorXd new_control_action = initial_control_action + new_control_action_adjustment;
-                std::cout << "Adjusted control action from " << PrettyPrint::PrettyPrint(initial_control_action) << " to " << PrettyPrint::PrettyPrint(new_control_action) << " to reduce interaction forces" << std::endl;
-                return new_control_action;
-            }
-            else
-            {
-                return initial_control_action;
-            }
+            const Configuration reached_position = robot.GetPosition();
+            //std::cout << "Forward simulated from\nNearest: " << PrettyPrint::PrettyPrint(start_position) << "\nTarget: " << PrettyPrint::PrettyPrint(target_position) << "\nReached: " << PrettyPrint::PrettyPrint(reached_position) << std::endl;
+            return std::pair<Configuration, bool>(reached_position, collided);
         }
 
         template<typename Robot>
@@ -1390,7 +1387,7 @@ namespace nomdp_planning_tools
         }
 
         template<typename Robot>
-        inline std::map<std::pair<size_t, size_t>, Eigen::Vector3d> ExtractSelfCollidingPoints(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step, const std::vector<std::pair<size_t, size_t>>& candidate_points) const
+        inline std::map<std::pair<size_t, size_t>, Eigen::Vector3d> ExtractSelfCollidingPoints(const Robot& previous_robot, const Robot& current_robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const std::vector<std::pair<size_t, size_t>>& candidate_points) const
         {
             if (candidate_points.size() > 1)
             {
@@ -1405,27 +1402,6 @@ namespace nomdp_planning_tools
                 // Let's see how many links we have - we only care if multiple links are involved
                 if (point_self_collision_check_map.size() >= 2)
                 {
-                    // We go through each link and compute an "input momentum" vector that reflects the contribution of the particular link to the collision
-                    // We can assume that point motion has occurred over unit time, so motion = velocity, and that each point has unit mass, so momentum = velocity.
-                    // Thus, the momentum = motion for each particle
-                    std::map<size_t, Eigen::Vector3d> link_momentum_vectors;
-                    for (auto link_itr = point_self_collision_check_map.begin(); link_itr != point_self_collision_check_map.end(); ++link_itr)
-                    {
-                        const size_t link_idx = link_itr->first;
-                        const std::string& link_name = robot_links_points[link_itr->first].first;
-                        const std::vector<size_t>& link_points = link_itr->second;
-                        Eigen::Vector3d link_momentum_vector(0.0, 0.0, 0.0);
-                        for (size_t idx = 0; idx < link_points.size(); idx++)
-                        {
-                            const size_t link_point = link_points[idx];
-                            const Eigen::Vector3d& link_relative_point = robot_links_points[link_idx].second[link_point];
-                            const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
-                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
-                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
-                            link_momentum_vector = link_momentum_vector + point_motion;
-                        }
-                        link_momentum_vectors[link_idx] = link_momentum_vector;
-                    }
                     // For each link, figure out which *other* links it is colliding with
                     std::map<size_t, std::vector<size_t>> link_collisions;
                     for (auto fitr = point_self_collision_check_map.begin(); fitr != point_self_collision_check_map.end(); ++fitr)
@@ -1436,26 +1412,74 @@ namespace nomdp_planning_tools
                             {
                                 const size_t fitr_link = fitr->first;
                                 const size_t sitr_link = sitr->first;
-                                const bool self_collision_allowed = robot.CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
+                                const bool self_collision_allowed = current_robot.CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
                                 if (self_collision_allowed == false)
                                 {
+                                    //const std::string msg = "Self collisions not allowed between " + std::to_string(fitr_link) + " and " + std::to_string(sitr_link);
+                                    //std::cout << msg << std::endl;
                                     link_collisions[fitr_link].push_back(sitr_link);
                                 }
                             }
                         }
                     }
+                    if (link_collisions.size() < 2)
+                    {
+                        return std::map<std::pair<size_t, size_t>, Eigen::Vector3d>();
+                    }
+                    //std::cout << "Self collisions: " << PrettyPrint::PrettyPrint(link_collisions) << std::endl;
+                    // We go through each link and compute an "input momentum" vector that reflects the contribution of the particular link to the collision
+                    // We can assume that point motion has occurred over unit time, so motion = velocity, and that each point has unit mass, so momentum = velocity.
+                    // Thus, the momentum = motion for each particle
+                    std::map<size_t, Eigen::Vector3d> link_momentum_vectors;
+                    for (auto link_itr = point_self_collision_check_map.begin(); link_itr != point_self_collision_check_map.end(); ++link_itr)
+                    {
+                        const size_t link_idx = link_itr->first;
+                        // Skip links we already filtered out due to allowed self collision
+                        if (link_collisions.find(link_idx) != link_collisions.end())
+                        {
+                            const std::string& link_name = robot_links_points[link_itr->first].first;
+                            const Eigen::Affine3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
+                            const Eigen::Affine3d current_link_transform = current_robot.GetLinkTransform(link_name);
+                            const std::vector<size_t>& link_points = link_itr->second;
+                            Eigen::Vector3d link_momentum_vector(0.0, 0.0, 0.0);
+                            for (size_t idx = 0; idx < link_points.size(); idx++)
+                            {
+                                const size_t link_point = link_points[idx];
+                                const Eigen::Vector3d& link_relative_point = robot_links_points[link_idx].second[link_point];
+                                const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
+                                const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
+                                const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
+                                if (point_motion.norm() <= std::numeric_limits<double>::epsilon())
+                                {
+                                    //const std::string msg = "Point motion would be zero (link " + std::to_string(link_idx) + ", point " + std::to_string(link_point) + ")\nPrevious location: " + PrettyPrint::PrettyPrint(previous_point_location) + "\nCurrent location: " + PrettyPrint::PrettyPrint(current_point_location);
+                                    //std::cout << msg << std::endl;
+                                }
+                                link_momentum_vector = link_momentum_vector + point_motion;
+                            }
+                            link_momentum_vectors[link_idx] = link_momentum_vector;
+                        }
+                    }
+                    //std::cout << "Link momentum vectors:\n" << PrettyPrint::PrettyPrint(link_momentum_vectors) << std::endl;
                     // Store the corrections we compute
                     std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points_with_corrections;
                     // Now, for each link, we compute a correction for each colliding point on the link
                     for (auto link_itr = link_collisions.begin(); link_itr != link_collisions.end(); ++link_itr)
                     {
                         const size_t link_idx = link_itr->first;
+                        const std::string& link_name = robot_links_points[link_idx].first;
+                        const Eigen::Affine3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
+                        const Eigen::Vector3d& link_point = robot_links_points[link_idx].second[point_self_collision_check_map[link_idx].front()];
+                        const Eigen::Vector3d link_point_location = previous_link_transform * link_point;
                         const std::vector<size_t>& colliding_links = link_itr->second;
+                        const auto link_momentum_vector_query = link_momentum_vectors.find(link_idx);
+                        assert(link_momentum_vector_query != link_momentum_vectors.end());
+                        const Eigen::Vector3d link_momentum_vector = link_momentum_vector_query->second;
+                        const Eigen::Vector3d link_velocity = link_momentum_vector / (double)point_self_collision_check_map[link_idx].size();
                         // We compute a whole-link correction
                         // For the purposes of simulation, we assume an elastic collision - i.e. momentum must be conserved
                         Eigen::MatrixXd contact_matrix = Eigen::MatrixXd::Zero((colliding_links.size() + 1) * 3, colliding_links.size() * 3);
                         // For each link, fill in the contact matrix
-                        for (int64_t link = 1; link <= colliding_links.size(); link++)
+                        for (int64_t link = 1; link <= (int64_t)colliding_links.size(); link++)
                         {
                             int64_t collision_number = link - 1;
                             // Our current link gets -I
@@ -1463,46 +1487,55 @@ namespace nomdp_planning_tools
                             // The other link gets +I
                             contact_matrix.block<3, 3>((link * 3), (collision_number * 3)) = Eigen::MatrixXd::Identity(3, 3);
                         }
+                        //std::cout << "Contact matrix:\n" << PrettyPrint::PrettyPrint(contact_matrix) << std::endl;
                         // Generate the contact normal matrix
                         Eigen::MatrixXd contact_normal_matrix = Eigen::MatrixXd::Zero(colliding_links.size() * 3, colliding_links.size());
-                        for (int64_t collision = 0; collision < colliding_links.size(); collision++)
+                        for (int64_t collision = 0; collision < (int64_t)colliding_links.size(); collision++)
                         {
                             const size_t other_link_idx = colliding_links[collision];
+                            const std::string& other_link_name = robot_links_points[other_link_idx].first;
+                            const Eigen::Affine3d previous_other_link_transform = previous_robot.GetLinkTransform(other_link_name);
+                            const Eigen::Vector3d& other_link_point = robot_links_points[other_link_idx].second[point_self_collision_check_map[other_link_idx].front()];
+                            const Eigen::Vector3d other_link_point_location = previous_other_link_transform * other_link_point;
                             // Compute the contact normal
-                            const Eigen::Vector3d& link_velocity = link_momentum_vectors[link_idx] / point_self_collision_check_map[link_idx].size();
-                            const Eigen::Vector3d& other_link_velocity = link_momentum_vectors[other_link_idx] / point_self_collision_check_map[other_link_idx].size();
-                            const Eigen::Vector3d current_link_position = link_velocity * -1.0;
-                            const Eigen::Vector3d current_other_link_position = other_link_velocity * -1.0;
-                            const Eigen::Vector3d contact_direction = current_other_link_position - current_link_position;
+                            //const Eigen::Vector3d other_link_velocity = link_momentum_vectors[other_link_idx] / (double)point_self_collision_check_map[other_link_idx].size();
+                            //const Eigen::Vector3d current_link_position = link_velocity * -1.0;
+                            //const Eigen::Vector3d current_other_link_position = other_link_velocity * -1.0;
+                            //const Eigen::Vector3d contact_direction = current_other_link_position - current_link_position;
+                            const Eigen::Vector3d contact_direction = other_link_point_location - link_point_location;
                             const Eigen::Vector3d contact_normal = EigenHelpers::SafeNorm(contact_direction);
+                            //const std::string msg = "Contact normal: " + PrettyPrint::PrettyPrint(contact_normal) + "\nCurrent link position: " + PrettyPrint::PrettyPrint(link_point_location) + "\nOther link position: " + PrettyPrint::PrettyPrint(other_link_point_location);
+                            //std::cout << msg << std::endl;
                             contact_normal_matrix.block<3, 1>((collision * 3), collision) = contact_normal;
                         }
+                        //std::cout << "Contact normal matrix:\n" << PrettyPrint::PrettyPrint(contact_normal_matrix) << std::endl;
                         // Generate the mass matrix
                         Eigen::MatrixXd mass_matrix = Eigen::MatrixXd::Zero((colliding_links.size() + 1) * 3, (colliding_links.size() + 1) * 3);
                         // Add the mass of our link
-                        mass_matrix.block<3, 3>(0, 0) = Eigen::MatrixXd::Identity(3, 3) * point_self_collision_check_map[link_idx].size();
+                        mass_matrix.block<3, 3>(0, 0) = Eigen::MatrixXd::Identity(3, 3) * (double)point_self_collision_check_map[link_idx].size();
                         // Add the mass of the other links
-                        for (int64_t link = 1; link <= colliding_links.size(); link++)
+                        for (int64_t link = 1; link <= (int64_t)colliding_links.size(); link++)
                         {
                             const size_t other_link_idx = colliding_links[link - 1];
-                            mass_matrix.block<3, 3>((link * 3), (link * 3)) = Eigen::MatrixXd::Identity(3, 3) * point_self_collision_check_map[other_link_idx].size();
+                            mass_matrix.block<3, 3>((link * 3), (link * 3)) = Eigen::MatrixXd::Identity(3, 3) * (double)point_self_collision_check_map[other_link_idx].size();
                         }
+                        //std::cout << "Mass matrix:\n" << PrettyPrint::PrettyPrint(mass_matrix) << std::endl;
                         // Generate the velocity matrix
                         Eigen::MatrixXd velocity_matrix = Eigen::MatrixXd::Zero((colliding_links.size() + 1) * 3, 1);
-                        const Eigen::Vector3d link_velocity = link_momentum_vectors[link_idx] / point_self_collision_check_map[link_idx].size();
                         velocity_matrix.block<3, 1>(0, 0) = link_velocity;
-                        for (int64_t link = 1; link <= colliding_links.size(); link++)
+                        for (int64_t link = 1; link <= (int64_t)colliding_links.size(); link++)
                         {
                             const size_t other_link_idx = colliding_links[link - 1];
-                            const Eigen::Vector3d other_link_velocity = link_momentum_vectors[other_link_idx] / point_self_collision_check_map[other_link_idx].size();
+                            const Eigen::Vector3d other_link_velocity = link_momentum_vectors[other_link_idx] / (double)point_self_collision_check_map[other_link_idx].size();
                             velocity_matrix.block<3, 1>((link * 3), 0) = other_link_velocity;
                         }
+                        //std::cout << "Velocity matrix:\n" << PrettyPrint::PrettyPrint(velocity_matrix) << std::endl;
                         // Compute the impulse corrections
                         // Yes, this is ugly. This is to suppress a warning on type conversion related to Eigen operations
                         #pragma GCC diagnostic push
                         #pragma GCC diagnostic ignored "-Wconversion"
                         const Eigen::MatrixXd impulses = (contact_normal_matrix.transpose() * contact_matrix.transpose() * mass_matrix.inverse() * contact_matrix * contact_normal_matrix).inverse() * contact_normal_matrix.transpose() * contact_matrix.transpose() * velocity_matrix;
-                        //std::cout << "Impulses:\n" << impulses << std::endl;
+                        //std::cout << "Impulses:\n" << PrettyPrint::PrettyPrint(impulses) << std::endl;
                         // Compute the new velocities
                         const Eigen::MatrixXd velocity_delta = (mass_matrix.inverse() * contact_matrix * contact_normal_matrix * impulses) * -1.0;
                         //std::cout << "New velocities:\n" << velocity_delta << std::endl;
@@ -1515,8 +1548,12 @@ namespace nomdp_planning_tools
                         {
                             const size_t point_idx = link_points[idx];
                             const std::pair<size_t, size_t> point_id(link_idx, point_idx);
+                            //std::cout << "Link correction velocity: " << PrettyPrint::PrettyPrint(link_correction_velocity) << std::endl;
                             const Eigen::Vector3d point_correction = link_correction_velocity / (double)(link_points.size());
-                            //std::cout << "Correction (new): " << PrettyPrint::PrettyPrint(point_id) << "\n" << point_correction << std::endl;
+                            assert(isnan(point_correction.x()) == false);
+                            assert(isnan(point_correction.y()) == false);
+                            assert(isnan(point_correction.z()) == false);
+                            //std::cout << "Correction (new): " << PrettyPrint::PrettyPrint(point_id) << " - " << PrettyPrint::PrettyPrint(point_correction) << std::endl;
                             self_colliding_points_with_corrections[point_id] = point_correction;
                         }
                     }
@@ -1588,7 +1625,7 @@ namespace nomdp_planning_tools
         }
 
         template<typename Robot>
-        inline std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> CollectSelfCollisions(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step) const
+        inline std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> CollectSelfCollisions(const Robot& previous_robot, const Robot& current_robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points) const
         {
             // Note that robots with only one link *cannot* self-collide!
             if (robot_links_points.size() == 1)
@@ -1598,7 +1635,7 @@ namespace nomdp_planning_tools
             else if (robot_links_points.size() == 2)
             {
                 // If the robot is only two links, and self-collision between them is allowed, we can avoid checks
-                if (robot.CheckIfSelfCollisionAllowed(0, 1))
+                if (current_robot.CheckIfSelfCollisionAllowed(0, 1))
                 {
                     return std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>();
                 }
@@ -1612,7 +1649,7 @@ namespace nomdp_planning_tools
                 const std::string& link_name = robot_links_points[link_idx].first;
                 const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Affine3d link_transform = current_robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1635,7 +1672,7 @@ namespace nomdp_planning_tools
                 //const VoxelGrid::GRID_INDEX& location = itr->first;
                 const std::vector<std::pair<size_t, size_t>>& candidate_points = itr->second;
                 //std::cout << "Candidate points: " << PrettyPrint::PrettyPrint(candidate_points) << std::endl;
-                const std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points = ExtractSelfCollidingPoints(robot, robot_links_points, control_input_step, candidate_points);
+                const std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points = ExtractSelfCollidingPoints(previous_robot, current_robot, robot_links_points, candidate_points);
                 //std::cout << "Extracted points: " << PrettyPrint::PrettyPrint(self_colliding_points) << std::endl;
                 for (auto spcitr = self_colliding_points.begin(); spcitr != self_colliding_points.end(); ++spcitr)
                 {
@@ -1648,11 +1685,16 @@ namespace nomdp_planning_tools
             return self_collisions;
         }
 
-        template<typename Robot>
-        inline std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> CheckCollision(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step) const
+        template<typename Robot, typename Configuration>
+        inline std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> CheckCollision(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points) const
         {
-            const bool env_collision = CheckEnvironmentCollision(robot, robot_links_points);
-            const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> self_collisions = CollectSelfCollisions(robot, robot_links_points, control_input_step);
+            Robot current_robot = robot;
+            Robot previous_robot = robot;
+            // We need our own copies with a set config to use for kinematics!
+            current_robot.UpdatePosition(current_config);
+            previous_robot.UpdatePosition(previous_config);
+            const bool env_collision = CheckEnvironmentCollision(current_robot, robot_links_points);
+            const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> self_collisions = CollectSelfCollisions(previous_robot, current_robot, robot_links_points);
             //std::cout << self_collisions.size() << " self-colliding points to resolve" << std::endl;
             if (env_collision || (self_collisions.size() > 0))
             {
@@ -1667,6 +1709,7 @@ namespace nomdp_planning_tools
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
         inline std::pair<Configuration, bool> ResolveForwardSimulation(Robot& robot, const Eigen::VectorXd& control_input, RNG& rng, const bool use_individual_jacobians, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
         {
+            //std::cout << "Resolving control input: " << PrettyPrint::PrettyPrint(control_input) << std::endl;
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points = robot.GetRawLinksPoints();
             // Step along the control input
@@ -1674,10 +1717,11 @@ namespace nomdp_planning_tools
             const double max_robot_motion_per_step = robot.GetMaxMotionPerStep();
             const double step_motion_estimate = step_norm * max_robot_motion_per_step;
             const double allowed_microstep_distance = GetResolution() * 0.5;
-            const uint32_t number_microsteps = (uint32_t)ceil(step_motion_estimate / allowed_microstep_distance);
+            const uint32_t number_microsteps = std::max(1u, ((uint32_t)ceil(step_motion_estimate / allowed_microstep_distance)));
             assert(number_microsteps > 0);
             //std::cout << "Resolving simulation step with estimated motion " << step_motion_estimate << " in " << number_microsteps << " microsteps" << std::endl;
             const Eigen::VectorXd control_input_step = control_input * (1.0 / (double)number_microsteps);
+            //std::cout << "Control input step: " << PrettyPrint::PrettyPrint(control_input_step) << std::endl;
             bool collided = false;
             if (enable_tracing)
             {
@@ -1693,10 +1737,13 @@ namespace nomdp_planning_tools
                     trace.resolver_steps.back().contact_resolver_steps.emplace_back();
                 }
                 // Store the previous configuration of the robot
-                Configuration previous_configuration = robot.GetPosition();
+                const Configuration previous_configuration = robot.GetPosition();
                 // Update the position of the robot
                 robot.ApplyControlInput(control_input_step, rng);
-                std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, robot_links_points, control_input_step);
+                const Configuration post_action_configuration = robot.GetPosition(rng);
+                robot.UpdatePosition(post_action_configuration);
+                //std::cout << "Post-action configuration: " << PrettyPrint::PrettyPrint(post_action_configuration) << std::endl;
+                std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, previous_configuration, post_action_configuration, robot_links_points);
                 std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map = collision_check.second;
                 bool in_collision = collision_check.first;
                 if (in_collision)
@@ -1705,15 +1752,16 @@ namespace nomdp_planning_tools
                 }
                 if (enable_tracing)
                 {
-                    trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(robot.GetPosition());
+                    trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(post_action_configuration);
                 }
                 // Now, we know if a collision has happened
                 if (in_collision)
                 {
+                    Configuration active_configuration = post_action_configuration;
                     uint32_t resolver_iterations = 0;
                     while (in_collision)
                     {
-                        const Eigen::VectorXd raw_correction_step = use_individual_jacobians ? ComputeResolverCorrectionStepIndividualJacobians(robot, robot_links_points, control_input_step, self_collision_map) : ComputeResolverCorrectionStepStackedJacobian(robot, robot_links_points, control_input_step, self_collision_map);
+                        const Eigen::VectorXd raw_correction_step = use_individual_jacobians ? ComputeResolverCorrectionStepIndividualJacobians(robot, previous_configuration, active_configuration, robot_links_points, self_collision_map) : ComputeResolverCorrectionStepStackedJacobian(robot, previous_configuration, active_configuration, robot_links_points, self_collision_map);
                         //std::cout << "Raw Cstep: " << raw_correction_step << std::endl;
                         // Scale down the size of the correction step
                         const double correction_step_norm = raw_correction_step.norm();
@@ -1724,8 +1772,11 @@ namespace nomdp_planning_tools
                         //std::cout << "Real Cstep: " << real_correction_step << std::endl;
                         // Apply correction step
                         robot.ApplyControlInput(real_correction_step);
+                        const Configuration post_resolve_configuration = robot.GetPosition();
+                        //std::cout << "Post-resolve configuration: " << PrettyPrint::PrettyPrint(post_resolve_configuration) << std::endl;
+                        active_configuration = post_resolve_configuration;
                         // Check to see if we're still in collision
-                        const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, robot_links_points, control_input_step);
+                        const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, previous_configuration, active_configuration, robot_links_points);
                         // Update the self-collision map
                         self_collision_map = new_collision_check.second;
                         // Update the collision check variable
@@ -1734,7 +1785,7 @@ namespace nomdp_planning_tools
                         // Update tracing
                         if (enable_tracing)
                         {
-                            trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(robot.GetPosition());
+                            trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(active_configuration);
                         }
                         if (resolver_iterations > 150)
                         {
@@ -1761,9 +1812,14 @@ namespace nomdp_planning_tools
             return std::pair<Configuration, bool>(robot.GetPosition(), collided);
         }
 
-        template<typename Robot>
-        Eigen::VectorXd ComputeResolverCorrectionStepIndividualJacobians(Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map) const
+        template<typename Robot, typename Configuration>
+        inline Eigen::VectorXd ComputeResolverCorrectionStepIndividualJacobians(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map) const
         {
+            Robot current_robot = robot;
+            Robot previous_robot = robot;
+            // We need our own copy with a set config to use for kinematics!
+            current_robot.UpdatePosition(current_config);
+            previous_robot.UpdatePosition(previous_config);
             // In case a collision has occured, we need to compute a "collision gradient" that will push the robot out of collision
             Eigen::VectorXd raw_correction_step;
             // Now, go through the links and points of the robot to build up the xgradient and Jacobian
@@ -1773,7 +1829,8 @@ namespace nomdp_planning_tools
                 const std::string& link_name = robot_links_points[link_idx].first;
                 const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Affine3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
+                const Eigen::Affine3d current_link_transform = current_robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1789,25 +1846,23 @@ namespace nomdp_planning_tools
                     std::pair<bool, Eigen::Vector3d> env_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = current_robot.ComputeLinkPointJacobian(link_name, link_relative_point);
                     //std::cout << "Point jacobian: " << point_jacobian << std::endl;
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
+                    const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    if (environment_sdf_.CheckInBounds(environment_relative_point))
+                    if (environment_sdf_.CheckInBounds(current_point_location))
                     {
-                        const float distance = environment_sdf_.Get(environment_relative_point);
+                        const float distance = environment_sdf_.Get(current_point_location);
                         // We only work with points in collision
                         if (distance < contact_distance_threshold_)
                         {
                             // We query the surface normal map for the gradient to move out of contact using the particle motion
-                            // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
-                            // xdot = J(q, p) * qdot
-                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
-                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                            const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
                             const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
                             // Query the surface normal map
-                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(environment_relative_point, normed_point_motion);
+                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
                             assert(surface_normal_query.second);
                             const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
                             const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
@@ -1855,9 +1910,14 @@ namespace nomdp_planning_tools
             return raw_correction_step;
         }
 
-        template<typename Robot>
-        Eigen::VectorXd ComputeResolverCorrectionStepStackedJacobian(Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const Eigen::VectorXd& control_input_step, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map) const
+        template<typename Robot, typename Configuration>
+        inline Eigen::VectorXd ComputeResolverCorrectionStepStackedJacobian(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map) const
         {
+            Robot current_robot = robot;
+            Robot previous_robot = robot;
+            // We need our own copy with a set config to use for kinematics!
+            current_robot.UpdatePosition(current_config);
+            previous_robot.UpdatePosition(previous_config);
             // In case a collision has occured, we need to compute a "collision gradient" that will push the robot out of collision
             // The "collision gradient" is of the form qgradient = J(q)+ * xgradient
             // Make space for the xgradient and Jacobian
@@ -1870,7 +1930,8 @@ namespace nomdp_planning_tools
                 const std::string& link_name = robot_links_points[link_idx].first;
                 const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Affine3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
+                const Eigen::Affine3d current_link_transform = current_robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1886,25 +1947,22 @@ namespace nomdp_planning_tools
                     std::pair<bool, Eigen::Vector3d> env_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = robot.ComputeLinkPointJacobian(link_name, link_relative_point);
-                    //std::cout << "Point jacobian: " << point_jacobian << std::endl;
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = current_robot.ComputeLinkPointJacobian(link_name, link_relative_point);
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
+                    const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    if (environment_sdf_.CheckInBounds(environment_relative_point))
+                    if (environment_sdf_.CheckInBounds(current_point_location))
                     {
-                        const float distance = environment_sdf_.Get(environment_relative_point);
+                        const float distance = environment_sdf_.Get(current_point_location);
                         // We only work with points in collision
                         if (distance < contact_distance_threshold_)
                         {
                             // We query the surface normal map for the gradient to move out of contact using the particle motion
-                            // Instead of storing these for every point, we just compute them as needed via differential kinematics - i.e. the Jacobian
-                            // xdot = J(q, p) * qdot
-                            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_point_motion = point_jacobian * control_input_step;
-                            const Eigen::Vector3d point_motion = raw_point_motion.col(0);
+                            const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
                             const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
                             // Query the surface normal map
-                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(environment_relative_point, normed_point_motion);
+                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
                             assert(surface_normal_query.second);
                             const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
                             const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
@@ -1935,10 +1993,12 @@ namespace nomdp_planning_tools
                         Eigen::Vector3d point_correction(0.0, 0.0, 0.0);
                         if (self_collision_correction.first)
                         {
+                            //std::cout << "Self-collision correction: " << PrettyPrint::PrettyPrint(self_collision_correction.second) << std::endl;
                             point_correction = point_correction + self_collision_correction.second;
                         }
                         if (env_collision_correction.first)
                         {
+                            //std::cout << "Env-collision correction: " << PrettyPrint::PrettyPrint(env_collision_correction.second) << std::endl;
                             point_correction = point_correction + env_collision_correction.second;
                         }
 //                        // Weight the correction based on the distance from the joint axis (note, the joint axis is at the origin of the link!)
@@ -1949,6 +2009,8 @@ namespace nomdp_planning_tools
                         extended_point_corrections.resize(point_corrections.rows() + 3, Eigen::NoChange);
                         extended_point_corrections << point_corrections,point_correction;
                         point_corrections = extended_point_corrections;
+                        //std::cout << "Point jacobian:\n" << point_jacobian << std::endl;
+                        //std::cout << "Point correction: " << PrettyPrint::PrettyPrint(point_correction) << std::endl;
                     }
                 }
             }

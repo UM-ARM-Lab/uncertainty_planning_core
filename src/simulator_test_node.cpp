@@ -514,6 +514,7 @@ std::pair<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_ro
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "simulator_test_node");
+    /*
     ros::NodeHandle nh;
     ros::NodeHandle nhp("~");
     ROS_INFO("Starting Simulator Test Node...");
@@ -644,5 +645,6 @@ int main(int argc, char** argv)
 #endif
     const bool enable_contact_manifold_target_adjustment = false;
     planning_space.DemonstrateSimulator(start, goal, enable_contact_manifold_target_adjustment, display_debug_publisher);
+    */
     return 0;
 }
