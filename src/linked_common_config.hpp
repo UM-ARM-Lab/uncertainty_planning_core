@@ -37,7 +37,7 @@ namespace linked_common_config
         options.step_size = 15.0 * options.environment_resolution;
         options.goal_probability_threshold = 0.51;
         options.goal_distance_threshold = 2.0 * options.environment_resolution;
-        options.signature_matching_threshold = 0.5;
+        options.signature_matching_threshold = 0.99;
         options.distance_clustering_threshold = 15.0 * options.environment_resolution;
         options.feasibility_alpha = 0.75;
         options.variance_alpha = 0.75;

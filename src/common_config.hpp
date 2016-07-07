@@ -37,14 +37,16 @@ namespace common_config
         double actuator_error;
         double sensor_error;
         // Reverse/repeat params
-        uint32_t action_attempt_count;
+        uint32_t edge_attempt_count;
         // Particle/execution limits
         uint32_t num_particles;
         // Execution limits
         uint32_t num_policy_simulations;
         uint32_t num_policy_executions;
+        // How many attempts does a policy action count for?
+        uint32_t policy_action_attempt_count;
         // Execution limits
-        uint32_t exec_step_limit;
+        uint32_t max_exec_actions;
         // Control flags
         bool use_contact;
         bool use_reverse;
@@ -72,6 +74,9 @@ namespace common_config
             options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
             options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
             options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
+            options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
+            options.use_contact = nhp.param(std::string("use_contact"), options.use_contact);
+            options.use_reverse = nhp.param(std::string("use_reverse"), options.use_reverse);
         }
         else if (type == common_config::OPTIONS::EXECUTION)
         {
@@ -83,6 +88,8 @@ namespace common_config
             options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
             options.executed_policy_file = nhp.param(std::string("executed_policy_file"), options.executed_policy_file);
             options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
+            options.max_exec_actions = (uint32_t)nhp.param(std::string("max_exec_actions"), (int)options.max_exec_actions);
+            options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
         }
         else
         {
@@ -125,6 +132,18 @@ namespace common_config
             {
                 options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(std::string(argv[7]));;
             }
+            if (argc >= 9)
+            {
+                options.policy_action_attempt_count = (uint32_t)atoi(argv[8]);
+            }
+            if (argc >= 10)
+            {
+                options.use_contact = (bool)atoi(argv[9]);
+            }
+            if (argc >= 11)
+            {
+                options.use_reverse = (bool)atoi(argv[10]);
+            }
         }
         else if (type == common_config::OPTIONS::EXECUTION)
         {
@@ -160,6 +179,14 @@ namespace common_config
             {
                 options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(std::string(argv[7]));;
             }
+            if (argc >= 9)
+            {
+                options.max_exec_actions = (uint32_t)atoi(argv[8]);
+            }
+            if (argc >= 10)
+            {
+                options.policy_action_attempt_count = (uint32_t)atoi(argv[9]);
+            }
         }
         else
         {
@@ -186,11 +213,12 @@ std::ostream& operator<<(std::ostream& strm, const common_config::OPTIONS& optio
     strm << "\nvariance_alpha: " << options.variance_alpha;
     strm << "\nactuator_error: " << options.actuator_error;
     strm << "\nsensor_error: " << options.sensor_error;
-    strm << "\naction_attempt_count: " << options.action_attempt_count;
+    strm << "\nedge_attempt_count: " << options.edge_attempt_count;
+    strm << "\npolicy_action_attempt_count: " << options.policy_action_attempt_count;
     strm << "\nnum_particles: " << options.num_particles;
     strm << "\nnum_policy_simulations: " << options.num_policy_simulations;
     strm << "\nnum_policy_executions: " << options.num_policy_executions;
-    strm << "\nexec_step_limit: " << options.exec_step_limit;
+    strm << "\nmax_exec_actions: " << options.max_exec_actions;
     strm << "\nuse_contact: " << options.use_contact;
     strm << "\nuse_reverse: " << options.use_reverse;
     strm << "\nuse_spur_actions: " << options.use_spur_actions;

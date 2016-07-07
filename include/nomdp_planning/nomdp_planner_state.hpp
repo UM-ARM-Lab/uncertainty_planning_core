@@ -335,7 +335,7 @@ namespace nomdp_planning_tools
             attempt_count_ = attempt_count;
             reached_count_ = reached_count;
             raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
-            std::cout << "Updated attempted/reached counts to " << attempt_count_ << "/" << reached_count_ << " with new edge P(feasibility) " << raw_edge_Pfeasibility_ << std::endl;
+            //std::cout << "Updated attempted/reached counts to " << attempt_count_ << "/" << reached_count_ << " with new edge P(feasibility) " << raw_edge_Pfeasibility_ << std::endl;
         }
 
         inline void UpdateReverseAttemptAndReachedCounts(const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count)
@@ -343,7 +343,7 @@ namespace nomdp_planning_tools
             reverse_attempt_count_ = reverse_attempt_count;
             reverse_reached_count_ = reverse_reached_count;
             reverse_edge_Pfeasibility_ = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
-            std::cout << "Updated reverse attempted/reached counts to " << reverse_attempt_count_ << "/" << reverse_reached_count_ << " with new edge P(feasibility) " << reverse_edge_Pfeasibility_ << std::endl;
+            //std::cout << "Updated reverse attempted/reached counts to " << reverse_attempt_count_ << "/" << reverse_reached_count_ << " with new edge P(feasibility) " << reverse_edge_Pfeasibility_ << std::endl;
         }
 
         inline double SetEffectiveEdgePfeasibility(const double effective_edge_Pfeasibility)

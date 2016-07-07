@@ -159,7 +159,7 @@ namespace nomdp_contact_planning
                 std::ofstream log_file(log_file_name, std::ios_base::out | std::ios_base::app);
                 if (!log_file.is_open())
                 {
-                    std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << log_file_name << "\x1b[37m \n";
+                    std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << log_file_name << "\x1b[0m \n";
                     throw std::invalid_argument("Log filename must be write-openable");
                 }
                 log_file << PrettyPrint::PrettyPrint(clustering_splits, false, ",") << std::endl;
@@ -200,6 +200,9 @@ namespace nomdp_contact_planning
         mutable uint64_t cluster_fallback_calls_;
         mutable uint64_t particles_stored_;
         mutable uint64_t particles_simulated_;
+        mutable uint64_t goal_candidates_evaluated_;
+        mutable uint64_t goal_reaching_performed_;
+        mutable uint64_t goal_reaching_successful_;
         mutable double total_goal_reached_probability_;
         mutable double time_to_first_solution_;
         mutable std::unordered_map<uint64_t, SplitProbabilityTable> split_probability_tables_;
@@ -293,6 +296,10 @@ namespace nomdp_contact_planning
         {
             std::cout << "Attempting to load from file..." << std::endl;
             std::ifstream input_file(filepath, std::ios::in|std::ios::binary);
+            if (input_file.good() == false)
+            {
+                throw std::invalid_argument("Planner tree file does not exist");
+            }
             input_file.seekg(0, std::ios::end);
             std::streampos end = input_file.tellg();
             input_file.seekg(0, std::ios::beg);
@@ -339,6 +346,10 @@ namespace nomdp_contact_planning
         {
             std::cout << "Attempting to load from file..." << std::endl;
             std::ifstream input_file(filepath, std::ios::in|std::ios::binary);
+            if (input_file.good() == false)
+            {
+                throw std::invalid_argument("Policy file does not exist");
+            }
             input_file.seekg(0, std::ios::end);
             std::streampos end = input_file.tellg();
             input_file.seekg(0, std::ios::beg);
@@ -395,6 +406,9 @@ namespace nomdp_contact_planning
             cluster_fallback_calls_ = 0;
             particles_stored_ = 0;
             particles_simulated_ = 0;
+            goal_candidates_evaluated_ = 0;
+            goal_reaching_performed_ = 0;
+            goal_reaching_successful_ = 0;
             nearest_neighbors_storage_.clear();
             resample_particles_ = false;
         }
@@ -436,6 +450,9 @@ namespace nomdp_contact_planning
             cluster_fallback_calls_ = 0;
             particles_stored_ = 0;
             particles_simulated_ = 0;
+            goal_candidates_evaluated_ = 0;
+            goal_reaching_performed_ = 0;
+            goal_reaching_successful_ = 0;
             nearest_neighbors_storage_.clear();
             resample_particles_ = false;
         }
@@ -477,7 +494,7 @@ namespace nomdp_contact_planning
             nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(start, goal);
             const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 40u;
-            simulator_.ForwardSimulateRobot(robot_, start, goal, rng_, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, true);
+            simulator_.ForwardSimulateRobot(robot_, start, goal, rng_, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, enable_contact_manifold_target_adjustment, trace, true);
             // Wait for input
             std::cout << "Press ENTER to draw..." << std::endl;
 #ifndef FORCE_DEBUG
@@ -552,7 +569,7 @@ namespace nomdp_contact_planning
          * Planning functions
          */
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
+        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t edge_attempt_count, const uint32_t policy_action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub)
         {
             // Draw the simulation environment
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -592,12 +609,16 @@ namespace nomdp_contact_planning
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, action_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, action_attempt_count, start_time);
+            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
             std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
+#ifdef ENABLE_DEBUG_PRINTS
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
-            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, action_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
+#else
+            std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { return state_sampling_fn(); } else { return goal_state; } };
+#endif
+            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
             std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
@@ -610,17 +631,21 @@ namespace nomdp_contact_planning
             clustering_performance_.ExportResults();
             std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
-            const std::pair<uint64_t, uint64_t> simulator_resolve_statistics = simulator_.GetResolveStatistics();
-            planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first;
-            planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.second;
+            const std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>> simulator_resolve_statistics = simulator_.GetResolveStatistics();
+            planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first.first;
+            planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.first.second;
+            planning_results.second["Unsuccessful simulator self-collision resolves"] = (double)simulator_resolve_statistics.second.first;
+            planning_results.second["Unsuccessful simulator environment resolves"] = (double)simulator_resolve_statistics.second.second;
             planning_results.second["Particles stored"] = (double)particles_stored_;
             planning_results.second["Particles simulated"] = (double)particles_simulated_;
-            std::cout << "Simulator statistics: " << simulator_resolve_statistics.first << " successful resolves, " << simulator_resolve_statistics.second << " unsuccessful resolves" << std::endl;
+            planning_results.second["Goal candidates evaluated"] = (double)goal_candidates_evaluated_;
+            planning_results.second["Goal reaching performed"] = (double)goal_reaching_performed_;
+            planning_results.second["Goal reaching successful"] = (double)goal_reaching_successful_;
             if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
                 const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, action_attempt_count, action_attempt_count);
+                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, edge_attempt_count, policy_action_attempt_count);
                 planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
                 // Draw the final path(s)
                 for (size_t pidx = 0; pidx < planning_results.first.size(); pidx++)
@@ -633,7 +658,7 @@ namespace nomdp_contact_planning
                         for (size_t idx = 0; idx < planned_path.size(); idx++)
                         {
                             const NomdpPlanningState& current_state = planned_path[idx];
-                            const Configuration& current_configuration = current_state.GetExpectation();
+                            const Configuration current_configuration = current_state.GetExpectation();
                             std_msgs::ColorRGBA forward_color;
                             forward_color.r = (float)(1.0 - goal_reached_probability);
                             forward_color.g = 0.0f;
@@ -680,19 +705,23 @@ namespace nomdp_contact_planning
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment)
+        inline std::pair<NomdpPlanningPolicy, std::map<std::string, double>> Plan(const Configuration& start, const Configuration& goal, const double goal_bias, const std::chrono::duration<double>& time_limit, const uint32_t edge_attempt_count, const uint32_t policy_action_attempt_count, const bool allow_contacts, const bool include_reverse_actions, const bool include_spur_actions, const bool enable_contact_manifold_target_adjustment)
         {
             NomdpPlanningState start_state(start);
             NomdpPlanningState goal_state(goal);
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, action_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, action_attempt_count, start_time);
+            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
             std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
+#ifdef ENABLE_DEBUG_PRINTS
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
-            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, action_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
+#else
+            std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { return state_sampling_fn(); } else { return goal_state; } };
+#endif
+            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
             std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
@@ -704,17 +733,21 @@ namespace nomdp_contact_planning
             planning_results.second["Time to first solution"] = time_to_first_solution_;
             std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
-            const std::pair<uint64_t, uint64_t> simulator_resolve_statistics = simulator_.GetResolveStatistics();
-            planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first;
-            planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.second;
+            const std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>> simulator_resolve_statistics = simulator_.GetResolveStatistics();
+            planning_results.second["Successful simulator resolves"] = (double)simulator_resolve_statistics.first.first;
+            planning_results.second["Unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.first.second;
+            planning_results.second["Unsuccessful simulator self-collision resolves"] = (double)simulator_resolve_statistics.second.first;
+            planning_results.second["Unsuccessful simulator environment resolves"] = (double)simulator_resolve_statistics.second.second;
             planning_results.second["Particles stored"] = (double)particles_stored_;
             planning_results.second["Particles simulated"] = (double)particles_simulated_;
-            std::cout << "Simulator statistics: " << simulator_resolve_statistics.first << " successful resolves, " << simulator_resolve_statistics.second << " unsuccessful resolves" << std::endl;
+            planning_results.second["Goal candidates evaluated"] = (double)goal_candidates_evaluated_;
+            planning_results.second["Goal reaching performed"] = (double)goal_reaching_performed_;
+            planning_results.second["Goal reaching successful"] = (double)goal_reaching_successful_;
             if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 const NomdpPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
                 const NomdpPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, action_attempt_count, action_attempt_count);
+                const NomdpPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, edge_attempt_count, policy_action_attempt_count);
                 planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
                 return std::pair<NomdpPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
             }
@@ -866,17 +899,20 @@ namespace nomdp_contact_planning
          * Policy simulation and execution functions
          */
 #ifdef USE_ROS
-        inline std::pair<std::pair<NomdpPlanningPolicy, double>, std::pair<double, double>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             simulator_.ResetResolveStatistics();
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
+            std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
-                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = SimulateSinglePolicyExecution(policy, start, goal, exec_step_limit, enable_contact_manifold_target_adjustment, rng_, display_pub, wait_for_user);
+                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = SimulateSinglePolicyExecution(policy, start, goal, exec_step_limit, enable_contact_manifold_target_adjustment, rng_, display_pub, wait_for_user);
                 particle_executions[idx] = particle_execution.first;
                 policy = particle_execution.second.first;
-                if (particle_execution.second.second)
+                const int64_t policy_execution_step_count = particle_execution.second.second;
+                policy_execution_step_counts[idx] = policy_execution_step_count;
+                if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
                     std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully, " << reached_goal << " successful so far" << std::endl;
@@ -898,20 +934,29 @@ namespace nomdp_contact_planning
                 DrawParticlePolicyExecution((uint32_t)idx, particle_executions[idx], display_pub, draw_wait, show_tracks);
             }
             const double policy_success = (double)reached_goal / (double)num_executions;
-            const std::pair<uint64_t, uint64_t> resolve_stats = simulator_.GetResolveStatistics();
-            return std::pair<std::pair<NomdpPlanningPolicy, double>, std::pair<double, double>>(std::pair<NomdpPlanningPolicy, double>(policy, policy_success), std::pair<double, double>((double)resolve_stats.first, (double)resolve_stats.second));
+            std::map<std::string, double> policy_statistics;
+            policy_statistics["(Simulation) Policy success"] = policy_success;
+            const std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>> simulator_resolve_statistics = simulator_.GetResolveStatistics();
+            policy_statistics["(Simulation) Policy successful simulator resolves"] = (double)simulator_resolve_statistics.first.first;
+            policy_statistics["(Simulation) Policy unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.first.second;
+            policy_statistics["(Simulation) Policy unsuccessful simulator self-collision resolves"] = (double)simulator_resolve_statistics.second.first;
+            policy_statistics["(Simulation) Policy unsuccessful simulator environment resolves"] = (double)simulator_resolve_statistics.second.second;
+            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
         }
 #endif
 
-        inline std::pair<std::pair<NomdpPlanningPolicy, double>, std::pair<double, double>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment) const
         {
             simulator_.ResetResolveStatistics();
+            std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
-                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = SimulateSinglePolicyExecution(policy, start, goal, exec_step_limit, enable_contact_manifold_target_adjustment, rng_);
+                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = SimulateSinglePolicyExecution(policy, start, goal, exec_step_limit, enable_contact_manifold_target_adjustment, rng_);
                 policy = particle_execution.second.first;
-                if (particle_execution.second.second)
+                const int64_t policy_execution_step_count = particle_execution.second.second;
+                policy_execution_step_counts[idx] = policy_execution_step_count;
+                if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
                     std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully, " << reached_goal << " successful so far" << std::endl;
@@ -923,22 +968,31 @@ namespace nomdp_contact_planning
             }
             const uint32_t successful_particles = reached_goal;
             const double policy_success = (double)successful_particles / (double)num_executions;
-            const std::pair<uint64_t, uint64_t> resolve_stats = simulator_.GetResolveStatistics();
-            return std::pair<std::pair<NomdpPlanningPolicy, double>, std::pair<double, double>>(std::pair<NomdpPlanningPolicy, double>(policy, policy_success), std::pair<double, double>((double)resolve_stats.first, (double)resolve_stats.second));
+            std::map<std::string, double> policy_statistics;
+            policy_statistics["(Simulation) Policy success"] = policy_success;
+            const std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>> simulator_resolve_statistics = simulator_.GetResolveStatistics();
+            policy_statistics["(Simulation) Policy successful simulator resolves"] = (double)simulator_resolve_statistics.first.first;
+            policy_statistics["(Simulation) Policy unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.first.second;
+            policy_statistics["(Simulation) Policy unsuccessful simulator self-collision resolves"] = (double)simulator_resolve_statistics.second.first;
+            policy_statistics["(Simulation) Policy unsuccessful simulator environment resolves"] = (double)simulator_resolve_statistics.second.second;
+            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
         }
 
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, double> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
+            std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
-                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit, display_pub, wait_for_user);
+                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit, display_pub, wait_for_user);
                 particle_executions[idx] = particle_execution.first;
                 policy = particle_execution.second.first;
-                if (particle_execution.second.second)
+                const int64_t policy_execution_step_count = particle_execution.second.second;
+                policy_execution_step_counts[idx] = policy_execution_step_count;
+                if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
                     std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully, " << reached_goal << " successful so far" << std::endl;
@@ -960,19 +1014,24 @@ namespace nomdp_contact_planning
                 DrawParticlePolicyExecution((uint32_t)idx, particle_executions[idx], display_pub, draw_wait, show_tracks);
             }
             const double policy_success = (double)reached_goal / (double)num_executions;
-            return std::pair<NomdpPlanningPolicy, double>(policy, policy_success);
+            std::map<std::string, double> policy_statistics;
+            policy_statistics["(Execution) Policy success"] = policy_success;
+            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, double> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit) const
         {
+            std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
-                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit);
+                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit);
                 policy = particle_execution.second.first;
-                if (particle_execution.second.second)
+                const int64_t policy_execution_step_count = particle_execution.second.second;
+                policy_execution_step_counts[idx] = policy_execution_step_count;
+                if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
                     std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully, " << reached_goal << " successful so far" << std::endl;
@@ -983,11 +1042,25 @@ namespace nomdp_contact_planning
                 }
             }
             const double policy_success = (double)reached_goal / (double)num_executions;
-            return std::pair<NomdpPlanningPolicy, double>(policy, policy_success);
+            std::map<std::string, double> policy_statistics;
+            policy_statistics["(Execution) Policy success"] = policy_success;
+            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
         }
 
 #ifdef USE_ROS
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> SimulateSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, PRNG& rng, ros::Publisher& display_pub, const bool wait_for_user) const
+        static inline std_msgs::ColorRGBA MakeColor(const float r, const float g, const float b, const float a)
+        {
+            std_msgs::ColorRGBA color;
+            color.r = (float)fabs(r);
+            color.g = (float)fabs(g);
+            color.b = (float)fabs(b);
+            color.a = (float)fabs(a);
+            return color;
+        }
+#endif
+
+#ifdef USE_ROS
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> SimulateSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, PRNG& rng, ros::Publisher& display_pub, const bool wait_for_user) const
         {
             std::cout << "Drawing environment..." << std::endl;
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -1017,7 +1090,6 @@ namespace nomdp_contact_planning
             std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
-            int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
             while (current_exec_step < exec_step_limit)
@@ -1026,17 +1098,19 @@ namespace nomdp_contact_planning
                 // Get the current configuration
                 const Configuration& current_config = particle_trajectory.back();
                 // Get the next action
-                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(parent_state_idx, desired_transition_id, current_config, policy_particle_clustering_fn);
-                parent_state_idx = policy_query.first.first;
+                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(desired_transition_id, current_config, policy_particle_clustering_fn);
+                const int64_t previous_state_idx = policy_query.first.first;
                 desired_transition_id = policy_query.first.second;
                 const Configuration& action = policy_query.second;
                 //std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
-                std::cout << "----------\nReceived new action for parent state index " << parent_state_idx << " and transition ID " << desired_transition_id << "\n==========" << std::endl;
-                std::cout << "Drawing updated policy..." << std::endl;
+                //std::cout << "----------\nReceived new action for best matching state index " << previous_state_idx << " with transition ID " << desired_transition_id << "\n==========" << std::endl;
+                //std::cout << "Drawing updated policy..." << std::endl;
                 DrawPolicy(policy, display_pub);
-                std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
-                const NomdpPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(parent_state_idx).GetValueImmutable();
-                const Configuration& parent_state_config = parent_state.GetExpectation();
+                DrawLocalPolicy(policy, 0, display_pub, MakeColor(0.0, 1.0, 1.0, 1.0), "policy_start_to_goal");;
+                DrawLocalPolicy(policy, previous_state_idx, display_pub, MakeColor(0.0, 0.0, 1.0, 1.0), "policy_here_to_goal");
+                //std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
+                const NomdpPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(previous_state_idx).GetValueImmutable();
+                const Configuration parent_state_config = parent_state.GetExpectation();
                 std_msgs::ColorRGBA parent_state_color;
                 parent_state_color.r = 0.0f;
                 parent_state_color.g = 0.5f;
@@ -1083,21 +1157,20 @@ namespace nomdp_contact_planning
                 {
                     // We've reached the goal!
                     std::cout << "Policy simulation reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-                    return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, true));
+                    return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
                 }
             }
             // If we get here, we haven't reached the goal!
             std::cout << "Policy simulation failed to reach the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, false));
+            return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 #endif
 
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> SimulateSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> SimulateSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
         {
             std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
-            int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
             while (current_exec_step < exec_step_limit)
@@ -1106,12 +1179,12 @@ namespace nomdp_contact_planning
                 // Get the current configuration
                 const Configuration& current_config = particle_trajectory.back();
                 // Get the next action
-                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(parent_state_idx, desired_transition_id, current_config, policy_particle_clustering_fn);
-                parent_state_idx = policy_query.first.first;
+                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(desired_transition_id, current_config, policy_particle_clustering_fn);
+                const int64_t previous_state_idx = policy_query.first.first;
                 desired_transition_id = policy_query.first.second;
                 const Configuration& action = policy_query.second;
                 //std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
-                std::cout << "----------\nReceived new action for parent state index " << parent_state_idx << " and transition ID " << desired_transition_id << "\n==========" << std::endl;
+                std::cout << "----------\nReceived new action for parent state index " << previous_state_idx << " and transition ID " << desired_transition_id << "\n==========" << std::endl;
                 // Simulate fowards
                 const std::vector<Configuration, ConfigAlloc> execution_states = SimulatePolicyStep(current_config, action, enable_contact_manifold_target_adjustment, rng);
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
@@ -1121,16 +1194,16 @@ namespace nomdp_contact_planning
                 {
                     // We've reached the goal!
                     std::cout << "Policy simulation reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-                    return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, true));
+                    return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
                 }
             }
             // If we get here, we haven't reached the goal!
             std::cout << "Policy simulation failed to reach the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, false));
+            return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 
 #ifdef USE_ROS
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user) const
         {
             std::cout << "Drawing environment..." << std::endl;
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -1164,7 +1237,6 @@ namespace nomdp_contact_planning
             std::cout << "Executing policy..." << std::endl;
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
-            int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
             while (current_exec_step < exec_step_limit)
@@ -1173,16 +1245,18 @@ namespace nomdp_contact_planning
                 // Get the current configuration
                 const Configuration& current_config = particle_trajectory.back();
                 // Get the next action
-                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(parent_state_idx, desired_transition_id, current_config, policy_particle_clustering_fn);
-                parent_state_idx = policy_query.first.first;
+                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(desired_transition_id, current_config, policy_particle_clustering_fn);
+                const int64_t previous_state_idx = policy_query.first.first;
                 desired_transition_id = policy_query.first.second;
                 const Configuration& action = policy_query.second;
-                std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
+                std::cout << "----------\nReceived new action for best matching state index " << previous_state_idx << " with transition ID " << desired_transition_id << "\n==========" << std::endl;
                 std::cout << "Drawing updated policy..." << std::endl;
                 DrawPolicy(policy, display_pub);
+                DrawLocalPolicy(policy, 0, display_pub, MakeColor(0.0, 0.0, 1.0, 1.0), "policy_start_to_goal");;
+                DrawLocalPolicy(policy, previous_state_idx, display_pub, MakeColor(0.0, 0.0, 1.0, 1.0), "policy_here_to_goal");
                 std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
-                const NomdpPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(parent_state_idx).GetValueImmutable();
-                const Configuration& parent_state_config = parent_state.GetExpectation();
+                const NomdpPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(previous_state_idx).GetValueImmutable();
+                const Configuration parent_state_config = parent_state.GetExpectation();
                 std_msgs::ColorRGBA parent_state_color;
                 parent_state_color.r = 0.0f;
                 parent_state_color.g = 0.5f;
@@ -1229,16 +1303,16 @@ namespace nomdp_contact_planning
                 {
                     // We've reached the goal!
                     std::cout << "Policy execution reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-                    return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, true));
+                    return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
                 }
             }
             // If we get here, we haven't reached the goal!
             std::cout << "Policy execution failed to reach the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, false));
+            return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 #endif
 
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit) const
         {
             std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config); };
             // Reset the robot first
@@ -1249,7 +1323,6 @@ namespace nomdp_contact_planning
             std::cout << "Executing policy..." << std::endl;
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
-            int64_t parent_state_idx = -1;
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
             while (current_exec_step < exec_step_limit)
@@ -1258,11 +1331,11 @@ namespace nomdp_contact_planning
                 // Get the current configuration
                 const Configuration& current_config = particle_trajectory.back();
                 // Get the next action
-                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(parent_state_idx, desired_transition_id, current_config, policy_particle_clustering_fn);
-                parent_state_idx = policy_query.first.first;
+                const std::pair<std::pair<int64_t, uint64_t>, Configuration> policy_query = policy.QueryBestAction(desired_transition_id, current_config, policy_particle_clustering_fn);
+                const int64_t previous_state_idx = policy_query.first.first;
                 desired_transition_id = policy_query.first.second;
                 const Configuration& action = policy_query.second;
-                std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
+                std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and previous state index " << previous_state_idx << std::endl;
                 // Simulate fowards
                 const std::vector<Configuration, ConfigAlloc> execution_states = move_fn(action);
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
@@ -1272,12 +1345,12 @@ namespace nomdp_contact_planning
                 {
                     // We've reached the goal!
                     std::cout << "Policy execution reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-                    return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, true));
+                    return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
                 }
             }
             // If we get here, we haven't reached the goal!
             std::cout << "Policy execution failed to reach the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, bool>>(particle_trajectory, std::pair<NomdpPlanningPolicy, bool>(policy, false));
+            return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 
         inline std::vector<Configuration, ConfigAlloc> SimulatePolicyStep(const Configuration& current_config, const Configuration& action, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
@@ -1285,7 +1358,7 @@ namespace nomdp_contact_planning
             nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(current_config, action);
             const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 40u;
-            simulator_.ForwardSimulateRobot(robot_, current_config, action, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, true);
+            simulator_.ForwardSimulateRobot(robot_, current_config, action, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, enable_contact_manifold_target_adjustment, trace, true);
             std::vector<Configuration, ConfigAlloc> execution_trace;
             execution_trace.reserve(trace.resolver_steps.size());
             for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
@@ -1391,7 +1464,7 @@ namespace nomdp_contact_planning
                 assert(previous_index >= 0);
                 if (current_index == previous_index)
                 {
-                    const Configuration& current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
+                    const Configuration current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
                     visualization_msgs::Marker target_marker = DrawRobotConfiguration(robot_, current_config, blue_color);
                     target_marker.ns = "policy_graph";
                     target_marker.id = (int)idx + 1;
@@ -1399,8 +1472,8 @@ namespace nomdp_contact_planning
                 }
                 else
                 {
-                    const Configuration& current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
-                    const Configuration& previous_config = policy_graph.GetNodeImmutable(previous_index).GetValueImmutable().GetExpectation();
+                    const Configuration current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
+                    const Configuration previous_config = policy_graph.GetNodeImmutable(previous_index).GetValueImmutable().GetExpectation();
                     const Eigen::Vector3d current_config_point = Get3DPointForConfig(robot_, current_config);
                     const Eigen::Vector3d previous_config_point = Get3DPointForConfig(robot_, previous_config);
                     visualization_msgs::Marker edge_marker;
@@ -1433,6 +1506,58 @@ namespace nomdp_contact_planning
                 }
             }
             std::cout << "Drawing policy graph with " << policy_markers.markers.size() << " edges" << std::endl;
+            display_pub.publish(policy_markers);
+        }
+#endif
+
+#ifdef USE_ROS
+        inline void DrawLocalPolicy(const NomdpPlanningPolicy& policy, const int64_t current_state_idx, ros::Publisher& display_pub, const std_msgs::ColorRGBA& color, const std::string& policy_name) const
+        {
+            const ExecutionPolicyGraph& policy_graph = policy.GetRawPolicy();
+            const std::vector<int64_t>& previous_index_map = policy.GetRawPreviousIndexMap();
+            assert(policy_graph.GetNodesImmutable().size() == previous_index_map.size());
+            assert(current_state_idx >= 0);
+            assert(current_state_idx < (int64_t)previous_index_map.size());
+            visualization_msgs::MarkerArray policy_markers;
+            std_msgs::ColorRGBA blue_color;
+            blue_color.r = 0.0f;
+            blue_color.g = 0.0f;
+            blue_color.b = 1.0f;
+            blue_color.a = 1.0f;
+            const Configuration previous_config = policy_graph.GetNodeImmutable(current_state_idx).GetValueImmutable().GetExpectation();
+            Eigen::Vector3d previous_point = Get3DPointForConfig(robot_, previous_config);
+            int64_t previous_index = previous_index_map[current_state_idx];
+            int idx = 1;
+            while (previous_index != -1)
+            {
+                const int64_t current_idx = previous_index;
+                const Configuration current_config = policy_graph.GetNodeImmutable(current_idx).GetValueImmutable().GetExpectation();
+                const Eigen::Vector3d current_config_point = Get3DPointForConfig(robot_, current_config);
+                visualization_msgs::Marker edge_marker;
+                edge_marker.action = visualization_msgs::Marker::ADD;
+                edge_marker.ns = policy_name;
+                edge_marker.id = idx;
+                idx++;
+                edge_marker.frame_locked = false;
+                edge_marker.lifetime = ros::Duration(0.0);
+                edge_marker.type = visualization_msgs::Marker::ARROW;
+                edge_marker.header.frame_id = simulator_.GetFrame();
+                edge_marker.scale.x = simulator_.GetResolution();
+                edge_marker.scale.y = simulator_.GetResolution();
+                edge_marker.scale.z = simulator_.GetResolution();
+                edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+                edge_marker.color = color;
+                edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(previous_point));
+                edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current_config_point));
+                policy_markers.markers.push_back(edge_marker);
+                previous_index = previous_index_map[current_idx];
+                if (previous_index == current_idx)
+                {
+                    previous_index = -1;
+                }
+                previous_point = current_config_point;
+            }
+            std::cout << "Drawing local policy graph with " << policy_markers.markers.size() << " edges" << std::endl;
             display_pub.publish(policy_markers);
         }
 #endif
@@ -1614,7 +1739,9 @@ namespace nomdp_contact_planning
                 }
             }
         #endif
+#ifdef ENABLE_DEBUG_PRINTS
             std::cout << "Selected node " << best_index << " as nearest neighbor (Qnear)" << std::endl;
+#endif
             return best_index;
         }
 
@@ -1624,7 +1751,9 @@ namespace nomdp_contact_planning
         inline NomdpPlanningState SampleRandomTargetState()
         {
             const Configuration random_point = sampler_.Sample(rng_);
+#ifdef ENABLE_DEBUG_PRINTS
             std::cout << "Sampled config: " << PrettyPrint::PrettyPrint(random_point) << std::endl;
+#endif
             const NomdpPlanningState random_state(random_point);
             return random_state;
         }
@@ -1880,7 +2009,7 @@ namespace nomdp_contact_planning
             nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(start, end);
             const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 80u;
-            const Configuration result = simulator_.ForwardSimulateRobot(robot, start, end, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, false, trace, false).first;
+            const Configuration result = simulator_.ForwardSimulateRobot(robot, start, end, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, false, trace, false).first;
             const double result_distance = DistanceFn::Distance(result, end);
             if (result_distance <= goal_distance_threshold_)
             {
@@ -2046,9 +2175,9 @@ namespace nomdp_contact_planning
                 {
                     //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
                     cluster_fallback_calls_++;
-                    std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " exceeding distance threshold " << distance_threshold << ", performing additional hierarchical clustering" << std::endl;
+                    //std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " exceeding distance threshold " << distance_threshold << ", performing additional hierarchical clustering" << std::endl;
                     const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, distance_threshold).first;
-                    std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
+                    //std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
                     for (size_t ndx = 0; ndx < new_clustering.size(); ndx++)
                     {
                         //std::cout << "Resulting cluster " << ndx << ":\n" << PrettyPrint::PrettyPrint(new_clustering[ndx]) << std::endl;
@@ -2109,7 +2238,7 @@ namespace nomdp_contact_planning
         /*
          * Forward propagation functions
          */
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> ForwardSimulateParticles(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const uint32_t num_simulation_steps, const bool enable_contact_manifold_target_adjustment) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> ForwardSimulateParticles(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const uint32_t num_simulation_steps, const bool enable_contact_manifold_target_adjustment, const bool allow_contacts) const
         {
             // First, compute a target state
             const Configuration target_point = target.GetExpectation();
@@ -2137,9 +2266,9 @@ namespace nomdp_contact_planning
                 nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
 #ifdef ENABLE_PARALLEL
                 int th_id = omp_get_thread_num();
-                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, false);
+                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, allow_contacts, enable_contact_manifold_target_adjustment, trace, false);
 #else
-                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rng_, num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, enable_contact_manifold_target_adjustment, trace, false);
+                propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rng_, num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, allow_contacts, enable_contact_manifold_target_adjustment, trace, false);
 #endif
             }
             particles_simulated_ += num_particles_;
@@ -2148,7 +2277,7 @@ namespace nomdp_contact_planning
 
         inline std::pair<uint32_t, uint32_t> ComputeReverseEdgeProbability(const NomdpPlanningState& parent, const NomdpPlanningState& child, const bool enable_contact_manifold_target_adjustment) const
         {
-            std::vector<std::pair<Configuration, bool>> simulation_result = ForwardSimulateParticles(child, parent, 80, enable_contact_manifold_target_adjustment).second;
+            std::vector<std::pair<Configuration, bool>> simulation_result = ForwardSimulateParticles(child, parent, 80, enable_contact_manifold_target_adjustment, true).second;
             uint32_t reached_parent = 0u;
             // Get the target position
             const Configuration target_position = parent.GetExpectation();
@@ -2172,7 +2301,7 @@ namespace nomdp_contact_planning
             const uint64_t current_forward_transition_id = transition_id_;
             const Configuration control_input = target.GetExpectation();
             // Forward propagate each of the particles
-            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> simulation_result = ForwardSimulateParticles(nearest, target, num_simulation_steps, enable_contact_manifold_target_adjustment);
+            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> simulation_result = ForwardSimulateParticles(nearest, target, num_simulation_steps, enable_contact_manifold_target_adjustment, allow_contacts);
             std::vector<Configuration, ConfigAlloc>& initial_particles = simulation_result.first;
             std::vector<std::pair<Configuration, bool>>& propagated_points = simulation_result.second;
             // Cluster the live particles into (potentially) multiple states
@@ -2252,7 +2381,9 @@ namespace nomdp_contact_planning
                     current_state.UpdateReverseAttemptAndReachedCounts((uint32_t)num_particles_, 0u);
                 }
             }
+#ifdef ENABLE_DEBUG_PRINTS
             std::cout << "Forward simultation produced " << result_states.size() << " states, needed to compute reversibility for " << computed_reversibility << " of them" << std::endl;
+#endif
             // We only do further processing if a split happened
             if (result_states.size() > 1)
             {
@@ -2287,7 +2418,9 @@ namespace nomdp_contact_planning
                         p_reached = 1.0;
                     }
                     assert(p_reached <= 1.0);
+#ifdef ENABLE_DEBUG_PRINTS
                     std::cout << "Computed effective edge P(feasibility) of " << p_reached << " for " << planner_action_try_attempts << " try/retry attempts" << std::endl;
+#endif
                     current_state.SetEffectiveEdgePfeasibility(p_reached);
                     // INSTEAD, what we're going to do is compute effective P(reached) for each child given a max try/retry count
                     // Some splits can be handled as retry loops (and pretend that the bad children don't exist)
@@ -2491,17 +2624,21 @@ namespace nomdp_contact_planning
             // We only care about states with control input == goal position (states that are directly trying to go to the goal)
             if (DistanceFn::Distance(goal_state_candidate.GetCommand(), goal_state.GetExpectation()) == 0.0)
             {
+                goal_candidates_evaluated_++;
                 double goal_reached_probability = ComputeGoalReachedProbability(goal_state_candidate, goal_state.GetExpectation());
                 double goal_probability = goal_reached_probability * goal_state_candidate.GetMotionPfeasibility();
                 if (goal_probability >= goal_probability_threshold_)
                 {
                     // Update the state
                     goal_state_candidate.SetGoalPfeasibility(goal_reached_probability);
+#ifdef ENABLE_DEBUG_PRINTS
                     std::cout << "Goal reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << goal_reached_probability << " and probability(start->goal): " << goal_probability << std::endl;
+#endif
                     return true;
                 }
-                else
+                else if (goal_probability > 0.0)
                 {
+                    goal_reaching_performed_++;
                     // There are two stages of "goal assist"
                     // Stage 1 - goal reaching assist (help with the last state->goal transition)
                     // Stage 2 - path split assist (help with low-probability path)
@@ -2529,34 +2666,30 @@ namespace nomdp_contact_planning
                         simulation_result_states[ndx] = current_state;
                     }
                     const double improved_goal_reached_probability = ComputeTransitionGoalProbability(simulation_result_states, planner_action_try_attempts);
+#ifdef ENABLE_DEBUG_PRINTS
                     std::cout << "Performed goal reaching assist - improved probability(this->goal) from " << goal_reached_probability << " to " << improved_goal_reached_probability << std::endl;
+#endif
                     double improved_goal_probability = improved_goal_reached_probability * goal_state_candidate.GetMotionPfeasibility();
                     if (improved_goal_probability >= goal_probability_threshold_)
                     {
+                        goal_reaching_successful_++;
                         // Update the state
                         goal_state_candidate.SetGoalPfeasibility(improved_goal_reached_probability);
+#ifdef ENABLE_DEBUG_PRINTS
                         std::cout << "Goal reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << improved_goal_reached_probability << " and probability(start->goal): " << improved_goal_probability << std::endl;
-                        return true;
-                    }
-                    else if (improved_goal_probability > goal_probability_threshold_)
-                    {
-                        // Update the state
-                        goal_state_candidate.SetGoalPfeasibility(improved_goal_reached_probability);
-                        // Second, try path split assist
-                        std::cout << "*** Goal conditionally reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << goal_reached_probability << " and probability(start->goal): " << goal_probability << " ***" << std::endl;
+#endif
                         return true;
                     }
                     else
                     {
+#ifdef ENABLE_DEBUG_PRINTS
                         std::cout << "### Goal not reached with state " << PrettyPrint::PrettyPrint(goal_state_candidate) << " with probability(this->goal): " << goal_reached_probability << " and probability(start->goal): " << goal_probability << " ###" << std::endl;
+#endif
                         return false;
                     }
                 }
             }
-            else
-            {
-                return false;
-            }
+            return false;
         }
 
         inline void GoalReachedCallback(NomdpPlanningTreeState& new_goal, const uint32_t planner_action_try_attempts, const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time) const

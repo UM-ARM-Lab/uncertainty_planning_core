@@ -20,7 +20,7 @@
 #include "nomdp_planning/simple_uncertainty_models.hpp"
 #include "nomdp_planning/nomdp_contact_planning.hpp"
 #include "nomdp_planning/simplelinked_robot_helpers.hpp"
-#include "linked_common_config.hpp"
+#include "baxter_linked_common_config.hpp"
 
 #ifdef USE_ROS
     #include <ros/ros.h>
@@ -44,13 +44,13 @@ void peg_in_hole_env_linked(int argc, char** argv)
     const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = linked_common_config::GetBaseTransform();
     const simplelinked_robot_helpers::SimpleLinkedRobot robot = linked_common_config::GetRobot(base_transform, robot_config);
-    NomdpPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, simplelinked_robot_helpers::SimpleLinkedDistancer, simplelinked_robot_helpers::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "peg_in_hole", options.environment_resolution);
+    NomdpPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, simplelinked_robot_helpers::SimpleLinkedDistancer, simplelinked_robot_helpers::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "baxter_env", options.environment_resolution);
     // Plan
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
 #ifdef USE_ROS
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher);
+    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher);
 #else
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment);
+    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment);
 #endif
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;

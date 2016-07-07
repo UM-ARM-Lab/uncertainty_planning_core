@@ -588,7 +588,8 @@ namespace simplelinked_robot_helpers
         inline void UpdateTransforms()
         {
             // Update the transform for the first link
-            links_.front().link_transform = base_transform_;
+            links_[0].link_transform = base_transform_;
+            //std::cout << "Set base link " << links_[0].link_name << " transform: " << PrettyPrint::PrettyPrint(links_[0].link_transform) << std::endl;
             // Go out the kinematic chain
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
@@ -602,6 +603,7 @@ namespace simplelinked_robot_helpers
                 const Eigen::Affine3d parent_transform = parent_link.link_transform;
                 // Get the parent_link->joint transform
                 const Eigen::Affine3d parent_to_joint_transform = current_joint.joint_transform;
+                //std::cout << "Parent link origin->joint " << idx << " transform: " << PrettyPrint::PrettyPrint(parent_to_joint_transform) << std::endl;
                 // Compute the base->joint_transform
                 const Eigen::Affine3d complete_transform = parent_transform * parent_to_joint_transform;
                 // Compute the joint transform
@@ -610,6 +612,7 @@ namespace simplelinked_robot_helpers
                     const Eigen::Affine3d joint_transform = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(Eigen::AngleAxisd(current_joint.joint_model.GetValue(), current_joint.joint_axis));
                     const Eigen::Affine3d child_transform = complete_transform * joint_transform;
                     child_link.link_transform = child_transform;
+                    //std::cout << "Computed joint transform for revolute joint " << idx << " with value " << current_joint.joint_model.GetValue() << " transform: " << PrettyPrint::PrettyPrint(joint_transform) << std::endl;
                 }
                 else if (current_joint.joint_model.IsPrismatic())
                 {
@@ -617,12 +620,14 @@ namespace simplelinked_robot_helpers
                     const Eigen::Affine3d joint_transform = joint_translation * Eigen::Quaterniond::Identity();
                     const Eigen::Affine3d child_transform = complete_transform * joint_transform;
                     child_link.link_transform = child_transform;
+                    //std::cout << "Computed transform for prismatic joint " << idx << " with value " << current_joint.joint_model.GetValue() << " transform: " << PrettyPrint::PrettyPrint(joint_transform) << std::endl;
                 }
                 else
                 {
                     // Joint is fixed
                     child_link.link_transform = complete_transform;
                 }
+                //std::cout << "Set link " << child_link.link_name << " transform: " << PrettyPrint::PrettyPrint(child_link.link_transform) << std::endl;
             }
         }
 

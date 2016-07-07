@@ -25,8 +25,20 @@
 #endif
 
 #ifdef USE_ROS
-#include <ros/ros.h>
-#include <visualization_msgs/MarkerArray.h>
+    #include <ros/ros.h>
+    #include <visualization_msgs/MarkerArray.h>
+#endif
+
+#ifndef MAX_RESOLVER_ITERATIONS
+    #define MAX_RESOLVER_ITERATIONS 30
+#endif
+
+#ifndef RESOLVE_CORRECTION_STEP_SCALING_DECAY_ITERATIONS
+    #define RESOLVE_CORRECTION_STEP_SCALING_DECAY_ITERATIONS 5
+#endif
+
+#ifndef RESOLVE_CORRECTION_STEP_SCALING_DECAY_RATE
+    #define RESOLVE_CORRECTION_STEP_SCALING_DECAY_RATE 0.75
 #endif
 
 namespace std
@@ -308,6 +320,8 @@ namespace nomdp_planning_tools
         VoxelGrid::VoxelGrid<uint64_t> fingerprint_grid_;
         mutable std::atomic<uint64_t> successful_resolves_;
         mutable std::atomic<uint64_t> unsuccessful_resolves_;
+        mutable std::atomic<uint64_t> unsuccessful_env_collision_resolves_;
+        mutable std::atomic<uint64_t> unsuccessful_self_collision_resolves_;
 
         /* Discretize a cuboid obstacle to resolution-sized cells */
         inline std::vector<std::pair<Eigen::Vector3d, sdf_tools::TAGGED_OBJECT_COLLISION_CELL>> DiscretizeObstacle(const OBSTACLE_CONFIG& obstacle, const double resolution) const
@@ -470,11 +484,92 @@ namespace nomdp_planning_tools
             }
             else if (environment_id == "peg_in_hole")
             {
-                double grid_x_size = 10.0;
-                double grid_y_size = 10.0;
-                double grid_z_size = 10.0;
+                double grid_x_size = 12.0;
+                double grid_y_size = 12.0;
+                double grid_z_size = 12.0;
                 // The grid origin is the minimum point, with identity rotation
-                Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
+                Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            // Set the object we belong to
+                            // We assume that all objects are convex, so we can set the convex region as 1
+                            // "Bottom bottom"
+                            if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8)  || y_idx >= (grid.GetNumYCells() - 8) || z_idx >= (grid.GetNumZCells() - 8))
+                            {
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
+                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                            }
+                            else
+                            {
+                                if (z <= 3.0)
+                                {
+                                    if (x <= 2.0 || y <= 2.0)
+                                    {
+                                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                    }
+                                    else if (x > 2.5 || y > 2.5)
+                                    {
+                                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                    }
+                                    else if (z <= resolution)
+                                    {
+                                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                    }
+                                    else
+                                    {
+                                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL free_cell(0.0f, 0u, 0u, 0u);
+                                        grid.Set(x_idx, y_idx, z_idx, free_cell);
+                                    }
+                                }
+                                else
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL free_cell(0.0f, 0u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, free_cell);
+                                }
+                            }
+
+                            // Set the free-space convex segment we belong to (if necessary)
+                            if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
+                            {
+                                // There are 2 convex regions, we can belong to multiple regions, so we check for each
+                                if (z > 3.0)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                }
+                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5 && z > resolution)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                }
+
+                            }
+                        }
+                    }
+                }
+                return grid;
+            }
+            else if (environment_id == "baxter_env")
+            {
+                double grid_x_size = 2.0;
+                double grid_y_size = 2.0;
+                double grid_z_size = 2.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-0.5, -1.5, -0.5);
                 Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
@@ -490,40 +585,23 @@ namespace nomdp_planning_tools
                             const double& x = location.x();
                             const double& y = location.y();
                             const double& z = location.z();
-                            // Set the object we belong to
-                            // We assume that all objects are convex, so we can set the convex region as 1
-                            // "Bottom bottom"
-                            if (z <= 3.0)
+                            // Buffer
+                            if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8)  || y_idx >= (grid.GetNumYCells() - 8) || z_idx >= (grid.GetNumZCells() - 8))
                             {
-                                if (x <= 2.0 || y <= 2.0)
-                                {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
-                                }
-                                else if (x > 2.5 || y > 2.5)
-                                {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
-                                }
-                                else if (z <= resolution)
-                                {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
-                                }
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
+                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                            }
+                            // Set the object we belong to
+                            if (z_idx < 10)
+                            {
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                grid.Set(x_idx, y_idx, z_idx, object_cell);
                             }
                             // Set the free-space convex segment we belong to (if necessary)
-                            if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
+                            else if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
                             {
-                                // There are 2 convex regions, we can belong to multiple regions, so we check for each
-                                if (z > 3.0)
-                                {
-                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
-                                }
-                                if (x > 2.0 && y > 2.0 && x <= 2.5 && y <= 2.5 && z > resolution)
-                                {
-                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
-                                }
-
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL free_cell(0.0f, 0u, 0u, 1u);
+                                grid.Set(x_idx, y_idx, z_idx, free_cell);
                             }
                         }
                     }
@@ -720,6 +798,70 @@ namespace nomdp_planning_tools
                 }
                 return grid;
             }
+            else if (environment_id == "se2_maze_blocked")
+            {
+                double grid_x_size = 10.0;
+                double grid_y_size = 10.0;
+                double grid_z_size = 1.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(0.0, 0.0, -0.5);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 1u); // Everything is filled by default
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            //const double& z = location.z();
+                            // Check if the cell belongs to any of the regions of freespace
+                            if (x > 0.5 && y > 0.5 && x <= 3.0 && y <= 9.5)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 3.5 && y > 0.5 && x <= 6.5 && y <= 9.5)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 7.0 && y > 0.5 && x <= 9.5 && y <= 9.5)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 0.5 && y > 7.0 && x <= 9.5 && y <= 9.0)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            if (x > 0.5 && y > 1.0 && x <= 9.5 && y <= 3.0)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                            }
+                            // Re-add the obstacle in the middle
+                            if (x > 3.5 && y > 4.75 && x <= 6.5 && y <= 5.25)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 2u;
+                            }
+                        }
+                    }
+                }
+                return grid;
+            }
             else if (environment_id == "se2_cluttered")
             {
                 throw std::invalid_argument("Not implemented yet");
@@ -904,6 +1046,10 @@ namespace nomdp_planning_tools
             {
                 ;
             }
+            else if (environment_id == "baxter_env")
+            {
+                ;
+            }
             else if (environment_id == "blocked_peg_in_hole")
             {
                 ;
@@ -917,6 +1063,10 @@ namespace nomdp_planning_tools
                 ;
             }
             else if (environment_id == "se2_maze")
+            {
+                ;
+            }
+            else if (environment_id == "se2_maze_blocked")
             {
                 ;
             }
@@ -1219,15 +1369,17 @@ namespace nomdp_planning_tools
             return initialized_;
         }
 
-        inline std::pair<uint64_t, uint64_t> GetResolveStatistics() const
+        inline std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>> GetResolveStatistics() const
         {
-            return std::pair<uint64_t, uint64_t>(successful_resolves_, unsuccessful_resolves_);
+            return std::make_pair(std::make_pair(successful_resolves_.load(), unsuccessful_resolves_.load()), std::make_pair(unsuccessful_self_collision_resolves_.load(), unsuccessful_env_collision_resolves_.load()));
         }
 
         inline void ResetResolveStatistics() const
         {
             successful_resolves_.store(0);
             unsuccessful_resolves_.store(0);
+            unsuccessful_self_collision_resolves_.store(0);
+            unsuccessful_env_collision_resolves_.store(0);
         }
 
         inline Eigen::Affine3d GetOriginTransform() const
@@ -1319,7 +1471,7 @@ namespace nomdp_planning_tools
     #endif
 
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
-        inline std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const uint32_t forward_simulation_steps, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
+        inline std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const uint32_t forward_simulation_steps, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
         {
             //std::cout << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
             UNUSED(enable_contact_manifold_target_adjustment);
@@ -1333,17 +1485,28 @@ namespace nomdp_planning_tools
                 // Have robot compute next control input first
                 // Then, in a second function *not* in a callback, apply that control input
                 const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, rng);
-                const std::pair<Configuration, bool> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, use_individual_jacobians, trace, enable_tracing);
-                robot.UpdatePosition(result.first);
-                // Check if we've collided with the environment
-                if (result.second)
+                const std::pair<Configuration, std::pair<bool, bool>> result = ResolveForwardSimulation<Robot, Configuration>(robot, control_action, rng, use_individual_jacobians, allow_contacts, trace, enable_tracing);
+                const Configuration& resolved_configuration = result.first;
+                const bool resolve_collided = result.second.first;
+                if ((allow_contacts == true) || (resolve_collided == false))
                 {
-                    collided = true;
+                    robot.UpdatePosition(resolved_configuration);
+                    // Check if we've collided with the environment
+                    if (resolve_collided)
+                    {
+                        collided = true;
+                    }
+                    // Last, but not least, check if we've gotten close enough the target state to short-circut the simulation
+                    const double target_distance = robot.ComputeDistanceTo(target_position);
+                    if (target_distance < simulation_shortcut_distance)
+                    {
+                        break;
+                    }
                 }
-                // Last, but not least, check if we've gotten close enough the target state to short-circut the simulation
-                const double target_distance = robot.ComputeDistanceTo(target_position);
-                if (target_distance < simulation_shortcut_distance)
+                else
                 {
+                    assert(resolve_collided == true);
+                    // If we don't allow contacts, we don't update the position and we stop simulating
                     break;
                 }
             }
@@ -1356,6 +1519,7 @@ namespace nomdp_planning_tools
         template<typename Robot>
         inline bool CheckEnvironmentCollision(const Robot& robot, const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>& robot_links_points) const
         {
+            //bool collided = false;
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
@@ -1370,20 +1534,21 @@ namespace nomdp_planning_tools
                     // Transform the link point into the environment frame
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
+                    assert(environment_sdf_.CheckInBounds(environment_relative_point));
                     // Check for collisions
-                    // We only work with points in the SDF
-                    if (environment_sdf_.CheckInBounds(environment_relative_point))
+                    const float distance = environment_sdf_.Get(environment_relative_point);
+                    // We only work with points in collision
+                    if (distance < contact_distance_threshold_)
                     {
-                        const float distance = environment_sdf_.Get(environment_relative_point);
-                        // We only work with points in collision
-                        if (distance < contact_distance_threshold_)
-                        {
-                            return true;
-                        }
+                        return true;
+                        //collided = true;
+                        //const std::string msg = "Collision on link " + PrettyPrint::PrettyPrint(link_idx) + " with point " + PrettyPrint::PrettyPrint(point_idx) + " at " + PrettyPrint::PrettyPrint(environment_relative_point) + " with penetration " + PrettyPrint::PrettyPrint(distance) + " and gradient " + PrettyPrint::PrettyPrint(environment_sdf_.GetGradient(environment_relative_point, true));
+                        //std::cerr << msg << std::endl;
                     }
                 }
             }
             return false;
+            //return collided;
         }
 
         template<typename Robot>
@@ -1707,7 +1872,7 @@ namespace nomdp_planning_tools
         }
 
         template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
-        inline std::pair<Configuration, bool> ResolveForwardSimulation(Robot& robot, const Eigen::VectorXd& control_input, RNG& rng, const bool use_individual_jacobians, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
+        inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(Robot robot, const Eigen::VectorXd& control_input, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing) const
         {
             //std::cout << "Resolving control input: " << PrettyPrint::PrettyPrint(control_input) << std::endl;
             // Get the list of link name + link points for all the links of the robot
@@ -1738,11 +1903,12 @@ namespace nomdp_planning_tools
                 }
                 // Store the previous configuration of the robot
                 const Configuration previous_configuration = robot.GetPosition();
+                //std::cout << "\x1b[35;1m Pre-action configuration: " << PrettyPrint::PrettyPrint(previous_configuration) << " \x1b[0m" << std::endl;
                 // Update the position of the robot
                 robot.ApplyControlInput(control_input_step, rng);
                 const Configuration post_action_configuration = robot.GetPosition(rng);
                 robot.UpdatePosition(post_action_configuration);
-                //std::cout << "Post-action configuration: " << PrettyPrint::PrettyPrint(post_action_configuration) << std::endl;
+                //std::cout << "\x1b[33;1m Post-action configuration: " << PrettyPrint::PrettyPrint(post_action_configuration) << " \x1b[0m" << std::endl;
                 std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, previous_configuration, post_action_configuration, robot_links_points);
                 std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map = collision_check.second;
                 bool in_collision = collision_check.first;
@@ -1755,10 +1921,11 @@ namespace nomdp_planning_tools
                     trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(post_action_configuration);
                 }
                 // Now, we know if a collision has happened
-                if (in_collision)
+                if (in_collision && allow_contacts)
                 {
                     Configuration active_configuration = post_action_configuration;
                     uint32_t resolver_iterations = 0;
+                    double correction_step_scaling = 1.0;
                     while (in_collision)
                     {
                         const Eigen::VectorXd raw_correction_step = use_individual_jacobians ? ComputeResolverCorrectionStepIndividualJacobians(robot, previous_configuration, active_configuration, robot_links_points, self_collision_map) : ComputeResolverCorrectionStepStackedJacobian(robot, previous_configuration, active_configuration, robot_links_points, self_collision_map);
@@ -1767,13 +1934,13 @@ namespace nomdp_planning_tools
                         const double correction_step_norm = raw_correction_step.norm();
                         const double correction_step_motion_estimate = correction_step_norm * max_robot_motion_per_step;
                         const double step_fraction = std::max((correction_step_motion_estimate / allowed_microstep_distance), 1.0);
-                        const Eigen::VectorXd real_correction_step = raw_correction_step / step_fraction;
+                        const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * correction_step_scaling;
                         //const Eigen::VectorXd real_correction_step = robot.ProcessCorrectionAction(raw_correction_step);
                         //std::cout << "Real Cstep: " << real_correction_step << std::endl;
                         // Apply correction step
                         robot.ApplyControlInput(real_correction_step);
                         const Configuration post_resolve_configuration = robot.GetPosition();
-                        //std::cout << "Post-resolve configuration: " << PrettyPrint::PrettyPrint(post_resolve_configuration) << std::endl;
+                        //std::cout << "\x1b[36;1m Post-resolve step configuration: " << PrettyPrint::PrettyPrint(post_resolve_configuration) << " \x1b[0m"  << std::endl;
                         active_configuration = post_resolve_configuration;
                         // Check to see if we're still in collision
                         const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, previous_configuration, active_configuration, robot_links_points);
@@ -1787,29 +1954,48 @@ namespace nomdp_planning_tools
                         {
                             trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(active_configuration);
                         }
-                        if (resolver_iterations > 150)
+                        if (resolver_iterations > MAX_RESOLVER_ITERATIONS)
                         {
-                            //std::cerr << "Resolver iterations > 150, terminating microstep+resolver and returning previous configuration" << std::endl;
+//                            const std::string msg = "\x1b[31;1m Resolver iterations > " + std::to_string(MAX_RESOLVER_ITERATIONS) + ", terminating microstep+resolver at configuration " + PrettyPrint::PrettyPrint(active_configuration) + " and returning previous configuration " + PrettyPrint::PrettyPrint(previous_configuration) + "\nCollision check results:\n" + PrettyPrint::PrettyPrint(new_collision_check, false, "\n") + " \x1b[0m";
+//                            std::cerr << msg << std::endl;
                             if (enable_tracing)
                             {
                                 trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(previous_configuration);
                             }
                             unsuccessful_resolves_.fetch_add(1);
-                            return std::pair<Configuration, bool>(previous_configuration, true);
+                            if (self_collision_map.size() > 0)
+                            {
+                                unsuccessful_self_collision_resolves_.fetch_add(1);
+                            }
+                            else
+                            {
+                                unsuccessful_env_collision_resolves_.fetch_add(1);
+                            }
+                            return std::make_pair(previous_configuration, std::make_pair(true, true));
                         }
-                        else if (resolver_iterations == 100)
+                        if ((resolver_iterations % RESOLVE_CORRECTION_STEP_SCALING_DECAY_ITERATIONS) == 0)
                         {
-                            //std::cerr << "Resolver iterations = " << resolver_iterations << ", is the simulator stuck? Correction: " << PrettyPrint::PrettyPrint(real_correction_step) << std::endl;
+                            correction_step_scaling = correction_step_scaling * RESOLVE_CORRECTION_STEP_SCALING_DECAY_RATE;
                         }
                     }
+                }
+                else if (in_collision && (allow_contacts == false))
+                {
+                    if (enable_tracing)
+                    {
+                        trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(previous_configuration);
+                    }
+                    successful_resolves_.fetch_add(1);
+                    return std::make_pair(previous_configuration, std::make_pair(true, false));
                 }
                 else
                 {
                     continue;
                 }
             }
+            //std::cout << "\x1b[32;1m Post-action resolution configuration: " << PrettyPrint::PrettyPrint(robot.GetPosition()) << " \x1b[0m" << std::endl;
             successful_resolves_.fetch_add(1);
-            return std::pair<Configuration, bool>(robot.GetPosition(), collided);
+            return std::make_pair(robot.GetPosition(), std::make_pair(collided, false));
         }
 
         template<typename Robot, typename Configuration>
@@ -1852,27 +2038,25 @@ namespace nomdp_planning_tools
                     const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
                     const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    if (environment_sdf_.CheckInBounds(current_point_location))
+                    assert(environment_sdf_.CheckInBounds(current_point_location));
+                    const float distance = environment_sdf_.Get(current_point_location);
+                    // We only work with points in collision
+                    if (distance < contact_distance_threshold_)
                     {
-                        const float distance = environment_sdf_.Get(current_point_location);
-                        // We only work with points in collision
-                        if (distance < contact_distance_threshold_)
-                        {
-                            // We query the surface normal map for the gradient to move out of contact using the particle motion
-                            const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
-                            const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
-                            // Query the surface normal map
-                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
-                            assert(surface_normal_query.second);
-                            const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
-                            const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
-                            // We use the penetration distance as a scale
-                            const double penetration_distance = fabs(contact_distance_threshold_ - distance);
-                            const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
-                            //std::cout << "Point gradient: " << scaled_gradient << std::endl;
-                            env_collision_correction.first = true;
-                            env_collision_correction.second = scaled_gradient;
-                        }
+                        // We query the surface normal map for the gradient to move out of contact using the particle motion
+                        const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
+                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                        // Query the surface normal map
+                        const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
+                        assert(surface_normal_query.second);
+                        const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
+                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                        // We use the penetration distance as a scale
+                        const double penetration_distance = fabs(contact_distance_threshold_ - distance);
+                        const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
+                        //std::cout << "Point gradient: " << scaled_gradient << std::endl;
+                        env_collision_correction.first = true;
+                        env_collision_correction.second = scaled_gradient;
                     }
                     // We only add a correction for the point if necessary
                     if (self_collision_correction.first || env_collision_correction.first)
@@ -1952,27 +2136,30 @@ namespace nomdp_planning_tools
                     const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
                     const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    if (environment_sdf_.CheckInBounds(current_point_location))
+                    if (environment_sdf_.CheckInBounds(current_point_location) == false)
                     {
-                        const float distance = environment_sdf_.Get(current_point_location);
-                        // We only work with points in collision
-                        if (distance < contact_distance_threshold_)
-                        {
-                            // We query the surface normal map for the gradient to move out of contact using the particle motion
-                            const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
-                            const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
-                            // Query the surface normal map
-                            const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
-                            assert(surface_normal_query.second);
-                            const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
-                            const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
-                            // We use the penetration distance as a scale
-                            const double penetration_distance = fabs(contact_distance_threshold_ - distance);
-                            const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
-                            //std::cout << "Point gradient: " << scaled_gradient << std::endl;
-                            env_collision_correction.first = true;
-                            env_collision_correction.second = scaled_gradient;
-                        }
+                        const std::string msg = "Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
+                        std::cout << msg << std::endl;
+                        assert(false);
+                    }
+                    const float distance = environment_sdf_.Get(current_point_location);
+                    // We only work with points in collision
+                    if (distance < contact_distance_threshold_)
+                    {
+                        // We query the surface normal map for the gradient to move out of contact using the particle motion
+                        const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
+                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                        // Query the surface normal map
+                        const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
+                        assert(surface_normal_query.second);
+                        const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
+                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                        // We use the penetration distance as a scale
+                        const double penetration_distance = fabs(contact_distance_threshold_ - distance);
+                        const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
+                        //std::cout << "Point gradient: " << scaled_gradient << std::endl;
+                        env_collision_correction.first = true;
+                        env_collision_correction.second = scaled_gradient;
                     }
                     // We only add a correction for the point if necessary
                     if (self_collision_correction.first || env_collision_correction.first)

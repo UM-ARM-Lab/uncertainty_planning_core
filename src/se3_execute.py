@@ -18,8 +18,7 @@ import thruster_robot_examples.srv
 
 class ExecuteServer(object):
 
-    def __init__(self, service_path, command_action, abort_service, teleport_service, exec_time_limit):
-        self.exec_time_limit = exec_time_limit
+    def __init__(self, service_path, command_action, abort_service, teleport_service):
         self.command_action_client = actionlib.SimpleActionClient(command_action, thruster_robot_controllers.msg.GoToPoseTargetAction)
         self.command_action_client.wait_for_server()
         rospy.loginfo("Connected to action server")
@@ -47,7 +46,7 @@ class ExecuteServer(object):
         else:
             rospy.loginfo("Executing to " + str(request.target))
             robot_target = request.target
-            trajectory = self.command_to_target(robot_target, self.exec_time_limit)
+            trajectory = self.command_to_target(robot_target, request.time_limit)
         rospy.loginfo("Assembling response")
         response = nomdp_planning.srv.Simple6dofRobotMoveResponse()
         response.trajectory = trajectory
@@ -61,7 +60,7 @@ class ExecuteServer(object):
 
     def command_to_target(self, target_pose, time_limit):
         goal = thruster_robot_controllers.msg.GoToPoseTargetGoal()
-        goal.max_execution_time = rospy.Duration(time_limit)
+        goal.max_execution_time = time_limit
         goal.target_pose = target_pose
         self.command_action_client.send_goal(goal)
         self.command_action_client.wait_for_result()
@@ -75,4 +74,4 @@ class ExecuteServer(object):
 if __name__ == '__main__':
     rospy.init_node("simple6dof_execute_server")
     rospy.loginfo("Starting...")
-    ExecuteServer("/simple_6dof_robot_move", "/vehicle_bus/go_to_target_pose", "/vehicle_bus/target_pose/abort", "/vehicle_bus/bus/teleport", 10.0)
+    ExecuteServer("/simple_6dof_robot_move", "/vehicle_bus/go_to_target_pose", "/vehicle_bus/target_pose/abort", "/vehicle_bus/bus/teleport")

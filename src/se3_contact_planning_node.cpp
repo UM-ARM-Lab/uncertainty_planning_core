@@ -47,9 +47,9 @@ void peg_in_hole_env_se3(int argc, char** argv)
     // Plan
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
 #ifdef USE_ROS
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher);
+    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher);
 #else
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment);
+    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment);
 #endif
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;

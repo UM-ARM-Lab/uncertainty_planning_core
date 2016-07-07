@@ -96,12 +96,12 @@ set(SE3_SOURCES ${NOMDP_CORE_SOURCES} include/${PROJECT_NAME}/simplese3_robot_he
 set(SE2_SOURCES ${NOMDP_CORE_SOURCES} include/${PROJECT_NAME}/simplese2_robot_helpers.hpp)
 
 # Planning executable sources
-set(LINKED_PLANNER_SOURCES ${LINKED_SOURCES} src/common_config.hpp src/linked_common_config.hpp src/linked_contact_planning_node.cpp)
+set(LINKED_PLANNER_SOURCES ${LINKED_SOURCES} src/common_config.hpp src/baxter_linked_common_config.hpp src/linked_contact_planning_node.cpp)
 set(SE3_PLANNER_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_common_config.hpp src/se3_contact_planning_node.cpp)
 set(SE2_PLANNER_SOURCES ${SE2_SOURCES} src/common_config.hpp src/se2_common_config.hpp src/se2_contact_planning_node.cpp)
 
 # Policy execution sources
-set(LINKED_EXECUTION_SOURCES ${LINKED_SOURCES} src/linked_common_config.hpp src/linked_contact_execution_node.cpp)
+set(LINKED_EXECUTION_SOURCES ${LINKED_SOURCES} src/baxter_linked_common_config.hpp src/linked_contact_execution_node.cpp)
 set(SE3_EXECUTION_SOURCES ${SE3_SOURCES} src/se3_common_config.hpp src/se3_contact_execution_node.cpp)
 set(SE2_EXECUTION_SOURCES ${SE2_SOURCES} src/se2_common_config.hpp src/se2_contact_execution_node.cpp)
 
@@ -132,17 +132,17 @@ set(SE2_EXECUTION_SOURCES ${SE2_SOURCES} src/se2_common_config.hpp src/se2_conta
 add_executable(linked_contact_planning_node_parallel ${LINKED_PLANNER_SOURCES})
 add_dependencies(linked_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(linked_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(linked_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+set_target_properties(linked_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
 
 add_executable(se3_contact_planning_node_parallel ${SE3_PLANNER_SOURCES})
 add_dependencies(se3_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(se3_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+set_target_properties(se3_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
 
 add_executable(se2_contact_planning_node_parallel ${SE2_PLANNER_SOURCES})
 add_dependencies(se2_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(se2_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se2_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+set_target_properties(se2_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
 
 ###################################################################################################################
 # ROS-DISABLED VERSIONS
@@ -179,7 +179,7 @@ set_target_properties(linked_contact_execution_node PROPERTIES COMPILE_FLAGS "${
 add_executable(se3_contact_execution_node ${SE3_EXECUTION_SOURCES})
 add_dependencies(se3_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(se3_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(se3_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+set_target_properties(se3_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
 
 ###################################################################################################################
 # SIMULATION AND EXECUTION SE(2)
@@ -193,7 +193,7 @@ set_target_properties(se2_contact_execution_node_debug PROPERTIES COMPILE_FLAGS 
 add_executable(se2_contact_execution_node ${SE2_EXECUTION_SOURCES})
 add_dependencies(se2_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(se2_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(se2_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+set_target_properties(se2_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
 
 #############
 ## Install ##

@@ -29,7 +29,7 @@ namespace se2_common_config
         common_config::OPTIONS options;
         options.clustering_type = nomdp_contact_planning::CONVEX_REGION_SIGNATURE;
         options.environment_resolution = 0.125;
-        options.planner_time_limit = 600.0;
+        options.planner_time_limit = 120.0;
         options.goal_bias = 0.1;
         options.step_size = 15.0 * options.environment_resolution;
         options.goal_probability_threshold = 0.51;
@@ -40,14 +40,15 @@ namespace se2_common_config
         options.variance_alpha = 0.75;
         options.actuator_error = options.environment_resolution * 1.0;
         options.sensor_error = 0.0;
-        options.action_attempt_count = 50u;
+        options.edge_attempt_count = 50u;
         options.num_particles = 24u;
         options.use_contact = true;
         options.use_reverse = true;
         options.use_spur_actions = true;
-        options.exec_step_limit = 1000u;
-        options.num_policy_simulations = 10u;
-        options.num_policy_executions = 100u;
+        options.max_exec_actions = 1000u;
+        options.num_policy_simulations = 1u;
+        options.num_policy_executions = 1u;
+        options.policy_action_attempt_count = 100u;
         options.enable_contact_manifold_target_adjustment = false;
         options.planner_log_file = "/tmp/se2_planner_log.txt";
         options.policy_log_file = "/tmp/se2_policy_log.txt";

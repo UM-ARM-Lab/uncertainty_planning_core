@@ -1,4 +1,5 @@
 bool reset
+duration time_limit
 geometry_msgs/PoseStamped target
 ---
 geometry_msgs/PoseStamped[] trajectory

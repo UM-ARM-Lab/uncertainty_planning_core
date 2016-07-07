@@ -38,6 +38,7 @@ inline EigenHelpers::VectorAffine3d move_robot(const Eigen::Affine3d& target_tra
     // Put together service call
     nomdp_planning::Simple6dofRobotMove::Request req;
     req.target = target_pose;
+    req.time_limit = ros::Duration(10.0);
     if (reset)
     {
         std::cout << "Resetting robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
@@ -80,34 +81,57 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
     const simplese3_robot_helpers::SimpleSE3Robot robot = se3_common_config::GetRobot(robot_config);
     NomdpPlanningSpace<simplese3_robot_helpers::SimpleSE3Robot, simplese3_robot_helpers::SimpleSE3BaseSampler, Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, simplese3_robot_helpers::SimpleSE3Averager, simplese3_robot_helpers::SimpleSE3Distancer, simplese3_robot_helpers::SimpleSE3DimDistancer, simplese3_robot_helpers::SimpleSE3Interpolator, Eigen::aligned_allocator<Eigen::Affine3d>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "peg_in_hole", options.environment_resolution);
     // Load the policy
-    const auto policy = planning_space.LoadPolicy(options.planned_policy_file);
-    std::map<std::string, double> complete_policy_stats;
-    std::cout << "Press ENTER to simulate policy..." << std::endl;
-    std::cin.get();
-    const auto policy_simulation_stats = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.exec_step_limit, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.001, false);
-    std::cout << "Policy simulation success: " << policy_simulation_stats.first.second << std::endl;
-    complete_policy_stats["Policy simulation success"] = policy_simulation_stats.first.second;
-    complete_policy_stats["Policy simulation successful resolves"] = policy_simulation_stats.second.first;
-    complete_policy_stats["Policy simulation unsuccessful resolves"] = policy_simulation_stats.second.second;
-    std::cout << "Press ENTER to execute policy..." << std::endl;
-    std::cin.get();
-    std::function<EigenHelpers::VectorAffine3d(const Eigen::Affine3d&, const bool)> robot_execution_fn = [&] (const Eigen::Affine3d& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot_control_service); };
-    const auto execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.exec_step_limit, display_debug_publisher, false, 0.001, false);
-    std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(execution_results.second, true) << std::endl;
-    complete_policy_stats["Policy execution success"] = execution_results.second;
-    // Save the executed policy
-    planning_space.SavePolicy(execution_results.first, options.executed_policy_file);
-    // Print out the results & save them to the log file
-    const std::string log_results = PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n");
-    std::cout << "Policy results:\n" << log_results << std::endl;
-    std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
-    if (!log_file.is_open())
+    try
     {
-        std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << options.policy_log_file << "\x1b[37m \n";
-        throw std::invalid_argument( "Log filename must be write-openable" );
+        auto policy = planning_space.LoadPolicy(options.planned_policy_file);
+        policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
+        std::map<std::string, double> complete_policy_stats;
+    #ifndef FORCE_DEBUG
+        std::cout << "Press ENTER to simulate policy..." << std::endl;
+        std::cin.get();
+    #endif
+        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.001, false);
+        const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
+        const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second;
+        std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;
+        complete_policy_stats.insert(policy_simulation_stats.begin(), policy_simulation_stats.end());
+    #ifndef FORCE_DEBUG
+        std::cout << "Press ENTER to execute policy..." << std::endl;
+        std::cin.get();
+    #endif
+        std::function<EigenHelpers::VectorAffine3d(const Eigen::Affine3d&, const bool)> robot_execution_fn = [&] (const Eigen::Affine3d& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot_control_service); };
+        const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_exec_actions, display_debug_publisher, false, 0.001, false);
+        const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
+        const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second;
+        std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(policy_execution_stats) << std::endl;
+        complete_policy_stats.insert(policy_execution_stats.begin(), policy_execution_stats.end());
+        // Save the executed policy
+        planning_space.SavePolicy(policy_execution_results.first, options.executed_policy_file);
+        // Print out the results & save them to the log file
+        const std::string log_results = PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n") + "\nSimulation step counts: " + PrettyPrint::PrettyPrint(policy_simulation_step_counts) + "\nExecution step counts: " + PrettyPrint::PrettyPrint(policy_execution_step_counts);
+        std::cout << "Policy results:\n" << log_results << std::endl;
+        std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
+        if (!log_file.is_open())
+        {
+            std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << options.policy_log_file << "\x1b[37m \n";
+            throw std::invalid_argument( "Log filename must be write-openable" );
+        }
+        log_file << log_results << std::endl;
+        log_file.close();
     }
-    log_file << log_results << std::endl;
-    log_file.close();
+    catch (...)
+    {
+        std::cout << "!!! Policy file does not exist, skipping !!!" << std::endl;
+        const std::string log_results = "(Execution) Policy success: 0\n(Simulation) Policy success: 0\n(Simulation) Policy successful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator environment resolves: 0\n(Simulation) Policy unsuccessful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator self-collision resolves: 0\nSimulation step counts: -1\nExecution step counts: -1";
+        std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
+        if (!log_file.is_open())
+        {
+            std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << options.policy_log_file << "\x1b[37m \n";
+            throw std::invalid_argument( "Log filename must be write-openable" );
+        }
+        log_file << log_results << std::endl;
+        log_file.close();
+    }
 }
 
 int main(int argc, char** argv)
