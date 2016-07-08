@@ -74,4 +74,4 @@ class ExecuteServer(object):
 if __name__ == '__main__':
     rospy.init_node("simple6dof_execute_server")
     rospy.loginfo("Starting...")
-    ExecuteServer("/simple_6dof_robot_move", "/vehicle_bus/go_to_target_pose", "/vehicle_bus/target_pose/abort", "/vehicle_bus/bus/teleport")
+    ExecuteServer("simple_6dof_robot_move", "vehicle_bus/go_to_target_pose", "vehicle_bus/target_pose/abort", "vehicle_bus/bus/teleport")
