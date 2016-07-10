@@ -899,15 +899,21 @@ namespace nomdp_contact_planning
          * Policy simulation and execution functions
          */
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             simulator_.ResetResolveStatistics();
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
             std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
+            std::vector<double> policy_execution_times(num_executions, -0.0);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
+                const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
                 const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = SimulateSinglePolicyExecution(policy, start, goal, exec_step_limit, enable_contact_manifold_target_adjustment, rng_, display_pub, wait_for_user);
+                const std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> execution_time(end_time - start_time);
+                const double execution_seconds = execution_time.count();
+                policy_execution_times[idx] = execution_seconds;
                 particle_executions[idx] = particle_execution.first;
                 policy = particle_execution.second.first;
                 const int64_t policy_execution_step_count = particle_execution.second.second;
@@ -941,18 +947,24 @@ namespace nomdp_contact_planning
             policy_statistics["(Simulation) Policy unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.first.second;
             policy_statistics["(Simulation) Policy unsuccessful simulator self-collision resolves"] = (double)simulator_resolve_statistics.second.first;
             policy_statistics["(Simulation) Policy unsuccessful simulator environment resolves"] = (double)simulator_resolve_statistics.second.second;
-            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
+            return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const bool enable_contact_manifold_target_adjustment) const
         {
             simulator_.ResetResolveStatistics();
             std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
+            std::vector<double> policy_execution_times(num_executions, -0.0);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
+                const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
                 const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = SimulateSinglePolicyExecution(policy, start, goal, exec_step_limit, enable_contact_manifold_target_adjustment, rng_);
+                const std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> execution_time(end_time - start_time);
+                const double execution_seconds = execution_time.count();
+                policy_execution_times[idx] = execution_seconds;
                 policy = particle_execution.second.first;
                 const int64_t policy_execution_step_count = particle_execution.second.second;
                 policy_execution_step_counts[idx] = policy_execution_step_count;
@@ -975,19 +987,24 @@ namespace nomdp_contact_planning
             policy_statistics["(Simulation) Policy unsuccessful simulator resolves"] = (double)simulator_resolve_statistics.first.second;
             policy_statistics["(Simulation) Policy unsuccessful simulator self-collision resolves"] = (double)simulator_resolve_statistics.second.first;
             policy_statistics["(Simulation) Policy unsuccessful simulator environment resolves"] = (double)simulator_resolve_statistics.second.second;
-            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
+            return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
             std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
+            std::vector<double> policy_execution_times(num_executions, -0.0);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
+                const ros::Time start_time = ros::Time::now();
                 std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit, display_pub, wait_for_user);
+                const ros::Time end_time = ros::Time::now();
+                const double execution_seconds = end_time.toSec() - start_time.toSec();
+                policy_execution_times[idx] = execution_seconds;
                 particle_executions[idx] = particle_execution.first;
                 policy = particle_execution.second.first;
                 const int64_t policy_execution_step_count = particle_execution.second.second;
@@ -1016,18 +1033,24 @@ namespace nomdp_contact_planning
             const double policy_success = (double)reached_goal / (double)num_executions;
             std::map<std::string, double> policy_statistics;
             policy_statistics["(Execution) Policy success"] = policy_success;
-            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
+            return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 #endif
 
-        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::vector<int64_t>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit) const
         {
             std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
+            std::vector<double> policy_execution_times(num_executions, -0.0);
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
+                const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
                 std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit);
+                const std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> execution_time(end_time - start_time);
+                const double execution_seconds = execution_time.count();
+                policy_execution_times[idx] = execution_seconds;
                 policy = particle_execution.second.first;
                 const int64_t policy_execution_step_count = particle_execution.second.second;
                 policy_execution_step_counts[idx] = policy_execution_step_count;
@@ -1044,7 +1067,7 @@ namespace nomdp_contact_planning
             const double policy_success = (double)reached_goal / (double)num_executions;
             std::map<std::string, double> policy_statistics;
             policy_statistics["(Execution) Policy success"] = policy_success;
-            return std::make_pair(policy, std::make_pair(policy_statistics, policy_execution_step_counts));
+            return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 
 #ifdef USE_ROS

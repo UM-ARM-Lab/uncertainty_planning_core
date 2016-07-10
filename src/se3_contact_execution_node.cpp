@@ -92,7 +92,7 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
     #endif
         const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.001, false);
         const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
-        const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second;
+        const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second.first;
         std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;
         complete_policy_stats.insert(policy_simulation_stats.begin(), policy_simulation_stats.end());
     #ifndef FORCE_DEBUG
@@ -102,13 +102,14 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
         std::function<EigenHelpers::VectorAffine3d(const Eigen::Affine3d&, const bool)> robot_execution_fn = [&] (const Eigen::Affine3d& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot_control_service); };
         const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_exec_actions, display_debug_publisher, false, 0.001, false);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
-        const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second;
+        const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second.first;
+        const std::vector<double> policy_execution_times = policy_execution_results.second.second.second;
         std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(policy_execution_stats) << std::endl;
         complete_policy_stats.insert(policy_execution_stats.begin(), policy_execution_stats.end());
         // Save the executed policy
         planning_space.SavePolicy(policy_execution_results.first, options.executed_policy_file);
         // Print out the results & save them to the log file
-        const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n" + PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n") + "\nSimulation step counts: " + PrettyPrint::PrettyPrint(policy_simulation_step_counts) + "\nExecution step counts: " + PrettyPrint::PrettyPrint(policy_execution_step_counts);
+        const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n" + PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n") + "\nSimulation step counts: " + PrettyPrint::PrettyPrint(policy_simulation_step_counts) + "\nExecution step counts: " + PrettyPrint::PrettyPrint(policy_execution_step_counts) + "\nExecution times: " + PrettyPrint::PrettyPrint(policy_execution_times);
         std::cout << "Policy results:\n" << log_results << std::endl;
         std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
         if (!log_file.is_open())
@@ -122,7 +123,7 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
     catch (...)
     {
         std::cout << "!!! Policy file does not exist, skipping !!!" << std::endl;
-        const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n(Execution) Policy success: 0\n(Simulation) Policy success: 0\n(Simulation) Policy successful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator environment resolves: 0\n(Simulation) Policy unsuccessful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator self-collision resolves: 0\nSimulation step counts: -1\nExecution step counts: -1";
+        const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n(Execution) Policy success: 0\n(Simulation) Policy success: 0\n(Simulation) Policy successful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator environment resolves: 0\n(Simulation) Policy unsuccessful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator self-collision resolves: 0\nSimulation step counts: -1\nExecution step counts: -1\nExecution times: -0.0";
         std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
         if (!log_file.is_open())
         {
