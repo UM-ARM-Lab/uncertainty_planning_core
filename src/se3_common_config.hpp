@@ -79,7 +79,7 @@ namespace se3_common_config
         const double velocity_limit = env_resolution * 2.0;
         const double max_sensor_noise = options.sensor_error;
         const double max_actuator_noise = options.actuator_error;
-        const simplese3_robot_helpers::ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise, kp, ki, kd, i_clamp, (velocity_limit * 0.125), (max_sensor_noise * 0.125), (max_actuator_noise * 0.125));
+        const simplese3_robot_helpers::ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise, kp, ki, kd, i_clamp, (velocity_limit * 0.25), (max_sensor_noise * 0.25), (max_actuator_noise * 0.25));
         return robot_config;
     }
 

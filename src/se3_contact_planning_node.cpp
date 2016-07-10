@@ -78,7 +78,7 @@ void peg_in_hole_env_se3(int argc, char** argv)
         std::cout << "Planner failed to reach goal" << std::endl;
     }
     // Print out the results & save them to the log file
-    const std::string log_results = PrettyPrint::PrettyPrint(planner_stats, false, "\n");
+    const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n" + PrettyPrint::PrettyPrint(planner_stats, false, "\n");
     std::cout << "Planner results for " << options.num_particles << " particles:\n" << log_results << std::endl;
     std::ofstream log_file(options.planner_log_file, std::ios_base::out | std::ios_base::app);
     if (!log_file.is_open())

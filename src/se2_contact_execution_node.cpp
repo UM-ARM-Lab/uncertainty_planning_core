@@ -123,7 +123,7 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
         // Save the executed policy
         planning_space.SavePolicy(policy_execution_results.first, options.executed_policy_file);
         // Print out the results & save them to the log file
-        const std::string log_results = PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n") + "\nSimulation step counts: " + PrettyPrint::PrettyPrint(policy_simulation_step_counts) + "\nExecution step counts: " + PrettyPrint::PrettyPrint(policy_execution_step_counts);
+        const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n" + PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n") + "\nSimulation step counts: " + PrettyPrint::PrettyPrint(policy_simulation_step_counts) + "\nExecution step counts: " + PrettyPrint::PrettyPrint(policy_execution_step_counts);
         std::cout << "Policy results:\n" << log_results << std::endl;
         std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
         if (!log_file.is_open())
@@ -137,7 +137,7 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
     catch (...)
     {
         std::cout << "!!! Policy file does not exist, skipping !!!" << std::endl;
-        const std::string log_results = "(Execution) Policy success: 0\n(Simulation) Policy success: 0\n(Simulation) Policy successful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator environment resolves: 0\n(Simulation) Policy unsuccessful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator self-collision resolves: 0\nSimulation step counts: -1\nExecution step counts: -1";
+        const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n(Execution) Policy success: 0\n(Simulation) Policy success: 0\n(Simulation) Policy successful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator environment resolves: 0\n(Simulation) Policy unsuccessful simulator resolves: 0\n(Simulation) Policy unsuccessful simulator self-collision resolves: 0\nSimulation step counts: -1\nExecution step counts: -1";
         std::ofstream log_file(options.policy_log_file, std::ios_base::out | std::ios_base::app);
         if (!log_file.is_open())
         {

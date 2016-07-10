@@ -74,6 +74,7 @@ namespace common_config
             options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
             options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
             options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
+            options.signature_matching_threshold = nhp.param(std::string("signature_matching_threshold"), options.signature_matching_threshold);
             options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
             options.use_contact = nhp.param(std::string("use_contact"), options.use_contact);
             options.use_reverse = nhp.param(std::string("use_reverse"), options.use_reverse);
@@ -88,6 +89,7 @@ namespace common_config
             options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
             options.executed_policy_file = nhp.param(std::string("executed_policy_file"), options.executed_policy_file);
             options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
+            options.signature_matching_threshold = nhp.param(std::string("signature_matching_threshold"), options.signature_matching_threshold);
             options.max_exec_actions = (uint32_t)nhp.param(std::string("max_exec_actions"), (int)options.max_exec_actions);
             options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
         }
@@ -134,15 +136,7 @@ namespace common_config
             }
             if (argc >= 9)
             {
-                options.policy_action_attempt_count = (uint32_t)atoi(argv[8]);
-            }
-            if (argc >= 10)
-            {
-                options.use_contact = (bool)atoi(argv[9]);
-            }
-            if (argc >= 11)
-            {
-                options.use_reverse = (bool)atoi(argv[10]);
+                options.signature_matching_threshold = atof(argv[8]);
             }
         }
         else if (type == common_config::OPTIONS::EXECUTION)
@@ -181,11 +175,15 @@ namespace common_config
             }
             if (argc >= 9)
             {
-                options.max_exec_actions = (uint32_t)atoi(argv[8]);
+                options.signature_matching_threshold = atof(argv[8]);
             }
             if (argc >= 10)
             {
-                options.policy_action_attempt_count = (uint32_t)atoi(argv[9]);
+                options.max_exec_actions = (uint32_t)atoi(argv[9]);
+            }
+            if (argc >= 11)
+            {
+                options.policy_action_attempt_count = (uint32_t)atoi(argv[10]);
             }
         }
         else
