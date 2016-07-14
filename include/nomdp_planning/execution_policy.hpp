@@ -1478,7 +1478,7 @@ namespace execution_policy
                     }
                     percent_active = updated_percent_active;
                 }
-                assert(p_reached > 0.0);
+                assert(p_reached >= 0.0);
                 if (p_reached > 1.0)
                 {
                     std::cout << "WARNING - P(reached) = " << p_reached << " > 1.0 (probably numerical error)" << std::endl;

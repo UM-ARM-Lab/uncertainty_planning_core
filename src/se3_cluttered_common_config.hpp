@@ -86,8 +86,8 @@ namespace se3_common_config
     inline std::pair<Eigen::Affine3d, Eigen::Affine3d> GetStartAndGoal()
     {
         // Define the goals of the plan
-        const Eigen::Affine3d start = Eigen::Translation3d(4.25, 9.25, 6.0) * Eigen::Quaterniond::Identity();
-        const Eigen::Affine3d goal = Eigen::Translation3d(4.25, 0.75, 6.0) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d start = Eigen::Translation3d(4.75, 0.25, 2.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d goal = Eigen::Translation3d(5.25, 9.75, 7.5) * Eigen::Quaterniond::Identity();
         return std::make_pair(start, goal);
     }
 

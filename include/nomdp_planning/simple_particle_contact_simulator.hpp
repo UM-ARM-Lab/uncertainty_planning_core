@@ -113,7 +113,7 @@ namespace nomdp_planning_tools
             Eigen::Vector3d normal;
             Eigen::Vector3d entry_direction;
 
-            StoredSurfaceNormal(const Eigen::Vector3d& in_normal, const Eigen::Vector3d& in_direction) : normal(EigenHelpers::SafeNorm(in_normal)), entry_direction(EigenHelpers::SafeNorm(in_direction)) {}
+            StoredSurfaceNormal(const Eigen::Vector3d& in_normal, const Eigen::Vector3d& in_direction) : normal(EigenHelpers::SafeNormal(in_normal)), entry_direction(EigenHelpers::SafeNormal(in_direction)) {}
 
             StoredSurfaceNormal() : normal(Eigen::Vector3d(0.0, 0.0, 0.0)), entry_direction(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
         };
@@ -543,7 +543,6 @@ namespace nomdp_planning_tools
                                     grid.Set(x_idx, y_idx, z_idx, free_cell);
                                 }
                             }
-
                             // Set the free-space convex segment we belong to (if necessary)
                             if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
                             {
@@ -556,7 +555,6 @@ namespace nomdp_planning_tools
                                 {
                                     grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
                                 }
-
                             }
                         }
                     }
@@ -564,6 +562,147 @@ namespace nomdp_planning_tools
                 return grid;
             }
             else if (environment_id == "se3_cluttered")
+            {
+                double grid_x_size = 12.0;
+                double grid_y_size = 12.0;
+                double grid_z_size = 12.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            // Make some of the exterior walls opaque
+                            if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
+                            {
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 1u, 0u, 0u);
+                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                            }
+                            else if (z_idx >= (grid.GetNumZCells() - 8))
+                            {
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
+                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                            }
+                            else
+                            {
+                                // Set the interior 10x10x10 meter area
+                                if (x > 1.0 && x <= 3.0 && y > 1.0 && y <= 3.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 2u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 5.0 && x <= 8.0 && y > 0.0 && y <= 2.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 3u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 4.0 && x <= 9.0 && y > 3.0 && y <= 5.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 4u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 0.0 && x <= 2.0 && y > 4.0 && y <= 7.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 5u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 3.0 && x <= 6.0&& y > 6.0 && y <= 8.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 6u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 0.0 && x <= 5.0 && y > 9.0 && y <= 10.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 8.0 && x <= 10.0 && y > 6.0 && y <= 10.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 8u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else
+                                {
+                                    // Set the convex regions
+                                    if (x > 0.0 && x <= 5.0 && y > 0.0 && y <= 1.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                    }
+                                    if (x > 0.0 && x <= 1.0 && y > 0.0 && y <= 4.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                    }
+                                    if (x > 0.0 && x <= 4.0 && y > 3.0 && y <= 4.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                    }
+                                    if (x > 3.0 && x <= 4.0 && y > 0.0 && y <= 6.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                    }
+                                    if (x > 3.0 && x <= 5.0 && y > 0.0 && y <= 3.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                    }
+                                    if (x > 3.0 && x <= 10.0 && y > 2.0 && y <= 3.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(6u);
+                                    }
+                                    if (x > 8.0 && x <= 10.0 && y > 0.0 && y <= 3.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(7u);
+                                    }
+                                    if (x > 9.0 && x <= 10.0 && y > 0.0 && y <= 6.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(8u);
+                                    }
+                                    if (x > 2.0 && x <= 10.0 && y > 5.0 && y <= 6.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(9u);
+                                    }
+                                    if (x > 2.0 && x <= 3.0 && y > 3.0 && y <= 9.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(10u);
+                                    }
+                                    if (x > 6.0 && x <= 8.0 && y > 5.0 && y <= 10.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(11u);
+                                    }
+                                    if (x > 0.0 && x <= 3.0 && y > 7.0 && y <= 9.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(12u);
+                                    }
+                                    if (x > 5.0 && x <= 8.0 && y > 8.0 && y <= 10.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(13u);
+                                    }
+                                    if (x > 0.0 && x <= 8.0 && y > 8.0 && y <= 9.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(14u);
+                                    }
+                                    if (x > 2.0 && x <= 4.0 && y > 3.0 && y <= 6.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(15u);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return grid;
+            }
+            else if (environment_id == "se3_box_puzzle")
             {
                 double grid_x_size = 12.0;
                 double grid_y_size = 12.0;
@@ -1196,6 +1335,10 @@ namespace nomdp_planning_tools
             {
                 ;
             }
+            else if (environment_id == "se3_box_puzzle")
+            {
+                ;
+            }
             else if (environment_id == "baxter_env")
             {
                 ;
@@ -1455,15 +1598,15 @@ namespace nomdp_planning_tools
             // Build the surface normals map
             surface_normals_grid_ = BuildSurfaceNormalsGrid(environment_objects, environment_sdf_);
             // Update & mark connected components
-            environment_.UpdateConnectedComponents();
+            //environment_.UpdateConnectedComponents();
             // Update the convex segments
             convex_segment_counts_ = environment_.UpdateConvexSegments();
-            // Make the SDF for each object
-            for (size_t idx = 0; idx < environment_objects.size(); idx++)
-            {
-                const OBSTACLE_CONFIG& current_object = environment_objects[idx];
-                per_object_sdfs_[current_object.object_id] = environment_.ExtractSignedDistanceField(INFINITY, std::vector<uint32_t>{current_object.object_id}).first;
-            }
+//            // Make the SDF for each object
+//            for (size_t idx = 0; idx < environment_objects.size(); idx++)
+//            {
+//                const OBSTACLE_CONFIG& current_object = environment_objects[idx];
+//                per_object_sdfs_[current_object.object_id] = environment_.ExtractSignedDistanceField(INFINITY, std::vector<uint32_t>{current_object.object_id}).first;
+//            }
             ResetResolveStatistics();
             initialized_ = true;
         }
@@ -1478,32 +1621,32 @@ namespace nomdp_planning_tools
             // Build the surface normals map
             surface_normals_grid_ = BuildSurfaceNormalsGrid(environment_id, environment_sdf_);
             // Update & mark connected components
-            environment_.UpdateConnectedComponents();
+            //environment_.UpdateConnectedComponents();
             // Update the convex segments
             convex_segment_counts_ = environment_.UpdateConvexSegments();
-            // Make the SDF for each object
-            // First. we need to collect all the object IDs (since we don't have objects to start with)
-            std::map<uint32_t, uint32_t> object_ids;
-            for (int64_t x_idx = 0; x_idx < environment_.GetNumXCells(); x_idx++)
-            {
-                for (int64_t y_idx = 0; y_idx < environment_.GetNumYCells(); y_idx++)
-                {
-                    for (int64_t z_idx = 0; z_idx < environment_.GetNumZCells(); z_idx++)
-                    {
-                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& env_cell = environment_.GetImmutable(x_idx, y_idx, z_idx).first;
-                        const uint32_t& env_cell_object_id = env_cell.object_id;
-                        if (env_cell_object_id > 0)
-                        {
-                            object_ids[env_cell_object_id] = 1u;
-                        }
-                    }
-                }
-            }
-            for (auto itr = object_ids.begin(); itr != object_ids.end(); ++itr)
-            {
-                const uint32_t object_id = itr->first;
-                per_object_sdfs_[object_id] = environment_.ExtractSignedDistanceField(INFINITY, std::vector<uint32_t>{object_id}).first;
-            }
+//            // Make the SDF for each object
+//            // First. we need to collect all the object IDs (since we don't have objects to start with)
+//            std::map<uint32_t, uint32_t> object_ids;
+//            for (int64_t x_idx = 0; x_idx < environment_.GetNumXCells(); x_idx++)
+//            {
+//                for (int64_t y_idx = 0; y_idx < environment_.GetNumYCells(); y_idx++)
+//                {
+//                    for (int64_t z_idx = 0; z_idx < environment_.GetNumZCells(); z_idx++)
+//                    {
+//                        const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& env_cell = environment_.GetImmutable(x_idx, y_idx, z_idx).first;
+//                        const uint32_t& env_cell_object_id = env_cell.object_id;
+//                        if (env_cell_object_id > 0)
+//                        {
+//                            object_ids[env_cell_object_id] = 1u;
+//                        }
+//                    }
+//                }
+//            }
+//            for (auto itr = object_ids.begin(); itr != object_ids.end(); ++itr)
+//            {
+//                const uint32_t object_id = itr->first;
+//                per_object_sdfs_[object_id] = environment_.ExtractSignedDistanceField(INFINITY, std::vector<uint32_t>{object_id}).first;
+//            }
             ResetResolveStatistics();
             initialized_ = true;
         }
@@ -1568,18 +1711,18 @@ namespace nomdp_planning_tools
             return environment_sdf_.ExportForDisplay(1.0f);
         }
 
-        inline visualization_msgs::Marker ExportObjectSDFForDisplay(const uint32_t object_id) const
-        {
-            auto found_itr = per_object_sdfs_.find(object_id);
-            if (found_itr != per_object_sdfs_.end())
-            {
-                return found_itr->second.ExportForDisplay(1.0f);
-            }
-            else
-            {
-                return visualization_msgs::Marker();
-            }
-        }
+//        inline visualization_msgs::Marker ExportObjectSDFForDisplay(const uint32_t object_id) const
+//        {
+//            auto found_itr = per_object_sdfs_.find(object_id);
+//            if (found_itr != per_object_sdfs_.end())
+//            {
+//                return found_itr->second.ExportForDisplay(1.0f);
+//            }
+//            else
+//            {
+//                return visualization_msgs::Marker();
+//            }
+//        }
 
         inline visualization_msgs::MarkerArray ExportAllForDisplay() const
         {
@@ -1596,15 +1739,15 @@ namespace nomdp_planning_tools
             env_sdf_marker.id = 1;
             env_sdf_marker.ns = "sim_environment_sdf";
             display_markers.markers.push_back(env_sdf_marker);
-            for (auto object_sdfs_itr = per_object_sdfs_.begin(); object_sdfs_itr != per_object_sdfs_.end(); ++object_sdfs_itr)
-            {
-                const uint32_t object_id = object_sdfs_itr->first;
-                const sdf_tools::SignedDistanceField& object_sdf = object_sdfs_itr->second;
-                visualization_msgs::Marker object_sdf_marker = object_sdf.ExportForDisplay(1.0f);
-                object_sdf_marker.id = 1;
-                object_sdf_marker.ns = "object_" + std::to_string(object_id) + "_sdf";
-                display_markers.markers.push_back(object_sdf_marker);
-            }
+//            for (auto object_sdfs_itr = per_object_sdfs_.begin(); object_sdfs_itr != per_object_sdfs_.end(); ++object_sdfs_itr)
+//            {
+//                const uint32_t object_id = object_sdfs_itr->first;
+//                const sdf_tools::SignedDistanceField& object_sdf = object_sdfs_itr->second;
+//                visualization_msgs::Marker object_sdf_marker = object_sdf.ExportForDisplay(1.0f);
+//                object_sdf_marker.id = 1;
+//                object_sdf_marker.ns = "object_" + std::to_string(object_id) + "_sdf";
+//                display_markers.markers.push_back(object_sdf_marker);
+//            }
             // Draw all the convex segments for each object
             for (auto convex_segment_counts_itr = convex_segment_counts_.begin(); convex_segment_counts_itr != convex_segment_counts_.end(); ++convex_segment_counts_itr)
             {
@@ -1818,7 +1961,7 @@ namespace nomdp_planning_tools
                             //const Eigen::Vector3d current_other_link_position = other_link_velocity * -1.0;
                             //const Eigen::Vector3d contact_direction = current_other_link_position - current_link_position;
                             const Eigen::Vector3d contact_direction = other_link_point_location - link_point_location;
-                            const Eigen::Vector3d contact_normal = EigenHelpers::SafeNorm(contact_direction);
+                            const Eigen::Vector3d contact_normal = EigenHelpers::SafeNormal(contact_direction);
                             //const std::string msg = "Contact normal: " + PrettyPrint::PrettyPrint(contact_normal) + "\nCurrent link position: " + PrettyPrint::PrettyPrint(link_point_location) + "\nOther link position: " + PrettyPrint::PrettyPrint(other_link_point_location);
                             //std::cout << msg << std::endl;
                             contact_normal_matrix.block<3, 1>((collision * 3), collision) = contact_normal;
@@ -2195,12 +2338,12 @@ namespace nomdp_planning_tools
                     {
                         // We query the surface normal map for the gradient to move out of contact using the particle motion
                         const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
-                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNormal(point_motion);
                         // Query the surface normal map
                         const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
                         assert(surface_normal_query.second);
                         const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
-                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNormal(raw_gradient);
                         // We use the penetration distance as a scale
                         const double penetration_distance = fabs(contact_distance_threshold_ - distance);
                         const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
@@ -2298,12 +2441,12 @@ namespace nomdp_planning_tools
                     {
                         // We query the surface normal map for the gradient to move out of contact using the particle motion
                         const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
-                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNorm(point_motion);
+                        const Eigen::Vector3d normed_point_motion = EigenHelpers::SafeNormal(point_motion);
                         // Query the surface normal map
                         const std::pair<Eigen::Vector3d, bool> surface_normal_query = surface_normals_grid_.LookupSurfaceNormal(current_point_location, normed_point_motion);
                         assert(surface_normal_query.second);
                         const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
-                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNorm(raw_gradient);
+                        const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNormal(raw_gradient);
                         // We use the penetration distance as a scale
                         const double penetration_distance = fabs(contact_distance_threshold_ - distance);
                         const Eigen::Vector3d scaled_gradient = normed_point_gradient * penetration_distance;
