@@ -86,17 +86,17 @@ namespace se3_common_config
     inline std::pair<Eigen::Affine3d, Eigen::Affine3d> GetStartAndGoal()
     {
         // Define the goals of the plan
-        const Eigen::Affine3d start = Eigen::Translation3d(4.75, 0.25, 2.5) * Eigen::Quaterniond::Identity();
-        const Eigen::Affine3d goal = Eigen::Translation3d(5.25, 9.75, 7.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d start = Eigen::Translation3d(4.5, 0.5, 2.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d goal = Eigen::Translation3d(5.5, 9.5, 7.5) * Eigen::Quaterniond::Identity();
         return std::make_pair(start, goal);
     }
 
     inline EigenHelpers::VectorVector3d GetRobotPoints()
     {
         EigenHelpers::VectorVector3d robot_points;
-        const std::vector<double> x_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
-        const std::vector<double> y_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
-        const std::vector<double> z_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
+        const std::vector<double> x_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
+        const std::vector<double> y_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
+        const std::vector<double> z_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
         for (size_t xpdx = 0; xpdx < x_pos.size(); xpdx++)
         {
             for (size_t ypdx = 0; ypdx < y_pos.size(); ypdx++)

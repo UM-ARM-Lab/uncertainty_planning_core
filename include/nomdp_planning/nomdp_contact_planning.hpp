@@ -2363,7 +2363,8 @@ namespace nomdp_contact_planning
                     particles_stored_ += particle_locations.size();
                     uint32_t reverse_attempt_count = (uint32_t)num_particles_;
                     uint32_t reverse_reached_count = (uint32_t)num_particles_;
-                    if (did_collide)
+                    // Don't do extra work with one particle
+                    if (did_collide && (num_particles_ > 1))
                     {
                         //std::cout << "Simulation resulted in collision, defering reversibility check to post-processing" << std::endl;
                         reverse_attempt_count = (uint32_t)num_particles_;

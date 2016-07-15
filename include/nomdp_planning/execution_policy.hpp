@@ -778,7 +778,7 @@ namespace execution_policy
                         const double edge_probability_weight = (current_edge_weight >= std::numeric_limits<double>::epsilon()) ? 1.0 / current_edge_weight : INFINITY;
                         const double edge_attempt_weight = marginal_edge_weight * (double)estimated_attempt_count;
                         const double new_edge_weight = edge_probability_weight * edge_attempt_weight;
-                        std::cout << "Assigned new edge weight " << new_edge_weight << " from 1/P(edge) " << edge_probability_weight << " and edge attempt weight " << edge_attempt_weight << std::endl;
+                        //std::cout << "Assigned new edge weight " << new_edge_weight << " from 1/P(edge) " << edge_probability_weight << " and edge attempt weight " << edge_attempt_weight << std::endl;
                         current_out_edge.SetWeight(new_edge_weight);
                     }
                     // If the edge is zero probability (here for linkage only)
@@ -901,14 +901,14 @@ namespace execution_policy
         inline std::pair<PolicyGraph, std::vector<int64_t>> BuildPolicyGraphComponentsFromTree(const NomdpPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold) const
         {
             const PolicyGraph preliminary_policy_graph = ExecutionPolicyGraphBuilder::BuildPolicyGraphFromPlannerTree(planner_tree, NomdpPlanningState(goal));
-            std::cout << "Preliminary graph " << preliminary_policy_graph.Print() << std::endl;
+            //std::cout << "Preliminary graph " << preliminary_policy_graph.Print() << std::endl;
             //std::cout << "Policy graph has " << preliminary_policy_graph.GetNodesImmutable().size() << " graph nodes" << std::endl;
             const PolicyGraph intermediate_policy_graph = ExecutionPolicyGraphBuilder::ComputeTrueEdgeWeights(preliminary_policy_graph, marginal_edge_weight, conformant_planning_threshold, edge_attempt_threshold);
-            std::cout << "Intermediate graph " << intermediate_policy_graph.Print() << std::endl;
+            //std::cout << "Intermediate graph " << intermediate_policy_graph.Print() << std::endl;
             //std::cout << "Computed true edge weights for " << intermediate_policy_graph.GetNodesImmutable().size() << " policy graph nodes" << std::endl;
             const std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> processed_policy_graph_components = ExecutionPolicyGraphBuilder::ComputeNodeDistances(intermediate_policy_graph, intermediate_policy_graph.GetNodesImmutable().size() - 1);
             //std::cout << "Processed policy graph into graph with " << processed_policy_graph_components.first.GetNodesImmutable().size() << " policy nodes and previous index map with " << processed_policy_graph_components.second.size() << " entries" << std::endl;
-            std::cout << "(Re)Built policy graph from planner tree\n" << PrintTree(planner_tree, processed_policy_graph_components.second.first, processed_policy_graph_components.second.second) << std::endl;
+            //std::cout << "(Re)Built policy graph from planner tree\n" << PrintTree(planner_tree, processed_policy_graph_components.second.first, processed_policy_graph_components.second.second) << std::endl;
             return std::make_pair(processed_policy_graph_components.first, processed_policy_graph_components.second.first);
         }
 
