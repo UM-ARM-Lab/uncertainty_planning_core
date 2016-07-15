@@ -53,7 +53,7 @@ namespace se2_common_config
         options.planner_log_file = "/tmp/se2_planner_log.txt";
         options.policy_log_file = "/tmp/se2_policy_log.txt";
         options.planned_policy_file = "/tmp/se2_planned_policy.policy";
-        options.executed_policy_file = "/tmp/se2_executed_policy.policy";
+        options.executed_policy_file = "/dev/null";
         return options;
     }
 

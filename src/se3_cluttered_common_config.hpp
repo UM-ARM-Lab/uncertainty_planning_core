@@ -53,7 +53,7 @@ namespace se3_common_config
         options.planner_log_file = "/tmp/se3_planner_log.txt";
         options.policy_log_file = "/tmp/se3_policy_log.txt";
         options.planned_policy_file = "/tmp/se3_planned_policy.policy";
-        options.executed_policy_file = "/tmp/se3_executed_policy.policy";
+        options.executed_policy_file = "/dev/null";
         return options;
     }
 

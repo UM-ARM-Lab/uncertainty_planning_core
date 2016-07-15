@@ -805,7 +805,7 @@ namespace execution_policy
                         const double edge_probability_weight = (current_edge_weight >= std::numeric_limits<double>::epsilon()) ? 1.0 / current_edge_weight : INFINITY;
                         const double edge_attempt_weight = marginal_edge_weight * (double)estimated_attempt_count;
                         const double new_edge_weight = edge_probability_weight * edge_attempt_weight;
-                        std::cout << "Assigned new edge weight " << new_edge_weight << " from 1/P(edge) " << edge_probability_weight << " and edge attempt weight " << edge_attempt_weight << std::endl;
+                        //std::cout << "Assigned new edge weight " << new_edge_weight << " from 1/P(edge) " << edge_probability_weight << " and edge attempt weight " << edge_attempt_weight << std::endl;
                         current_in_edge.SetWeight(new_edge_weight);
                     }
                     // If the edge is zero probability (here for linkage only)
