@@ -991,7 +991,7 @@ namespace nomdp_contact_planning
         }
 
 #ifdef USE_ROS
-        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
             std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
@@ -1001,7 +1001,7 @@ namespace nomdp_contact_planning
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
                 const ros::Time start_time = ros::Time::now();
-                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_step_limit, display_pub, wait_for_user);
+                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_time_limit, display_pub, wait_for_user);
                 const ros::Time end_time = ros::Time::now();
                 const double execution_seconds = end_time.toSec() - start_time.toSec();
                 policy_execution_times[idx] = execution_seconds;
@@ -1226,7 +1226,7 @@ namespace nomdp_contact_planning
         }
 
 #ifdef USE_ROS
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t exec_step_limit, ros::Publisher& display_pub, const bool wait_for_user) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user) const
         {
             std::cout << "Drawing environment..." << std::endl;
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -1262,7 +1262,9 @@ namespace nomdp_contact_planning
             particle_trajectory.push_back(start);
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
-            while (current_exec_step < exec_step_limit)
+            const double start_time = ros::Time::now().toSec();
+            double current_time = start_time;
+            while ((current_time - start_time) <= exec_time_limit)
             {
                 current_exec_step++;
                 // Get the current configuration
@@ -1324,13 +1326,18 @@ namespace nomdp_contact_planning
                 // Check if we've reached the goal
                 if (DistanceFn::Distance(result_config, goal) <= goal_distance_threshold_)
                 {
+                    current_time = ros::Time::now().toSec();
                     // We've reached the goal!
-                    std::cout << "Policy execution reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
+                    std::cout << "Policy execution reached the goal in " << (current_time - start_time) << " seconds out of a maximum of " << exec_time_limit << " seconds" << std::endl;
                     return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
+                }
+                else
+                {
+                    current_time = ros::Time::now().toSec();
                 }
             }
             // If we get here, we haven't reached the goal!
-            std::cout << "Policy execution failed to reach the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
+            std::cout << "Policy execution failed to reach the goal in " << (current_time - start_time) << " seconds out of a maximum of " << exec_time_limit << " seconds" << std::endl;
             return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 #endif
@@ -2542,9 +2549,15 @@ namespace nomdp_contact_planning
                 if (target_distance > step_size_)
                 {
                     const double step_fraction = step_size_ / target_distance;
+#ifdef ENABLE_DEBUG_PRINTS
+                    std::cout << "Forward simulating for " << step_fraction << " step fraction, step size is " << step_size_ << ", target distance is " << target_distance << std::endl;
+#endif
                     const Configuration interpolated_target_point = InterpolateFn::Interpolate(nearest.GetExpectation(), target_point, step_fraction);
                     target_point = interpolated_target_point;
                 }
+#ifdef ENABLE_DEBUG_PRINTS
+                std::cout << "Forward simulating for target distance is " << target_distance << std::endl;
+#endif
                 NomdpPlanningState target_state(target_point);
                 std::pair<std::vector<std::pair<NomdpPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> propagation_results = ForwardSimulateStates(nearest, target_state, 40u, planner_action_try_attempts, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
                 std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> raw_particle_propagations = {propagation_results.second};
@@ -2572,6 +2585,9 @@ namespace nomdp_contact_planning
                         const double step_fraction = step_size_ / target_distance;
                         const Configuration interpolated_target_point = InterpolateFn::Interpolate(current.GetExpectation(), target_point, step_fraction);
                         current_target_point = interpolated_target_point;
+#ifdef ENABLE_DEBUG_PRINTS
+                        std::cout << "Forward simulating for " << step_fraction << " step fraction, step size is " << step_size_ << ", target distance is " << target_distance << std::endl;
+#endif
                     }
                     // If we've reached the target state, stop
                     else if (fabs(target_distance) < std::numeric_limits<double>::epsilon())
@@ -2582,6 +2598,9 @@ namespace nomdp_contact_planning
                     // If we're less than step size away, this is our last step
                     else
                     {
+#ifdef ENABLE_DEBUG_PRINTS
+                        std::cout << "Forward simulating for target distance is " << target_distance << std::endl;
+#endif
                         completed = true;
                     }
                     // Take a step forwards

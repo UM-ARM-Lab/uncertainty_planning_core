@@ -871,13 +871,13 @@ namespace nomdp_planning_tools
                             const double& y = location.y();
                             const double& z = location.z();
                             // Buffer
-                            if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8)  || y_idx >= (grid.GetNumYCells() - 8) || z_idx >= (grid.GetNumZCells() - 8))
+                            if (x_idx <= 16 || y_idx <= 16 || z_idx <= 16 || x_idx >= (grid.GetNumXCells() - 16)  || y_idx >= (grid.GetNumYCells() - 16) || z_idx >= (grid.GetNumZCells() - 16))
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
                                 grid.Set(x_idx, y_idx, z_idx, buffer_cell);
                             }
                             // Set the object we belong to
-                            if (z_idx < 10)
+                            if (z_idx < 16)
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
                                 grid.Set(x_idx, y_idx, z_idx, object_cell);

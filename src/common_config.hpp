@@ -47,6 +47,7 @@ namespace common_config
         uint32_t policy_action_attempt_count;
         // Execution limits
         uint32_t max_exec_actions;
+        double max_policy_exec_time;
         // Control flags
         bool use_contact;
         bool use_reverse;
@@ -91,6 +92,7 @@ namespace common_config
             options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
             options.signature_matching_threshold = nhp.param(std::string("signature_matching_threshold"), options.signature_matching_threshold);
             options.max_exec_actions = (uint32_t)nhp.param(std::string("max_exec_actions"), (int)options.max_exec_actions);
+            options.max_policy_exec_time = nhp.param(std::string("max_policy_exec_time"), options.max_policy_exec_time);
             options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
         }
         else

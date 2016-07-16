@@ -24,6 +24,7 @@
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/PoseStamped.h>
+#include "thruster_robot_controllers/SetActuationError.h"
 #include <nomdp_planning/Simple6dofRobotMove.h>
 
 using namespace nomdp_contact_planning;
@@ -86,7 +87,19 @@ inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<dou
     return configs;
 }
 
-void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceClient& robot_control_service)
+void set_uncertainty(const double max_translation_error, const double max_rotation_error, ros::ServiceClient& set_uncertainty_service)
+{
+    thruster_robot_controllers::SetActuationErrorRequest req;
+    req.translation_actuator_error = max_translation_error;
+    req.rotation_actuation_error = max_rotation_error;
+    thruster_robot_controllers::SetActuationErrorResponse res;
+    if (set_uncertainty_service.call(req, res) == false)
+    {
+        throw std::invalid_argument("SetActuationError failed");
+    }
+}
+
+void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceClient& robot_control_service, ros::ServiceClient& set_uncertainty_service)
 {
     const common_config::OPTIONS options = se2_common_config::GetOptions(common_config::OPTIONS::EXECUTION);
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
@@ -114,8 +127,10 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
         std::cout << "Press ENTER to execute policy..." << std::endl;
         std::cin.get();
     #endif
+        std::cout << "Setting actuation uncertainty..." << std::endl;
+        set_uncertainty(robot_config.max_actuator_noise, robot_config.r_max_actuator_noise, set_uncertainty_service);
         std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 3, 1>& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot_control_service); };
-        const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_exec_actions, display_debug_publisher, false, 0.001, false);
+        const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_debug_publisher, false, 0.001, false);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
         const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second.first;
         const std::vector<double> policy_execution_times = policy_execution_results.second.second.second;
@@ -157,6 +172,7 @@ int main(int argc, char** argv)
     ROS_INFO("Starting Nomdp Contact Execution Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<nomdp_planning::Simple6dofRobotMove>("simple_6dof_robot_move");
-    peg_in_hole_env_se2(display_debug_publisher, robot_control_service);
+    ros::ServiceClient set_uncertainty_service = nh.serviceClient<thruster_robot_controllers::SetActuationError>("simple6dof_robot/set_actuation_uncertainty");
+    peg_in_hole_env_se2(display_debug_publisher, robot_control_service, set_uncertainty_service);
     return 0;
 }

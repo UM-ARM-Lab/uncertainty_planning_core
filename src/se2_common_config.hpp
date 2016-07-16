@@ -22,6 +22,9 @@
 #include "nomdp_planning/simplese2_robot_helpers.hpp"
 #include "common_config.hpp"
 
+#ifndef SE2_COMMON_CONFIG_HPP
+#define SE2_COMMON_CONFIG_HPP
+
 namespace se2_common_config
 {
     inline common_config::OPTIONS GetDefaultOptions()
@@ -46,6 +49,7 @@ namespace se2_common_config
         options.use_reverse = true;
         options.use_spur_actions = true;
         options.max_exec_actions = 1000u;
+        options.max_policy_exec_time = 300.0;
         options.num_policy_simulations = 1u;
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
@@ -136,3 +140,5 @@ namespace se2_common_config
         return sampler;
     }
 }
+
+#endif // SE2_COMMON_CONFIG_HPP

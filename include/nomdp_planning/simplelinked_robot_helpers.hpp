@@ -535,24 +535,29 @@ namespace simplelinked_robot_helpers
         }
     };
 
+    template<typename ActuatorModel>
     struct JointControllerGroup
     {
         simple_pid_controller::SimplePIDController controller;
         simple_uncertainty_models::SimpleUncertainSensor sensor;
-        simple_uncertainty_models::SimpleUncertainVelocityActuator actuator;
+        ActuatorModel actuator;
 
-        JointControllerGroup(const ROBOT_CONFIG& config)
+        JointControllerGroup(const ROBOT_CONFIG& config, const ActuatorModel& actuator_model) : actuator(actuator_model)
         {
             controller = simple_pid_controller::SimplePIDController(config.kp, config.ki, config.kd, config.integral_clamp);
             sensor = simple_uncertainty_models::SimpleUncertainSensor(-config.max_sensor_noise, config.max_sensor_noise);
-            actuator = simple_uncertainty_models::SimpleUncertainVelocityActuator(-config.max_actuator_noise, config.max_actuator_noise, config.velocity_limit);
         }
 
-        JointControllerGroup()
+        JointControllerGroup(const ROBOT_CONFIG& config) : actuator(ActuatorModel())
+        {
+            controller = simple_pid_controller::SimplePIDController(config.kp, config.ki, config.kd, config.integral_clamp);
+            sensor = simple_uncertainty_models::SimpleUncertainSensor(-config.max_sensor_noise, config.max_sensor_noise);
+        }
+
+        JointControllerGroup() : actuator(ActuatorModel())
         {
             controller = simple_pid_controller::SimplePIDController(0.0, 0.0, 0.0, 0.0);
             sensor = simple_uncertainty_models::SimpleUncertainSensor(0.0, 0.0);
-            actuator = simple_uncertainty_models::SimpleUncertainVelocityActuator(0.0, 0.0, 0.0);
         }
     };
 
@@ -563,6 +568,7 @@ namespace simplelinked_robot_helpers
         std::string link_name;
     };
 
+    template<typename ActuatorModel>
     struct RobotJoint
     {
         int64_t parent_link_index;
@@ -570,9 +576,10 @@ namespace simplelinked_robot_helpers
         Eigen::Affine3d joint_transform;
         Eigen::Vector3d joint_axis;
         SimpleJointModel joint_model;
-        JointControllerGroup joint_controller;
+        JointControllerGroup<ActuatorModel> joint_controller;
     };
 
+    template<typename ActuatorModel>
     class SimpleLinkedRobot
     {
     protected:
@@ -583,7 +590,7 @@ namespace simplelinked_robot_helpers
         Eigen::Affine3d base_transform_;
         Eigen::MatrixXi self_collision_map_;
         std::vector<RobotLink> links_;
-        std::vector<RobotJoint> joints_;
+        std::vector<RobotJoint<ActuatorModel>> joints_;
 
         inline void UpdateTransforms()
         {
@@ -594,7 +601,7 @@ namespace simplelinked_robot_helpers
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
                 // Get the current joint
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Get the parent link
                 const RobotLink& parent_link = links_[current_joint.parent_link_index];
                 // Get the child link
@@ -638,7 +645,7 @@ namespace simplelinked_robot_helpers
             size_t config_idx = 0u;
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                RobotJoint& current_joint = joints_[idx];
+                RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (current_joint.joint_model.IsFixed())
                 {
@@ -661,7 +668,7 @@ namespace simplelinked_robot_helpers
         {
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                RobotJoint& current_joint = joints_[idx];
+                RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 current_joint.joint_controller.controller.Zero();
             }
         }
@@ -671,7 +678,7 @@ namespace simplelinked_robot_helpers
             size_t num_active_joints = 0u;
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (!(current_joint.joint_model.IsFixed()))
                 {
@@ -683,7 +690,7 @@ namespace simplelinked_robot_helpers
 
     public:
 
-        static inline bool SanityCheckRobotModel(const std::vector<RobotLink>& links, const std::vector<RobotJoint>& joints)
+        static inline bool SanityCheckRobotModel(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints)
         {
             if (links.size() != (joints.size() + 1))
             {
@@ -694,7 +701,7 @@ namespace simplelinked_robot_helpers
             int64_t last_child_index = 0u;
             for (size_t idx = 0; idx < joints.size(); idx++)
             {
-                const RobotJoint& current_joint = joints[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints[idx];
                 if (current_joint.parent_link_index != last_child_index)
                 {
                     std::cerr << "Parent link index must be the same as the previous joint's child link index" << std::endl;
@@ -793,7 +800,7 @@ namespace simplelinked_robot_helpers
             return max_motion;
         }
 
-        inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
+        inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
         {
             base_transform_ = base_transform;
             // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
@@ -811,7 +818,7 @@ namespace simplelinked_robot_helpers
             initialized_ = true;
         }
 
-        inline SimpleLinkedRobot(const std::vector<RobotLink>& links, const std::vector<RobotJoint>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
+        inline SimpleLinkedRobot(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
         {
             base_transform_ = Eigen::Affine3d::Identity();
             // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
@@ -891,7 +898,7 @@ namespace simplelinked_robot_helpers
             configuration.reserve(num_active_joints_);
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (current_joint.joint_model.IsFixed())
                 {
@@ -914,7 +921,7 @@ namespace simplelinked_robot_helpers
             configuration.reserve(num_active_joints_);
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (current_joint.joint_model.IsFixed())
                 {
@@ -948,7 +955,7 @@ namespace simplelinked_robot_helpers
             int64_t control_idx = 0;
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                RobotJoint& current_joint = joints_[idx];
+                RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (current_joint.joint_model.IsFixed())
                 {
@@ -975,7 +982,7 @@ namespace simplelinked_robot_helpers
             int64_t input_idx = 0u;
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (current_joint.joint_model.IsFixed())
                 {
@@ -1005,7 +1012,7 @@ namespace simplelinked_robot_helpers
             int64_t input_idx = 0u;
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Skip fixed joints
                 if (current_joint.joint_model.IsFixed())
                 {
@@ -1062,7 +1069,7 @@ namespace simplelinked_robot_helpers
             for (size_t idx = 0; idx < joints_.size(); idx++)
             {
                 // Get the current joint
-                const RobotJoint& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Get the child link
                 const RobotLink& child_link = links_[current_joint.child_link_index];
                 // Get the transform of the current joint
