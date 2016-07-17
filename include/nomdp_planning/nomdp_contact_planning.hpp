@@ -993,6 +993,12 @@ namespace nomdp_contact_planning
 #ifdef USE_ROS
         inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait, const bool show_tracks) const
         {
+            // Buffer for a teensy bit of time
+            for (size_t iter = 0; iter < 100; iter++)
+            {
+                ros::spinOnce();
+                ros::Duration(0.005).sleep();
+            }
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
             std::vector<int64_t> policy_execution_step_counts(num_executions, 0u);
             std::vector<double> policy_execution_times(num_executions, -0.0);
@@ -1000,10 +1006,11 @@ namespace nomdp_contact_planning
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
-                const ros::Time start_time = ros::Time::now();
+                const double start_time = ros::Time::now().toSec();
                 std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, goal, move_fn, exec_time_limit, display_pub, wait_for_user);
-                const ros::Time end_time = ros::Time::now();
-                const double execution_seconds = end_time.toSec() - start_time.toSec();
+                const double end_time = ros::Time::now().toSec();
+                std::cout << "Started policy exec @ " << start_time << " finished policy exec @ " << end_time << std::endl;
+                const double execution_seconds = end_time - start_time;
                 policy_execution_times[idx] = execution_seconds;
                 particle_executions[idx] = particle_execution.first;
                 policy = particle_execution.second.first;
@@ -1012,11 +1019,11 @@ namespace nomdp_contact_planning
                 if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
-                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully, " << reached_goal << " successful so far" << std::endl;
+                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully in " << execution_seconds << " seconds, " << reached_goal << " successful so far" << std::endl;
                 }
                 else
                 {
-                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " unsuccessfully, " << reached_goal << " successful so far" << std::endl;
+                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " unsuccessfully in " << execution_seconds << " seconds, " << reached_goal << " successful so far" << std::endl;
                 }
             }
             // Draw the trajectory in a pretty way
@@ -1472,16 +1479,22 @@ namespace nomdp_contact_planning
             const std::vector<int64_t>& previous_index_map = policy.GetRawPreviousIndexMap();
             assert(policy_graph.GetNodesImmutable().size() == previous_index_map.size());
             visualization_msgs::MarkerArray policy_markers;
+//            std_msgs::ColorRGBA forward_color;
+//            forward_color.r = 0.0f;
+//            forward_color.g = 1.0f;
+//            forward_color.b = 0.0f;
+//            forward_color.a = 1.0f;
+//            std_msgs::ColorRGBA backward_color;
+//            backward_color.r = 1.0f;
+//            backward_color.g = 0.0f;
+//            backward_color.b = 0.0f;
+//            backward_color.a = 1.0f;
             std_msgs::ColorRGBA forward_color;
             forward_color.r = 0.0f;
-            forward_color.g = 1.0f;
+            forward_color.g = 0.0f;
             forward_color.b = 0.0f;
             forward_color.a = 1.0f;
-            std_msgs::ColorRGBA backward_color;
-            backward_color.r = 1.0f;
-            backward_color.g = 0.0f;
-            backward_color.b = 0.0f;
-            backward_color.a = 1.0f;
+            std_msgs::ColorRGBA backward_color = forward_color;
             std_msgs::ColorRGBA blue_color;
             blue_color.r = 0.0f;
             blue_color.g = 0.0f;
@@ -1515,8 +1528,8 @@ namespace nomdp_contact_planning
                     edge_marker.type = visualization_msgs::Marker::ARROW;
                     edge_marker.header.frame_id = simulator_.GetFrame();
                     edge_marker.scale.x = simulator_.GetResolution();
-                    edge_marker.scale.y = simulator_.GetResolution();
-                    edge_marker.scale.z = simulator_.GetResolution();
+                    edge_marker.scale.y = simulator_.GetResolution() * 3.0;
+                    edge_marker.scale.z = simulator_.GetResolution() * 2.0;
                     edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
                     if (current_index < previous_index)
                     {
@@ -1573,8 +1586,8 @@ namespace nomdp_contact_planning
                 edge_marker.type = visualization_msgs::Marker::ARROW;
                 edge_marker.header.frame_id = simulator_.GetFrame();
                 edge_marker.scale.x = simulator_.GetResolution();
-                edge_marker.scale.y = simulator_.GetResolution();
-                edge_marker.scale.z = simulator_.GetResolution();
+                edge_marker.scale.y = simulator_.GetResolution() * 3.0;
+                edge_marker.scale.z = simulator_.GetResolution() * 2.0;
                 edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
                 edge_marker.color = color;
                 edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(previous_point));

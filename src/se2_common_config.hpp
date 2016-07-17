@@ -37,7 +37,7 @@ namespace se2_common_config
         options.step_size = 15.0 * options.environment_resolution;
         options.goal_probability_threshold = 0.51;
         options.goal_distance_threshold = 2.0 * options.environment_resolution;
-        options.signature_matching_threshold = 0.99;
+        options.signature_matching_threshold = 0.75;
         options.distance_clustering_threshold = 15.0 * options.environment_resolution;
         options.feasibility_alpha = 0.75;
         options.variance_alpha = 0.75;
@@ -50,8 +50,8 @@ namespace se2_common_config
         options.use_spur_actions = true;
         options.max_exec_actions = 1000u;
         options.max_policy_exec_time = 300.0;
-        options.num_policy_simulations = 1u;
-        options.num_policy_executions = 1u;
+        options.num_policy_simulations = 10u;
+        options.num_policy_executions = 0u;
         options.policy_action_attempt_count = 100u;
         options.enable_contact_manifold_target_adjustment = false;
         options.planner_log_file = "/tmp/se2_planner_log.txt";

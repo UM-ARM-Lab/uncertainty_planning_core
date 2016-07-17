@@ -107,7 +107,7 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
     const simplese2_robot_helpers::SimpleSE2BaseSampler sampler = se2_common_config::GetSampler();
     const simplese2_robot_helpers::ROBOT_CONFIG robot_config = se2_common_config::GetDefaultRobotConfig(options);
     const simplese2_robot_helpers::SimpleSE2Robot robot = se2_common_config::GetRobot(robot_config);
-    nomdp_contact_planning::NomdpPlanningSpace<simplese2_robot_helpers::SimpleSE2Robot, simplese2_robot_helpers::SimpleSE2BaseSampler, Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::EigenMatrixD31Serializer, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, simplese2_robot_helpers::SimpleSE2Interpolator, std::allocator<Eigen::Matrix<double, 3, 1>>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se2_maze_blocked", options.environment_resolution);
+    nomdp_contact_planning::NomdpPlanningSpace<simplese2_robot_helpers::SimpleSE2Robot, simplese2_robot_helpers::SimpleSE2BaseSampler, Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::EigenMatrixD31Serializer, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, simplese2_robot_helpers::SimpleSE2Interpolator, std::allocator<Eigen::Matrix<double, 3, 1>>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se2_maze", options.environment_resolution);
     // Load the policy
     try
     {
@@ -118,7 +118,7 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
         std::cout << "Press ENTER to simulate policy..." << std::endl;
         std::cin.get();
     #endif
-        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.001, false);
+        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.001, true);
         const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
         const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second.first;
         std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;

@@ -55,7 +55,7 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
         std::map<std::string, double> complete_policy_stats;
         std::cout << "Press ENTER to simulate policy..." << std::endl;
         std::cin.get();
-        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.1, false);
+        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.005, false);
         const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
         const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second.first;
         std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;

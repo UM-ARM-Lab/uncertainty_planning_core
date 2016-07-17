@@ -582,7 +582,7 @@ namespace nomdp_planning_tools
                             const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
                             const double& x = location.x();
                             const double& y = location.y();
-                            const double& z = location.z();
+                            //const double& z = location.z();
                             // Make some of the exterior walls opaque
                             if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
                             {
@@ -851,10 +851,10 @@ namespace nomdp_planning_tools
             else if (environment_id == "baxter_env")
             {
                 double grid_x_size = 2.0;
-                double grid_y_size = 2.0;
+                double grid_y_size = 2.5;
                 double grid_z_size = 2.0;
                 // The grid origin is the minimum point, with identity rotation
-                Eigen::Translation3d grid_origin_translation(-0.5, -1.5, -0.5);
+                Eigen::Translation3d grid_origin_translation(-0.5, -2.0, -0.5);
                 Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
@@ -873,20 +873,48 @@ namespace nomdp_planning_tools
                             // Buffer
                             if (x_idx <= 16 || y_idx <= 16 || z_idx <= 16 || x_idx >= (grid.GetNumXCells() - 16)  || y_idx >= (grid.GetNumYCells() - 16) || z_idx >= (grid.GetNumZCells() - 16))
                             {
-                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
-                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                                // Set the object we belong to
+                                if (z_idx <= 16)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                                }
                             }
-                            // Set the object we belong to
-                            if (z_idx < 16)
+                            else
                             {
-                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                grid.Set(x_idx, y_idx, z_idx, object_cell);
-                            }
-                            // Set the free-space convex segment we belong to (if necessary)
-                            else if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
-                            {
-                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL free_cell(0.0f, 0u, 0u, 1u);
-                                grid.Set(x_idx, y_idx, z_idx, free_cell);
+                                if (x > 0.4 && x <= 0.6 && y <= -0.9 && y > -1.1 && z <= 0.5)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 2u, 0u, 1u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else
+                                {
+                                    if (x <= 0.4)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                    }
+                                    else if (x > 0.6)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                    }
+                                    if (y > -0.9)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                    }
+                                    else if (y <= -1.1)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                    }
+                                    if (z > 0.5)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                    }
+                                }
                             }
                         }
                     }

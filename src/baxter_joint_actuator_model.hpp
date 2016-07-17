@@ -28,10 +28,10 @@ namespace baxter_joint_actuator_model
 {
     typedef std::vector<std::pair<std::pair<double, double>, std::vector<double>>> JointUncertaintySampleModel;
 
-    inline std::vector<double> DownsampleBin(const std::vector<double>& raw_bin, const size_t downsampled_size)
+    inline std::vector<double> DownsampleBin(const std::vector<double>& raw_bin, const uint32_t downsampled_size)
     {
         std::vector<double> downsampled_bin(downsampled_size, 0.0);
-        for (size_t idx = 0; idx < downsampled_size; idx++)
+        for (uint32_t idx = 0; idx < downsampled_size; idx++)
         {
             std::random_device rd;
             std::mt19937 rng(rd());
@@ -59,7 +59,7 @@ namespace baxter_joint_actuator_model
         assert(false);
     }
 
-    inline std::shared_ptr<JointUncertaintySampleModel> LoadModel(const std::string& model_file, const double actuator_limit)
+    inline std::shared_ptr<JointUncertaintySampleModel> LoadModel(const std::string& model_file, const double actuator_limit, const uint32_t num_bins, const uint32_t bin_elements)
     {
         // Read the CSV file
         std::ifstream indata;
@@ -85,9 +85,9 @@ namespace baxter_joint_actuator_model
         std::cout << "Loaded " << raw_data.size() << " data points from " << model_file << std::endl;
         // Make the empty bins
         std::shared_ptr<JointUncertaintySampleModel> bins(new JointUncertaintySampleModel());
-        const double bin_size = (actuator_limit * 2.0) / 200.0;
+        const double bin_size = (actuator_limit * 2.0) / (double)num_bins;
         double previous_bin_upper = -actuator_limit;
-        for (size_t idx = 0; idx < 200; idx++)
+        for (size_t idx = 0; idx < num_bins; idx++)
         {
             double bin_lower = previous_bin_upper;
             if (idx == 0)
@@ -96,7 +96,7 @@ namespace baxter_joint_actuator_model
             }
             // Make sure the last bin's bounds are right
             double bin_upper = previous_bin_upper + bin_size;
-            if (idx >= 199)
+            if (idx >= (num_bins - 1))
             {
                 bin_upper = INFINITY;
             }
@@ -120,9 +120,9 @@ namespace baxter_joint_actuator_model
         {
             std::pair<std::pair<double, double>, std::vector<double>>& bin_contents = (*bins)[idx];
             std::vector<double>& bin_items = bin_contents.second;
-            bin_contents.second = DownsampleBin(bin_items, 100);
+            bin_contents.second = DownsampleBin(bin_items, bin_elements);
         }
-        std::cout << "Downsampled each bin to 100 examples" << std::endl;
+        std::cout << "Downsampled each bin to " << bin_elements << " examples" << std::endl;
         // Return the model
         return bins;
     }

@@ -32,7 +32,7 @@ namespace se3_common_config
         common_config::OPTIONS options;
         options.clustering_type = nomdp_contact_planning::CONVEX_REGION_SIGNATURE;
         options.environment_resolution = 0.125;
-        options.planner_time_limit = 600.0;
+        options.planner_time_limit = 300.0;
         options.goal_bias = 0.1;
         options.step_size = 24.0 * options.environment_resolution;
         options.goal_probability_threshold = 0.51;
@@ -41,7 +41,7 @@ namespace se3_common_config
         options.distance_clustering_threshold = 15.0 * options.environment_resolution;
         options.feasibility_alpha = 0.75;
         options.variance_alpha = 0.75;
-        options.actuator_error = options.environment_resolution * 1.0;
+        options.actuator_error = 0.25;
         options.sensor_error = 0.0;
         options.edge_attempt_count = 50u;
         options.num_particles = 24u;
@@ -90,8 +90,8 @@ namespace se3_common_config
     inline std::pair<Eigen::Affine3d, Eigen::Affine3d> GetStartAndGoal()
     {
         // Define the goals of the plan
-        const Eigen::Affine3d start = Eigen::Translation3d(4.5, 0.5, 2.5) * Eigen::Quaterniond::Identity();
-        const Eigen::Affine3d goal = Eigen::Translation3d(5.5, 9.5, 7.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d start = Eigen::Translation3d(4.375, 0.625, 2.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d goal = Eigen::Translation3d(5.625, 9.375, 7.5) * Eigen::Quaterniond::Identity();
         return std::make_pair(start, goal);
     }
 
