@@ -565,7 +565,7 @@ namespace nomdp_planning_tools
             {
                 double grid_x_size = 12.0;
                 double grid_y_size = 12.0;
-                double grid_z_size = 12.0;
+                double grid_z_size = 6.0;
                 // The grid origin is the minimum point, with identity rotation
                 Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
                 Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();

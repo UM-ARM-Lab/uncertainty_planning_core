@@ -76,7 +76,7 @@ void set_uncertainty(const double max_translation_error, const double max_rotati
 {
     thruster_robot_controllers::SetActuationErrorRequest req;
     req.translation_actuator_error = max_translation_error;
-    req.rotation_actuation_error = max_translation_error; max_rotation_error;
+    req.rotation_actuation_error = max_rotation_error;
     thruster_robot_controllers::SetActuationErrorResponse res;
     if (set_uncertainty_service.call(req, res) == false)
     {

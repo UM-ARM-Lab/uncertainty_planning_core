@@ -92,7 +92,7 @@ namespace se3_common_config
         // Define the goals of the plan
         const Eigen::Affine3d start = Eigen::Translation3d(4.625, 0.375, 2.5) * Eigen::Quaterniond::Identity();
         //const Eigen::Affine3d start = Eigen::Translation3d(9.375, 0.625, 2.5) * Eigen::Quaterniond::Identity();
-        const Eigen::Affine3d goal = Eigen::Translation3d(5.375, 9.625, 7.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d goal = Eigen::Translation3d(5.375, 9.625, 2.5) * Eigen::Quaterniond::Identity();
         return std::make_pair(start, goal);
     }
 
