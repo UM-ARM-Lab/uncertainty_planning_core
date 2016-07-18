@@ -38,7 +38,7 @@ namespace se3_common_config
         options.goal_probability_threshold = 0.51;
         options.goal_distance_threshold = 5.0 * options.environment_resolution;
         options.signature_matching_threshold = 0.75;
-        options.distance_clustering_threshold = 15.0 * options.environment_resolution;
+        options.distance_clustering_threshold = 20.0 * options.environment_resolution; // 15.0 * options.environment_resolution;
         options.feasibility_alpha = 0.75;
         options.variance_alpha = 0.75;
         options.actuator_error = 0.25;
@@ -50,7 +50,7 @@ namespace se3_common_config
         options.use_spur_actions = true;
         options.max_exec_actions = 1000u;
         options.max_policy_exec_time = 300.0;
-        options.num_policy_simulations = 1u;
+        options.num_policy_simulations = 0u;
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
         options.enable_contact_manifold_target_adjustment = false;
@@ -90,17 +90,21 @@ namespace se3_common_config
     inline std::pair<Eigen::Affine3d, Eigen::Affine3d> GetStartAndGoal()
     {
         // Define the goals of the plan
-        const Eigen::Affine3d start = Eigen::Translation3d(4.375, 0.625, 2.5) * Eigen::Quaterniond::Identity();
-        const Eigen::Affine3d goal = Eigen::Translation3d(5.625, 9.375, 7.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d start = Eigen::Translation3d(4.625, 0.375, 2.5) * Eigen::Quaterniond::Identity();
+        //const Eigen::Affine3d start = Eigen::Translation3d(9.375, 0.625, 2.5) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d goal = Eigen::Translation3d(5.375, 9.625, 7.5) * Eigen::Quaterniond::Identity();
         return std::make_pair(start, goal);
     }
 
     inline EigenHelpers::VectorVector3d GetRobotPoints()
     {
         EigenHelpers::VectorVector3d robot_points;
-        const std::vector<double> x_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
-        const std::vector<double> y_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
-        const std::vector<double> z_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
+//        const std::vector<double> x_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
+//        const std::vector<double> y_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
+//        const std::vector<double> z_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
+        const std::vector<double> x_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
+        const std::vector<double> y_pos = {-0.1875, -0.0625, 0.0625, 0.1875};
+        const std::vector<double> z_pos = {-0.4375, -0.3125, -0.1875, -0.0625, 0.0625, 0.1875, 0.3125, 0.4375};
         for (size_t xpdx = 0; xpdx < x_pos.size(); xpdx++)
         {
             for (size_t ypdx = 0; ypdx < y_pos.size(); ypdx++)

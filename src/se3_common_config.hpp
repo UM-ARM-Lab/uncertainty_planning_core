@@ -50,7 +50,7 @@ namespace se3_common_config
         options.use_spur_actions = true;
         options.max_exec_actions = 1000u;
         options.max_policy_exec_time = 300.0;
-        options.num_policy_simulations = 1u;
+        options.num_policy_simulations = 0u;
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
         options.enable_contact_manifold_target_adjustment = false;
@@ -91,8 +91,8 @@ namespace se3_common_config
     inline std::pair<Eigen::Affine3d, Eigen::Affine3d> GetStartAndGoal()
     {
         // Define the goals of the plan
-        const Eigen::Affine3d start = Eigen::Translation3d(9.0, 9.0, 9.0) * Eigen::Quaterniond::Identity();
-        const Eigen::Affine3d goal = Eigen::Translation3d(2.25, 2.25, 0.625) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d goal = Eigen::Translation3d(9.0, 9.0, 9.0) * Eigen::Quaterniond::Identity();
+        const Eigen::Affine3d start = Eigen::Translation3d(2.25, 2.25, 0.625) * Eigen::Quaterniond::Identity();
         return std::make_pair(start, goal);
     }
 

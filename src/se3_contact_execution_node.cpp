@@ -103,7 +103,7 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
         std::cout << "Press ENTER to simulate policy..." << std::endl;
         std::cin.get();
     #endif
-        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, false, 0.001, false);
+        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, true, 0.001, true);
         const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
         const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second.first;
         std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;
@@ -112,10 +112,13 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
         std::cout << "Press ENTER to execute policy..." << std::endl;
         std::cin.get();
     #endif
-        std::cout << "Setting actuation uncertainty..." << std::endl;
-        set_uncertainty(robot_config.max_actuator_noise, robot_config.r_max_actuator_noise, set_uncertainty_service);
+        if (options.num_policy_executions > 0)
+        {
+            std::cout << "Setting actuation uncertainty..." << std::endl;
+            set_uncertainty(robot_config.max_actuator_noise, robot_config.r_max_actuator_noise, set_uncertainty_service);
+        }
         std::function<EigenHelpers::VectorAffine3d(const Eigen::Affine3d&, const bool)> robot_execution_fn = [&] (const Eigen::Affine3d& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot_control_service); };
-        const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_debug_publisher, false, 0.001, false);
+        const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_debug_publisher, false, 0.001, true);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
         const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second.first;
         const std::vector<double> policy_execution_times = policy_execution_results.second.second.second;

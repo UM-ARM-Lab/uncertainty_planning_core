@@ -599,27 +599,27 @@ namespace nomdp_planning_tools
                                 // Set the interior 10x10x10 meter area
                                 if (x > 1.0 && x <= 3.0 && y > 1.0 && y <= 3.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 2u, 0u, 0u);
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
                                 else if (x > 5.0 && x <= 8.0 && y > 0.0 && y <= 2.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 3u, 0u, 0u);
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
                                 else if (x > 4.0 && x <= 9.0 && y > 3.0 && y <= 5.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 4u, 0u, 0u);
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
                                 else if (x > 0.0 && x <= 2.0 && y > 4.0 && y <= 7.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 5u, 0u, 0u);
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
                                 else if (x > 3.0 && x <= 6.0&& y > 6.0 && y <= 8.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 6u, 0u, 0u);
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
                                 else if (x > 0.0 && x <= 5.0 && y > 9.0 && y <= 10.0)
@@ -629,7 +629,7 @@ namespace nomdp_planning_tools
                                 }
                                 else if (x > 8.0 && x <= 10.0 && y > 6.0 && y <= 10.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 8u, 0u, 0u);
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
                                 else
@@ -1165,10 +1165,10 @@ namespace nomdp_planning_tools
                                 grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
                             }
                             // Re-add the obstacle in the middle
-                            if (x > 3.5 && y > 4.75 && x <= 6.5 && y <= 5.25)
+                            if (x > 7.0 && y > 4.75 && x <= 9.5 && y <= 5.25)
                             {
                                 grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
-                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 2u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 7u;
                             }
                         }
                     }
