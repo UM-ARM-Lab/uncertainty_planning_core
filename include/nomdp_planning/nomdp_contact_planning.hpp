@@ -1922,7 +1922,7 @@ namespace nomdp_contact_planning
             // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
             std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return ComputeConvexRegionSignatureDistance(particle_region_signatures[idx1], particle_region_signatures[idx2]); };
             const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(initial_cluster, distance_fn);
-            std::cout << "Region signature distance matrix " << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
+            //std::cout << "Region signature distance matrix " << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
             // Check the max element of the distance matrix
             const double max_distance = distance_matrix.maxCoeff();
             if (max_distance <= signature_matching_threshold_)
@@ -2216,7 +2216,7 @@ namespace nomdp_contact_planning
                 }
                 else
                 {
-                    std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
+                    //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
                     cluster_fallback_calls_++;
                     //std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " exceeding distance threshold " << distance_threshold << ", performing additional hierarchical clustering" << std::endl;
                     const std::vector<std::vector<size_t>> new_clustering = simple_hierarchical_clustering::SimpleHierarchicalClustering::Cluster(current_cluster, distance_matrix, distance_threshold).first;

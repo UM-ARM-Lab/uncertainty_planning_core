@@ -565,7 +565,7 @@ namespace nomdp_planning_tools
             {
                 double grid_x_size = 12.0;
                 double grid_y_size = 12.0;
-                double grid_z_size = 6.0;
+                double grid_z_size = 12.0;
                 // The grid origin is the minimum point, with identity rotation
                 Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
                 Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
@@ -694,6 +694,116 @@ namespace nomdp_planning_tools
                                     if (x > 2.0 && x <= 4.0 && y > 3.0 && y <= 6.0)
                                     {
                                         grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(15u);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return grid;
+            }
+            else if (environment_id == "se3_cluttered_new")
+            {
+                double grid_x_size = 12.0;
+                double grid_y_size = 12.0;
+                double grid_z_size = 6.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            //const double& z = location.z();
+                            // Make some of the exterior walls opaque
+                            if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
+                            {
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 1u, 0u, 0u);
+                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                            }
+                            // Transparent top
+                            else if (z_idx >= (grid.GetNumZCells() - 8))
+                            {
+                                const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
+                                grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                            }
+                            else
+                            {
+                                // Set the interior 10x10x10 meter area
+                                if (x > 0.0 && x <= 4.0 && y > 2.0 && y <= 3.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 6.0 && x <= 10.0 && y > 2.0 && y <= 3.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 0.0 && x <= 4.0 && y > 7.0 && y <= 8.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 6.0 && x <= 10.0 && y > 7.0 && y <= 8.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else if (x > 2.0 && x <= 8.0 && y > 4.0 && y <= 6.0)
+                                {
+                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
+                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                }
+                                else
+                                {
+                                    // Set the convex regions
+                                    if (x > 4 && x <= 6.0)
+                                    {
+                                        if (y <= 4.0)
+                                        {
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                        }
+                                        else if (y > 6.0)
+                                        {
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                        }
+                                    }
+                                    if (y > 3 && y <= 7.0)
+                                    {
+                                        if (x <= 2.0)
+                                        {
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                        }
+                                        else if (x > 8.0)
+                                        {
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                        }
+                                    }
+                                    if (y > 6.0 && y <= 7.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                    }
+                                    if (y > 3.0 && y <= 4.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(6u);
+                                    }
+                                    if (y <= 2.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(7u);
+                                    }
+                                    if (y > 8.0)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(8u);
                                     }
                                 }
                             }
@@ -1392,6 +1502,10 @@ namespace nomdp_planning_tools
                 ;
             }
             else if (environment_id == "noisy_arm_cluttered")
+            {
+                ;
+            }
+            else if (environment_id == "se3_cluttered_new")
             {
                 ;
             }
