@@ -13,9 +13,9 @@
 #include <arc_utilities/voxel_grid.hpp>
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <nomdp_planning/simple_pid_controller.hpp>
-#include <nomdp_planning/simple_uncertainty_models.hpp>
-#include <nomdp_planning/nomdp_planner_state.hpp>
+#include <uncertainty_planning_core/simple_pid_controller.hpp>
+#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
+#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
 
 #ifndef SIMPLE_PARTICLE_CONTACT_SIMULATOR_HPP
 #define SIMPLE_PARTICLE_CONTACT_SIMULATOR_HPP
@@ -55,7 +55,7 @@ namespace std
     };
 }
 
-namespace nomdp_planning_tools
+namespace uncertainty_planning_tools
 {
     template<typename Configuration, typename ConfigAlloc=std::allocator<Configuration>>
     struct ForwardSimulationContactResolverStepTrace

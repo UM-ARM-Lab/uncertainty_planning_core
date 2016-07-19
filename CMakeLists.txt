@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(nomdp_planning)
+project(uncertainty_planning_core)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -82,7 +82,7 @@ set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -Wall -We
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINKER_FLAGS}")
 
-set(NOMDP_CORE_SOURCES
+set(UNCERTAINTY_PLANNING_CORE_SOURCES
     include/${PROJECT_NAME}/nomdp_planner_state.hpp
     include/${PROJECT_NAME}/simple_pid_controller.hpp
     include/${PROJECT_NAME}/simple_uncertainty_models.hpp
@@ -91,9 +91,9 @@ set(NOMDP_CORE_SOURCES
     include/${PROJECT_NAME}/execution_policy.hpp)
 
 # Robot-type specific sources
-set(LINKED_SOURCES ${NOMDP_CORE_SOURCES} include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp)
-set(SE3_SOURCES ${NOMDP_CORE_SOURCES} include/${PROJECT_NAME}/simplese3_robot_helpers.hpp)
-set(SE2_SOURCES ${NOMDP_CORE_SOURCES} include/${PROJECT_NAME}/simplese2_robot_helpers.hpp)
+set(LINKED_SOURCES ${UNCERTAINTY_PLANNING_CORE_SOURCES} include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp)
+set(SE3_SOURCES ${UNCERTAINTY_PLANNING_CORE_SOURCES} include/${PROJECT_NAME}/simplese3_robot_helpers.hpp)
+set(SE2_SOURCES ${UNCERTAINTY_PLANNING_CORE_SOURCES} include/${PROJECT_NAME}/simplese2_robot_helpers.hpp)
 
 # Planning executable sources
 set(LINKED_PLANNER_SOURCES ${LINKED_SOURCES} src/common_config.hpp src/baxter_joint_actuator_model.hpp src/baxter_linked_common_config.hpp src/linked_contact_planning_node.cpp)
@@ -108,26 +108,6 @@ set(SE3_EXECUTION_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_common_co
 set(SE3_CLUTTERED_EXECUTION_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_cluttered_common_config.hpp src/se3_cluttered_contact_execution_node.cpp)
 set(SE3_NEW_CLUTTERED_EXECUTION_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_new_cluttered_common_config.hpp src/se3_new_cluttered_contact_execution_node.cpp)
 set(SE2_EXECUTION_SOURCES ${SE2_SOURCES} src/common_config.hpp src/se2_common_config.hpp src/se2_contact_execution_node.cpp)
-
-#add_executable(se2_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
-#add_dependencies(se2_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-#target_link_libraries(se2_simulator_test_node ${catkin_LIBRARIES} rt)
-#set_target_properties(se2_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_SE2")
-
-#add_executable(r3_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
-#add_dependencies(r3_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-#target_link_libraries(r3_simulator_test_node ${catkin_LIBRARIES} rt)
-#set_target_properties(r3_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_R3")
-
-#add_executable(sixdof_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
-#add_dependencies(sixdof_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-#target_link_libraries(sixdof_simulator_test_node ${catkin_LIBRARIES} rt)
-#set_target_properties(sixdof_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_6DOF")
-
-#add_executable(linked_simulator_test_node ${NOMDP_SIMULATOR_TEST_SOURCES})
-#add_dependencies(linked_simulator_test_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-#target_link_libraries(linked_simulator_test_node ${catkin_LIBRARIES} rt)
-#set_target_properties(linked_simulator_test_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -DUSE_LINKED")
 
 ###################################################################################################################
 # ROS-ENABLED VERSIONS
@@ -237,50 +217,3 @@ add_dependencies(se2_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT
 target_link_libraries(se2_contact_execution_node ${catkin_LIBRARIES} rt)
 set_target_properties(se2_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
 
-#############
-## Install ##
-#############
-
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
-# install(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark executables and/or libraries for installation
-# install(TARGETS deformable_ompl deformable_ompl_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
-
-## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
-
-#############
-## Testing ##
-#############
-
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_deformable_ompl.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
-
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)

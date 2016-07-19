@@ -16,10 +16,10 @@
 #include "arc_utilities/pretty_print.hpp"
 #include "arc_utilities/voxel_grid.hpp"
 #include "arc_utilities/simple_rrt_planner.hpp"
-#include "nomdp_planning/simple_pid_controller.hpp"
-#include "nomdp_planning/simple_uncertainty_models.hpp"
-#include "nomdp_planning/nomdp_contact_planning.hpp"
-#include "nomdp_planning/simplese3_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_pid_controller.hpp"
+#include "uncertainty_planning_core/simple_uncertainty_models.hpp"
+#include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
+#include "uncertainty_planning_core/simplese3_robot_helpers.hpp"
 #include "se3_new_cluttered_common_config.hpp"
 
 #ifdef USE_ROS
@@ -27,7 +27,7 @@
     #include <visualization_msgs/MarkerArray.h>
 #endif
 
-using namespace nomdp_contact_planning;
+using namespace uncertainty_contact_planning;
 
 #ifdef USE_ROS
 void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher)
@@ -43,7 +43,7 @@ void peg_in_hole_env_se3(int argc, char** argv)
     const simplese3_robot_helpers::SimpleSE3BaseSampler sampler = se3_common_config::GetSampler();
     const simplese3_robot_helpers::ROBOT_CONFIG robot_config = se3_common_config::GetDefaultRobotConfig(options);
     const simplese3_robot_helpers::SimpleSE3Robot robot = se3_common_config::GetRobot(robot_config);
-    NomdpPlanningSpace<simplese3_robot_helpers::SimpleSE3Robot, simplese3_robot_helpers::SimpleSE3BaseSampler, Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, simplese3_robot_helpers::SimpleSE3Averager, simplese3_robot_helpers::SimpleSE3Distancer, simplese3_robot_helpers::SimpleSE3DimDistancer, simplese3_robot_helpers::SimpleSE3Interpolator, Eigen::aligned_allocator<Eigen::Affine3d>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se3_cluttered_new", options.environment_resolution);
+    UncertaintyPlanningSpace<simplese3_robot_helpers::SimpleSE3Robot, simplese3_robot_helpers::SimpleSE3BaseSampler, Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, simplese3_robot_helpers::SimpleSE3Averager, simplese3_robot_helpers::SimpleSE3Distancer, simplese3_robot_helpers::SimpleSE3DimDistancer, simplese3_robot_helpers::SimpleSE3Interpolator, Eigen::aligned_allocator<Eigen::Affine3d>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se3_cluttered_new", options.environment_resolution);
     // Plan
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
 #ifdef USE_ROS

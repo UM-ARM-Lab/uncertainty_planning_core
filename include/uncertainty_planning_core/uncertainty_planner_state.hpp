@@ -10,13 +10,13 @@
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 
-#ifndef NOMDP_PLANNER_STATE_HPP
-#define NOMDP_PLANNER_STATE_HPP
+#ifndef UNCERTAINTY_PLANNER_STATE_HPP
+#define UNCERTAINTY_PLANNER_STATE_HPP
 
-namespace nomdp_planning_tools
+namespace uncertainty_planning_tools
 {
     template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
-    class NomdpPlannerState
+    class UncertaintyPlannerState
     {
     protected:
 
@@ -68,7 +68,7 @@ namespace nomdp_planning_tools
             return (uint64_t)std::hash<std::string>()(GetQualifiedTypeID());
         }
 
-        static inline uint64_t Serialize(const NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& state, std::vector<uint8_t>& buffer)
+        static inline uint64_t Serialize(const UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& state, std::vector<uint8_t>& buffer)
         {
             return state.SerializeSelf(buffer);
         }
@@ -110,9 +110,9 @@ namespace nomdp_planning_tools
             return bytes_written;
         }
 
-        static inline std::pair<NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        static inline std::pair<UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> temp_state;
+            UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> temp_state;
             const uint64_t bytes_read = temp_state.DeserializeSelf(buffer, current);
             return std::make_pair(temp_state, bytes_read);
         }
@@ -208,7 +208,7 @@ namespace nomdp_planning_tools
             return bytes_read;
         }
 
-        inline NomdpPlannerState(const Configuration& expectation)
+        inline UncertaintyPlannerState(const Configuration& expectation)
         {
             state_id_ = 0u;
             step_size_ = 0.0;
@@ -233,7 +233,7 @@ namespace nomdp_planning_tools
             goal_Pfeasibility_ = 0.0;
         }
 
-        inline NomdpPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
+        inline UncertaintyPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
         {
             state_id_ = state_id;
             step_size_ = step_size;
@@ -258,7 +258,7 @@ namespace nomdp_planning_tools
             goal_Pfeasibility_ = 0.0;
         }
 
-        inline NomdpPlannerState() : initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), goal_Pfeasibility_(0.0) {}
+        inline UncertaintyPlannerState() : initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), goal_Pfeasibility_(0.0) {}
 
         inline bool IsInitialized() const
         {
@@ -634,10 +634,10 @@ namespace nomdp_planning_tools
 }
 
 template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
-std::ostream& operator<<(std::ostream& strm, const nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& state)
+std::ostream& operator<<(std::ostream& strm, const uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& state)
 {
     strm << "Nomdp Planner State (QualifiedTypeID: " << state.GetQualifiedTypeID() << ") - Expectation: " << PrettyPrint::PrettyPrint(state.GetExpectation()) << " Command: " << PrettyPrint::PrettyPrint(state.GetCommand()) << " Variance: " << state.GetVariance() << " Space-independent Variance: " << state.GetSpaceIndependentVariance() << " Raw Pfeasibility(parent->this): " << state.GetRawEdgePfeasibility() << " Effective Pfeasibility(parent->this): " << state.GetEffectiveEdgePfeasibility() << " Raw Pfeasibility(this->parent): " << state.GetReverseEdgePfeasibility() << " Pfeasibility(start->this): " << state.GetMotionPfeasibility();
     return strm;
 }
 
-#endif // NOMDP_PLANNER_STATE_HPP
+#endif // UNCERTAINTY_PLANNER_STATE_HPP

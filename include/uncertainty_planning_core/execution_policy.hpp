@@ -9,7 +9,7 @@
 #include <queue>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/simple_rrt_planner.hpp>
-#include <nomdp_planning/nomdp_planner_state.hpp>
+#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
 
 #ifdef ENABLE_PARALLEL
     #include <omp.h>
@@ -621,7 +621,7 @@ namespace execution_policy
     private:
 
         // Typedef so we don't hate ourselves
-        typedef nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
         typedef simple_rrt_planner::SimpleRRTPlannerState<NomdpPlanningState, std::allocator<NomdpPlanningState>> NomdpPlanningTreeState;
         typedef std::vector<NomdpPlanningTreeState> NomdpPlanningTree;
         typedef GraphNode<NomdpPlanningState, std::allocator<NomdpPlanningState>> PolicyGraphNode;
@@ -841,7 +841,7 @@ namespace execution_policy
     protected:
 
         // Typedef so we don't hate ourselves
-        typedef nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
         typedef simple_rrt_planner::SimpleRRTPlannerState<NomdpPlanningState, std::allocator<NomdpPlanningState>> NomdpPlanningTreeState;
         typedef std::vector<NomdpPlanningTreeState> NomdpPlanningTree;
         typedef GraphNode<NomdpPlanningState, std::allocator<NomdpPlanningState>> PolicyGraphNode;
@@ -1649,14 +1649,14 @@ namespace execution_policy
 template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
 std::ostream& operator<<(std::ostream& strm, const execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DimDistanceFn, ConfigAlloc>& policy)
 {
-    const std::vector<simple_rrt_planner::SimpleRRTPlannerState<nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>>>& raw_policy_tree = policy.GetRawPolicy();
+    const std::vector<simple_rrt_planner::SimpleRRTPlannerState<uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>>>& raw_policy_tree = policy.GetRawPolicy();
     strm << "Execution Policy - Policy: ";
     for (size_t idx = 0; idx < raw_policy_tree.size(); idx++)
     {
-        const simple_rrt_planner::SimpleRRTPlannerState<nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>>& policy_tree_state = raw_policy_tree[idx];
+        const simple_rrt_planner::SimpleRRTPlannerState<uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>>& policy_tree_state = raw_policy_tree[idx];
         const int64_t parent_index = policy_tree_state.GetParentIndex();
         const std::vector<int64_t>& child_indices = policy_tree_state.GetChildIndices();
-        const nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& policy_state = policy_tree_state.GetValueImmutable();
+        const uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& policy_state = policy_tree_state.GetValueImmutable();
         strm << "\nState # " << idx << " with parent " << parent_index << " and children " << PrettyPrint::PrettyPrint(child_indices, true) << " - value: " << PrettyPrint::PrettyPrint(policy_state);
     }
     return strm;

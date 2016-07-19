@@ -16,10 +16,10 @@
 #include "arc_utilities/pretty_print.hpp"
 #include "arc_utilities/voxel_grid.hpp"
 #include "arc_utilities/simple_rrt_planner.hpp"
-#include "nomdp_planning/simple_pid_controller.hpp"
-#include "nomdp_planning/simple_uncertainty_models.hpp"
-#include "nomdp_planning/nomdp_contact_planning.hpp"
-#include "nomdp_planning/simplelinked_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_pid_controller.hpp"
+#include "uncertainty_planning_core/simple_uncertainty_models.hpp"
+#include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
+#include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
 #include "baxter_linked_common_config.hpp"
 
 #ifdef USE_ROS
@@ -27,7 +27,7 @@
     #include <visualization_msgs/MarkerArray.h>
 #endif
 
-using namespace nomdp_contact_planning;
+using namespace uncertainty_contact_planning;
 
 #ifdef USE_ROS
 void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher)
@@ -44,7 +44,7 @@ void peg_in_hole_env_linked(int argc, char** argv)
     const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = linked_common_config::GetBaseTransform();
     const simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel> robot = linked_common_config::GetRobot(base_transform, robot_config);
-    NomdpPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, linked_common_config::SimpleLinkedDistancer, linked_common_config::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "baxter_env", options.environment_resolution);
+    UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, linked_common_config::SimpleLinkedDistancer, linked_common_config::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "baxter_env", options.environment_resolution);
     // Plan
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
 #ifdef USE_ROS

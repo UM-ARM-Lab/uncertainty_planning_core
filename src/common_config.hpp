@@ -4,7 +4,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
-#include <nomdp_planning/nomdp_contact_planning.hpp>
+#include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 
 #ifdef USE_ROS
 #include <ros/ros.h>
@@ -19,7 +19,7 @@ namespace common_config
     {
         enum TYPE {PLANNING, EXECUTION};
 
-        nomdp_contact_planning::SPATIAL_FEATURE_CLUSTERING_TYPE clustering_type;
+        uncertainty_contact_planning::SPATIAL_FEATURE_CLUSTERING_TYPE clustering_type;
         double environment_resolution;
         // Time limits
         double planner_time_limit;
@@ -74,7 +74,7 @@ namespace common_config
             options.sensor_error = nhp.param(std::string("sensor_error"), options.sensor_error);
             options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
             options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
-            options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
+            options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
             options.signature_matching_threshold = nhp.param(std::string("signature_matching_threshold"), options.signature_matching_threshold);
             options.distance_clustering_threshold = nhp.param(std::string("distance_clustering_threshold"), options.distance_clustering_threshold);
             options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
@@ -90,7 +90,7 @@ namespace common_config
             options.policy_log_file = nhp.param(std::string("policy_log_file"), options.policy_log_file);
             options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
             options.executed_policy_file = nhp.param(std::string("executed_policy_file"), options.executed_policy_file);
-            options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
+            options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
             options.signature_matching_threshold = nhp.param(std::string("signature_matching_threshold"), options.signature_matching_threshold);
             options.distance_clustering_threshold = nhp.param(std::string("distance_clustering_threshold"), options.distance_clustering_threshold);
             options.max_exec_actions = (uint32_t)nhp.param(std::string("max_exec_actions"), (int)options.max_exec_actions);
@@ -136,7 +136,7 @@ namespace common_config
             }
             if (argc >= 8)
             {
-                options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(std::string(argv[7]));;
+                options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(std::string(argv[7]));;
             }
             if (argc >= 9)
             {
@@ -183,7 +183,7 @@ namespace common_config
             }
             if (argc >= 8)
             {
-                options.clustering_type = nomdp_contact_planning::ParseSpatialFeatureClusteringType(std::string(argv[7]));;
+                options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(std::string(argv[7]));;
             }
             if (argc >= 9)
             {
@@ -214,7 +214,7 @@ namespace common_config
 std::ostream& operator<<(std::ostream& strm, const common_config::OPTIONS& options)
 {
     strm << "OPTIONS:";
-    strm << "\nclustering_type: " << nomdp_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type);
+    strm << "\nclustering_type: " << uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type);
     strm << "\nenvironment_resolution: " << options.environment_resolution;
     strm << "\nplanner_time_limit: " << options.planner_time_limit;
     strm << "\ngoal_bias: " << options.goal_bias;

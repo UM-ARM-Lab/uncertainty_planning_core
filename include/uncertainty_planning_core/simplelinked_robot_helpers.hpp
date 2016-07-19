@@ -6,8 +6,8 @@
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/pretty_print.hpp>
-#include <nomdp_planning/simple_pid_controller.hpp>
-#include <nomdp_planning/simple_uncertainty_models.hpp>
+#include <uncertainty_planning_core/simple_pid_controller.hpp>
+#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 
 #ifndef SIMPLELINKED_ROBOT_HELPERS_HPP
 #define SIMPLELINKED_ROBOT_HELPERS_HPP

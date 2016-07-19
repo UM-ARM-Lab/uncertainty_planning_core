@@ -16,10 +16,10 @@
 #include "arc_utilities/pretty_print.hpp"
 #include "arc_utilities/voxel_grid.hpp"
 #include "arc_utilities/simple_rrt_planner.hpp"
-#include "nomdp_planning/simple_pid_controller.hpp"
-#include "nomdp_planning/simple_uncertainty_models.hpp"
-#include "nomdp_planning/nomdp_contact_planning.hpp"
-#include "nomdp_planning/simplese3_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_pid_controller.hpp"
+#include "uncertainty_planning_core/simple_uncertainty_models.hpp"
+#include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
+#include "uncertainty_planning_core/simplese3_robot_helpers.hpp"
 #include "thruster_robot_controllers/SetActuationError.h"
 #include "se3_cluttered_common_config.hpp"
 
@@ -27,17 +27,17 @@
     #include <ros/ros.h>
     #include <visualization_msgs/MarkerArray.h>
     #include <geometry_msgs/PoseStamped.h>
-    #include <nomdp_planning/Simple6dofRobotMove.h>
+    #include <uncertainty_planning_core/Simple6dofRobotMove.h>
 #endif
 
-using namespace nomdp_contact_planning;
+using namespace uncertainty_contact_planning;
 
 #ifdef USE_ROS
 inline EigenHelpers::VectorAffine3d move_robot(const Eigen::Affine3d& target_transform, const bool reset, ros::ServiceClient& robot_control_service)
 {
     const geometry_msgs::PoseStamped target_pose = EigenHelpersConversions::EigenAffine3dToGeometryPoseStamped(target_transform, "world");
     // Put together service call
-    nomdp_planning::Simple6dofRobotMove::Request req;
+    uncertainty_planning_core::Simple6dofRobotMove::Request req;
     req.target = target_pose;
     req.time_limit = ros::Duration(15.0);
     if (reset)
@@ -50,7 +50,7 @@ inline EigenHelpers::VectorAffine3d move_robot(const Eigen::Affine3d& target_tra
         std::cout << "Commanding robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
         req.reset = false;
     }
-    nomdp_planning::Simple6dofRobotMove::Response res;
+    uncertainty_planning_core::Simple6dofRobotMove::Response res;
     // Call service
     try
     {
@@ -92,7 +92,7 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher, ros::ServiceCl
     const simplese3_robot_helpers::SimpleSE3BaseSampler sampler = se3_common_config::GetSampler();
     const simplese3_robot_helpers::ROBOT_CONFIG robot_config = se3_common_config::GetDefaultRobotConfig(options);
     const simplese3_robot_helpers::SimpleSE3Robot robot = se3_common_config::GetRobot(robot_config);
-    NomdpPlanningSpace<simplese3_robot_helpers::SimpleSE3Robot, simplese3_robot_helpers::SimpleSE3BaseSampler, Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, simplese3_robot_helpers::SimpleSE3Averager, simplese3_robot_helpers::SimpleSE3Distancer, simplese3_robot_helpers::SimpleSE3DimDistancer, simplese3_robot_helpers::SimpleSE3Interpolator, Eigen::aligned_allocator<Eigen::Affine3d>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se3_cluttered", options.environment_resolution);
+    UncertaintyPlanningSpace<simplese3_robot_helpers::SimpleSE3Robot, simplese3_robot_helpers::SimpleSE3BaseSampler, Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, simplese3_robot_helpers::SimpleSE3Averager, simplese3_robot_helpers::SimpleSE3Distancer, simplese3_robot_helpers::SimpleSE3DimDistancer, simplese3_robot_helpers::SimpleSE3Interpolator, Eigen::aligned_allocator<Eigen::Affine3d>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se3_cluttered", options.environment_resolution);
     // Load the policy
     try
     {
@@ -159,7 +159,7 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     ROS_INFO("Starting Nomdp Contact Execution Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
-    ros::ServiceClient robot_control_service = nh.serviceClient<nomdp_planning::Simple6dofRobotMove>("simple_6dof_robot_move");
+    ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::Simple6dofRobotMove>("simple_6dof_robot_move");
     ros::ServiceClient set_uncertainty_service = nh.serviceClient<thruster_robot_controllers::SetActuationError>("simple6dof_robot/set_actuation_uncertainty");
     peg_in_hole_env_se3(display_debug_publisher, robot_control_service, set_uncertainty_service);
     return 0;

@@ -19,14 +19,14 @@
 #include <arc_utilities/simple_rrt_planner.hpp>
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <nomdp_planning/simple_pid_controller.hpp>
-#include <nomdp_planning/simple_uncertainty_models.hpp>
-#include <nomdp_planning/nomdp_planner_state.hpp>
-#include <nomdp_planning/simple_particle_contact_simulator.hpp>
-#include <nomdp_planning/execution_policy.hpp>
+#include <uncertainty_planning_core/simple_pid_controller.hpp>
+#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
+#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
+#include <uncertainty_planning_core/simple_particle_contact_simulator.hpp>
+#include <uncertainty_planning_core/execution_policy.hpp>
 
-#ifndef NOMDP_CONTACT_PLANNING_HPP
-#define NOMDP_CONTACT_PLANNING_HPP
+#ifndef UNCERTAINTY_CONTACT_PLANNING_HPP
+#define UNCERTAINTY_CONTACT_PLANNING_HPP
 
 #ifndef DISABLE_ROS_INTERFACE
     #define USE_ROS
@@ -58,7 +58,7 @@
     }
 #endif
 
-namespace nomdp_contact_planning
+namespace uncertainty_contact_planning
 {
     enum SPATIAL_FEATURE_CLUSTERING_TYPE {CONVEX_REGION_SIGNATURE, ACTUATION_CENTER_CONNECTIVITY, POINT_TO_POINT_MOVEMENT, COMPARE};
 
@@ -111,7 +111,7 @@ namespace nomdp_contact_planning
     }
 
     template<typename Robot, typename Sampler, typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename InterpolateFn, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
-    class NomdpPlanningSpace
+    class UncertaintyPlanningSpace
     {
     protected:
 
@@ -170,7 +170,7 @@ namespace nomdp_contact_planning
         };
 
         // Typedef so we don't hate ourselves
-        typedef nomdp_planning_tools::NomdpPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
         typedef execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningPolicy;
         typedef execution_policy::PolicyGraphBuilder<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> ExecutionPolicyGraphBuilder;
         typedef simple_rrt_planner::SimpleRRTPlannerState<NomdpPlanningState, std::allocator<NomdpPlanningState>> NomdpPlanningTreeState;
@@ -190,7 +190,7 @@ namespace nomdp_contact_planning
         double variance_alpha_;
         Robot robot_;
         Sampler sampler_;
-        nomdp_planning_tools::SimpleParticleContactSimulator simulator_;
+        uncertainty_planning_tools::SimpleParticleContactSimulator simulator_;
         mutable PRNG rng_;
         mutable std::vector<PRNG> rngs_;
         mutable uint64_t state_counter_;
@@ -369,7 +369,7 @@ namespace nomdp_contact_planning
         /*
          * Constructors
          */
-        inline NomdpPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<nomdp_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_objects, environment_resolution)
+        inline UncertaintyPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::vector<uncertainty_planning_tools::OBSTACLE_CONFIG>& environment_objects, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_objects, environment_resolution)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -413,7 +413,7 @@ namespace nomdp_contact_planning
             resample_particles_ = false;
         }
 
-        inline NomdpPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::string& environment_id, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_id, environment_resolution)
+        inline UncertaintyPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const size_t num_particles, const double step_size, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const Robot& robot, const Sampler& sampler, const std::string& environment_id, const double environment_resolution) : robot_(robot), sampler_(sampler), simulator_(environment_id, environment_resolution)
         {
             // Prepare the default RNG
             auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -461,7 +461,7 @@ namespace nomdp_contact_planning
          * Test example to show the behavior of the lightweight simulator
          */
 #ifdef USE_ROS
-        inline nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> DemonstrateSimulator(const Configuration& start, const Configuration& goal, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub) const
+        inline uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> DemonstrateSimulator(const Configuration& start, const Configuration& goal, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_pub) const
         {
             // Draw the simulation environment
             display_pub.publish(simulator_.ExportAllForDisplay());
@@ -491,7 +491,7 @@ namespace nomdp_contact_planning
 #ifndef FORCE_DEBUG
             std::cin.get();
 #endif
-            nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+            uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(start, goal);
             const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 40u;
             simulator_.ForwardSimulateRobot(robot_, start, goal, rng_, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, enable_contact_manifold_target_adjustment, trace, true);
@@ -525,7 +525,7 @@ namespace nomdp_contact_planning
             Configuration previous_config = start;
             for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
             {
-                const nomdp_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
+                const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
                 const Eigen::VectorXd& control_input_step = step_trace.control_input_step;
                 // Draw the control input for the entire trace segment
                 const Eigen::VectorXd& control_input = step_trace.control_input;
@@ -538,7 +538,7 @@ namespace nomdp_contact_planning
                 for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
                 {
                     // Get the current trace segment
-                    const nomdp_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
+                    const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
                     for (size_t contact_resolution_step_idx = 0; contact_resolution_step_idx < contact_resolution_trace.contact_resolution_steps.size(); contact_resolution_step_idx++)
                     {
                         const Configuration& current_config = contact_resolution_trace.contact_resolution_steps[contact_resolution_step_idx];
@@ -608,18 +608,18 @@ namespace nomdp_contact_planning
             NomdpPlanningState goal_state(goal);
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
-            std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
-            std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
+            std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&UncertaintyPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
+            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&UncertaintyPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&UncertaintyPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
+            std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&UncertaintyPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
 #ifdef ENABLE_DEBUG_PRINTS
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
 #else
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { return state_sampling_fn(); } else { return goal_state; } };
 #endif
-            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
-            std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
+            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&UncertaintyPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment, display_pub);
+            std::function<bool(void)> termination_check_fn = std::bind(&UncertaintyPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
             time_to_first_solution_ = 0.0;
@@ -711,18 +711,18 @@ namespace nomdp_contact_planning
             NomdpPlanningState goal_state(goal);
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
-            std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&NomdpPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&NomdpPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
-            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&NomdpPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
-            std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&NomdpPlanningSpace::SampleRandomTargetState, this);
+            std::function<int64_t(const NomdpPlanningTree&, const NomdpPlanningState&)> nearest_neighbor_fn = std::bind(&UncertaintyPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
+            std::function<bool(const NomdpPlanningState&)> goal_reached_fn = std::bind(&UncertaintyPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts, enable_contact_manifold_target_adjustment);
+            std::function<void(NomdpPlanningTreeState&)> goal_reached_callback = std::bind(&UncertaintyPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
+            std::function<NomdpPlanningState(void)> state_sampling_fn = std::bind(&UncertaintyPlanningSpace::SampleRandomTargetState, this);
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
 #ifdef ENABLE_DEBUG_PRINTS
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); std::cout << "Sampled state" << std::endl; return state; } else { std::cout << "Sampled goal state" << std::endl; return goal_state; } };
 #else
             std::function<NomdpPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { return state_sampling_fn(); } else { return goal_state; } };
 #endif
-            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&NomdpPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
-            std::function<bool(void)> termination_check_fn = std::bind(&NomdpPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
+            std::function<std::vector<std::pair<NomdpPlanningState, int64_t>>(const NomdpPlanningState&, const NomdpPlanningState&)> forward_propagation_fn = std::bind(&UncertaintyPlanningSpace::PropagateForwards, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, enable_contact_manifold_target_adjustment);
+            std::function<bool(void)> termination_check_fn = std::bind(&UncertaintyPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
             // Call the planner
             total_goal_reached_probability_ = 0.0;
             time_to_first_solution_ = 0.0;
@@ -1392,7 +1392,7 @@ namespace nomdp_contact_planning
 
         inline std::vector<Configuration, ConfigAlloc> SimulatePolicyStep(const Configuration& current_config, const Configuration& action, const bool enable_contact_manifold_target_adjustment, PRNG& rng) const
         {
-            nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+            uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(current_config, action);
             const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 40u;
             simulator_.ForwardSimulateRobot(robot_, current_config, action, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, enable_contact_manifold_target_adjustment, trace, true);
@@ -1400,11 +1400,11 @@ namespace nomdp_contact_planning
             execution_trace.reserve(trace.resolver_steps.size());
             for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
             {
-                const nomdp_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
+                const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
                 for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
                 {
                     // Get the current trace segment
-                    const nomdp_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
+                    const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
                     // Get the last (collision-free resolved) config of the segment
                     const Configuration& resolved_config = contact_resolution_trace.contact_resolution_steps.back();
                     execution_trace.push_back(resolved_config);
@@ -2049,7 +2049,7 @@ namespace nomdp_contact_planning
 
         inline bool CheckPointToPointMovement(Robot robot, const Configuration& start, const Configuration& end, PRNG& rng) const
         {
-            nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+            uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             const double target_distance = DistanceFn::Distance(start, end);
             const uint32_t number_of_steps = (uint32_t)ceil(target_distance / step_size_) * 80u;
             const Configuration result = simulator_.ForwardSimulateRobot(robot, start, end, rng, number_of_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, false, trace, false).first;
@@ -2306,7 +2306,7 @@ namespace nomdp_contact_planning
             for (size_t idx = 0; idx < num_particles_; idx++)
             {
                 const Configuration& initial_particle = initial_particles[idx];
-                nomdp_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+                uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
 #ifdef ENABLE_PARALLEL
                 int th_id = omp_get_thread_num();
                 propagated_points[idx] = simulator_.ForwardSimulateRobot(robot_, initial_particle, target_point, rngs_[th_id], num_simulation_steps, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, allow_contacts, enable_contact_manifold_target_adjustment, trace, false);
@@ -3036,4 +3036,4 @@ namespace nomdp_contact_planning
     };
 }
 
-#endif // NOMDP_CONTACT_PLANNING_HPP
+#endif // UNCERTAINTY_CONTACT_PLANNING_HPP

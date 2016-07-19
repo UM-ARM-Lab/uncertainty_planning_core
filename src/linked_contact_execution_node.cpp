@@ -16,17 +16,17 @@
 #include "arc_utilities/pretty_print.hpp"
 #include "arc_utilities/voxel_grid.hpp"
 #include "arc_utilities/simple_rrt_planner.hpp"
-#include "nomdp_planning/simple_pid_controller.hpp"
-#include "nomdp_planning/simple_uncertainty_models.hpp"
-#include "nomdp_planning/nomdp_contact_planning.hpp"
-#include "nomdp_planning/simplese2_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_pid_controller.hpp"
+#include "uncertainty_planning_core/simple_uncertainty_models.hpp"
+#include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
+#include "uncertainty_planning_core/simplese2_robot_helpers.hpp"
 #include "baxter_linked_common_config.hpp"
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <nomdp_planning/Simple6dofRobotMove.h>
+#include <uncertainty_planning_core/Simple6dofRobotMove.h>
 
-using namespace nomdp_contact_planning;
+using namespace uncertainty_contact_planning;
 
 inline std::vector<linked_common_config::SLC, std::allocator<linked_common_config::SLC>> move_robot(const linked_common_config::SLC& target_config, const bool reset, ros::ServiceClient& robot_control_service)
 {
@@ -46,7 +46,7 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
     const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = linked_common_config::GetBaseTransform();
     const simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel> robot = linked_common_config::GetRobot(base_transform, robot_config);
-    NomdpPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, linked_common_config::SimpleLinkedDistancer, linked_common_config::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "baxter_env", options.environment_resolution);
+    UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, linked_common_config::SimpleLinkedDistancer, linked_common_config::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "baxter_env", options.environment_resolution);
     // Load the policy
     try
     {
@@ -104,7 +104,7 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     ROS_INFO("Starting Nomdp Contact Execution Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
-    ros::ServiceClient robot_control_service = nh.serviceClient<nomdp_planning::Simple6dofRobotMove>("simple_6dof_robot_move");
+    ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::Simple6dofRobotMove>("simple_6dof_robot_move");
     peg_in_hole_env_linked(display_debug_publisher, robot_control_service);
     return 0;
 }

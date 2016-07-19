@@ -16,10 +16,10 @@
 #include "arc_utilities/pretty_print.hpp"
 #include "arc_utilities/voxel_grid.hpp"
 #include "arc_utilities/simple_rrt_planner.hpp"
-#include "nomdp_planning/simple_pid_controller.hpp"
-#include "nomdp_planning/simple_uncertainty_models.hpp"
-#include "nomdp_planning/nomdp_contact_planning.hpp"
-#include "nomdp_planning/simplelinked_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_pid_controller.hpp"
+#include "uncertainty_planning_core/simple_uncertainty_models.hpp"
+#include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
+#include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
 #include "common_config.hpp"
 #include "baxter_joint_actuator_model.hpp"
 
@@ -34,7 +34,7 @@ namespace linked_common_config
     inline common_config::OPTIONS GetDefaultOptions()
     {
         common_config::OPTIONS options;
-        options.clustering_type = nomdp_contact_planning::CONVEX_REGION_SIGNATURE;
+        options.clustering_type = uncertainty_contact_planning::CONVEX_REGION_SIGNATURE;
         options.environment_resolution = 0.025;
         options.planner_time_limit = 120.0;
         options.goal_bias = 0.1;

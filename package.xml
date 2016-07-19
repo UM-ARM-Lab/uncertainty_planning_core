@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>nomdp_planning</name>
+  <name>uncertainty_planning_core</name>
   <version>0.0.0</version>
-  <description>The nomdp_planning package</description>
+  <description>The uncertainty_planning_core package</description>
   <maintainer email="calder.pg@gmail.com">Calder Phillips-Grafflin</maintainer>
   <license>BSD</license>
 

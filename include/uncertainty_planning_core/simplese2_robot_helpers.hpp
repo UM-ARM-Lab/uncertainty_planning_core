@@ -4,8 +4,8 @@
 #include <random>
 #include <Eigen/Geometry>
 #include <arc_utilities/eigen_helpers.hpp>
-#include <nomdp_planning/simple_pid_controller.hpp>
-#include <nomdp_planning/simple_uncertainty_models.hpp>
+#include <uncertainty_planning_core/simple_pid_controller.hpp>
+#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 
 #ifndef SIMPLESE2_ROBOT_HELPERS_HPP
 #define SIMPLESE2_ROBOT_HELPERS_HPP
