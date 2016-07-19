@@ -723,7 +723,7 @@ namespace nomdp_planning_tools
                             const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
                             const double& x = location.x();
                             const double& y = location.y();
-                            //const double& z = location.z();
+                            const double& z = location.z();
                             // Make some of the exterior walls opaque
                             if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
                             {
@@ -739,72 +739,47 @@ namespace nomdp_planning_tools
                             else
                             {
                                 // Set the interior 10x10x10 meter area
-                                if (x > 0.0 && x <= 4.0 && y > 2.0 && y <= 3.0)
+                                if (y > 2.0 && y <= 4.0)
                                 {
                                     const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
-                                else if (x > 6.0 && x <= 10.0 && y > 2.0 && y <= 3.0)
+                                else if (y > 6.0 && y <= 8.0)
                                 {
                                     const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
                                     grid.Set(x_idx, y_idx, z_idx, object_cell);
                                 }
-                                else if (x > 0.0 && x <= 4.0 && y > 7.0 && y <= 8.0)
+                                // Main regions
+                                if (y <= 2)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
                                 }
-                                else if (x > 6.0 && x <= 10.0 && y > 7.0 && y <= 8.0)
+                                if (y > 8.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
                                 }
-                                else if (x > 2.0 && x <= 8.0 && y > 4.0 && y <= 6.0)
+                                if (y > 4.0 && y <= 6.0)
                                 {
-                                    const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                                    grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
                                 }
-                                else
+                                // Hole regions
+                                if (z > 1.5 && z <= 3.5 && x > 1.5 && x <= 3.5 && y > 4.0)
                                 {
-                                    // Set the convex regions
-                                    if (x > 4 && x <= 6.0)
-                                    {
-                                        if (y <= 4.0)
-                                        {
-                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
-                                        }
-                                        else if (y > 6.0)
-                                        {
-                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
-                                        }
-                                    }
-                                    if (y > 3 && y <= 7.0)
-                                    {
-                                        if (x <= 2.0)
-                                        {
-                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
-                                        }
-                                        else if (x > 8.0)
-                                        {
-                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
-                                        }
-                                    }
-                                    if (y > 6.0 && y <= 7.0)
-                                    {
-                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
-                                    }
-                                    if (y > 3.0 && y <= 4.0)
-                                    {
-                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(6u);
-                                    }
-                                    if (y <= 2.0)
-                                    {
-                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(7u);
-                                    }
-                                    if (y > 8.0)
-                                    {
-                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(8u);
-                                    }
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                }
+                                if (z > 1.5 && z <= 3.5 && x > 6.5 && x <= 8.5 && y <= 6.0)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
                                 }
                             }
                         }
