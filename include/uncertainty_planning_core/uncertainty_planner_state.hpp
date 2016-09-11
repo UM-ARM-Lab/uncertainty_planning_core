@@ -630,13 +630,20 @@ namespace uncertainty_planning_tools
             space_independent_variances_ = ComputeSpaceIndependentDirectionalVariance(expectation_, step_size_);
             return std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>>(expectation_, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>(std::pair<double, Eigen::VectorXd>(variance_, variances_), std::pair<double, Eigen::VectorXd>(space_independent_variance_, space_independent_variances_)));
         }
+
+        inline std::string Print() const
+        {
+            std::ostringstream strm;
+            strm << "Nomdp Planner State (QualifiedTypeID: " << GetQualifiedTypeID() << ") - Expectation: " << PrettyPrint::PrettyPrint(GetExpectation()) << " Command: " << PrettyPrint::PrettyPrint(GetCommand()) << " Variance: " << GetVariance() << " Space-independent Variance: " << GetSpaceIndependentVariance() << " Raw Pfeasibility(parent->this): " << GetRawEdgePfeasibility() << " Effective Pfeasibility(parent->this): " << GetEffectiveEdgePfeasibility() << " Raw Pfeasibility(this->parent): " << GetReverseEdgePfeasibility() << " Pfeasibility(start->this): " << GetMotionPfeasibility();
+            return strm.str();
+        }
     };
 }
 
 template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
 std::ostream& operator<<(std::ostream& strm, const uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& state)
 {
-    strm << "Nomdp Planner State (QualifiedTypeID: " << state.GetQualifiedTypeID() << ") - Expectation: " << PrettyPrint::PrettyPrint(state.GetExpectation()) << " Command: " << PrettyPrint::PrettyPrint(state.GetCommand()) << " Variance: " << state.GetVariance() << " Space-independent Variance: " << state.GetSpaceIndependentVariance() << " Raw Pfeasibility(parent->this): " << state.GetRawEdgePfeasibility() << " Effective Pfeasibility(parent->this): " << state.GetEffectiveEdgePfeasibility() << " Raw Pfeasibility(this->parent): " << state.GetReverseEdgePfeasibility() << " Pfeasibility(start->this): " << state.GetMotionPfeasibility();
+    strm << state.Print();
     return strm;
 }
 

@@ -4,13 +4,13 @@
 #                                                   #
 #   Copyright (c) 2015, Calder Phillips-Grafflin    #
 #                                                   #
-#   Planner parameter testing                       #
+#   SE(3) Execute Shim                              #
 #                                                   #
 #####################################################
 
 import rospy
 import std_srvs.srv
-import nomdp_planning.srv
+import uncertainty_planning_core.srv
 import actionlib
 import thruster_robot_controllers.msg
 import thruster_robot_examples.srv
@@ -28,7 +28,7 @@ class ExecuteServer(object):
         self.teleport_client = rospy.ServiceProxy(teleport_service, thruster_robot_examples.srv.Teleport)
         self.teleport_client.wait_for_service()
         rospy.loginfo("Connected to teleport server")
-        self.server = rospy.Service(service_path, nomdp_planning.srv.Simple6dofRobotMove, self.service_handler)
+        self.server = rospy.Service(service_path, uncertainty_planning_core.srv.Simple6dofRobotMove, self.service_handler)
         rospy.loginfo("...ready")
         spin_rate = rospy.Rate(10.0)
         while not rospy.is_shutdown():
@@ -37,20 +37,32 @@ class ExecuteServer(object):
 
     def service_handler(self, request):
         rospy.loginfo("Received execution service call")
-        if request.reset:
-            rospy.loginfo("Resetting to " + str(request.target))
+        if request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.RESET:
+            rospy.loginfo("Resetting to " + str(request.start))
             self.command_stop()
             rospy.sleep(2.5)
-            self.command_teleport(request.target)
-            trajectory = [request.target]
-        else:
+            self.command_teleport(request.start)
+            trajectory = [request.start]
+        elif request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.EXECUTE:
             rospy.loginfo("Executing to " + str(request.target))
             robot_target = request.target
             trajectory = self.command_to_target(robot_target, request.time_limit)
+        elif request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.EXECUTE_FROM_START:
+            rospy.loginfo("First, resetting to " + str(request.start))
+            self.command_stop()
+            rospy.sleep(2.5)
+            self.command_teleport(request.start)
+            rospy.loginfo("Executing to " + str(request.target))
+            robot_target = request.target
+            trajectory = self.command_to_target(robot_target, request.time_limit)
+        else:
+            rospy.logerr("Invalid mode command")
+            trajectory = []
         rospy.loginfo("Assembling response")
-        response = nomdp_planning.srv.Simple6dofRobotMoveResponse()
+        response = uncertainty_planning_core.srv.Simple6dofRobotMoveResponse()
         response.trajectory = trajectory
         rospy.loginfo("Response with " + str(len(response.trajectory)) + " states")
+        rospy.loginfo("Reached " + str(response.trajectory[-1]))
         return response
 
     def command_teleport(self, target_pose):

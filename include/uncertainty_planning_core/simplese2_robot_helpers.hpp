@@ -258,7 +258,7 @@ namespace simplese2_robot_helpers
         simple_uncertainty_models::SimpleUncertainVelocityActuator zr_axis_actuator_;
         Eigen::Affine3d pose_;
         Eigen::Matrix<double, 3, 1> config_;
-        EigenHelpers::VectorVector3d link_points_;
+        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
 
         inline void SetConfig(const Eigen::Matrix<double, 3, 1>& new_config)
         {
@@ -276,11 +276,11 @@ namespace simplese2_robot_helpers
         inline double ComputeMaxMotionPerStep() const
         {
             double max_motion = 0.0;
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = GetRawLinksPoints();
             // Generate motion primitives
             std::vector<Eigen::VectorXd> motion_primitives;
             motion_primitives.reserve(6);
-            for (size_t joint_idx = 0; joint_idx < 3; joint_idx++)
+            for (ssize_t joint_idx = 0; joint_idx < 3; joint_idx++)
             {
                 Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(3);
                 raw_motion_plus(joint_idx) = 1.0;
@@ -294,7 +294,7 @@ namespace simplese2_robot_helpers
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -316,7 +316,7 @@ namespace simplese2_robot_helpers
             return max_motion;
         }
 
-        inline SimpleSE2Robot(const EigenHelpers::VectorVector3d& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector3d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
         {
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -327,14 +327,14 @@ namespace simplese2_robot_helpers
             x_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.max_actuator_noise, robot_config.max_actuator_noise, robot_config.velocity_limit);
             y_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.max_actuator_noise, robot_config.max_actuator_noise, robot_config.velocity_limit);
             zr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.r_max_actuator_noise, robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
-            UpdatePosition(initial_position);
+            ResetPosition(initial_position);
             max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
-        inline std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> GetRawLinksPoints() const
         {
-            return std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>>{std::pair<std::string, EigenHelpers::VectorVector3d>("robot", link_points_)};
+            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>>{std::make_pair("robot", link_points_)};
         }
 
         inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
@@ -345,6 +345,11 @@ namespace simplese2_robot_helpers
         }
 
         inline void UpdatePosition(const Eigen::Matrix<double, 3, 1>& position)
+        {
+            SetConfig(position);
+        }
+
+        inline void ResetPosition(const Eigen::Matrix<double, 3, 1>& position)
         {
             SetConfig(position);
             x_axis_controller_.Zero();
@@ -386,16 +391,16 @@ namespace simplese2_robot_helpers
         }
 
         template<typename PRNG>
-        inline Eigen::VectorXd GenerateControlAction(const Eigen::Matrix<double, 3, 1>& target, PRNG& rng)
+        inline Eigen::VectorXd GenerateControlAction(const Eigen::Matrix<double, 3, 1>& target, const double controller_interval, PRNG& rng)
         {
             // Get the current position
             const Eigen::Matrix<double, 3, 1> current = GetPosition(rng);
             // Get the current error
             const Eigen::VectorXd current_error = SimpleSE2DimDistancer::RawDistance(current, target);
             // Compute feedback terms
-            const double x_term = x_axis_controller_.ComputeFeedbackTerm(current_error(0), 1.0);
-            const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), 1.0);
-            const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(current_error(2), 1.0);
+            const double x_term = x_axis_controller_.ComputeFeedbackTerm(current_error(0), controller_interval);
+            const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), controller_interval);
+            const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(current_error(2), controller_interval);
             // Make the control action
             const double x_axis_control = x_axis_actuator_.GetControlValue(x_term);
             const double y_axis_control = y_axis_actuator_.GetControlValue(y_term);

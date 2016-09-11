@@ -11,16 +11,16 @@
 #include <random>
 #include <Eigen/Geometry>
 #include <visualization_msgs/Marker.h>
-#include "arc_utilities/eigen_helpers.hpp"
-#include "arc_utilities/eigen_helpers_conversions.hpp"
-#include "arc_utilities/pretty_print.hpp"
-#include "arc_utilities/voxel_grid.hpp"
-#include "arc_utilities/simple_rrt_planner.hpp"
-#include "uncertainty_planning_core/simple_pid_controller.hpp"
-#include "uncertainty_planning_core/simple_uncertainty_models.hpp"
-#include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
-#include "uncertainty_planning_core/simplese2_robot_helpers.hpp"
-#include "se2_common_config.hpp"
+#include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <arc_utilities/pretty_print.hpp>
+#include <arc_utilities/voxel_grid.hpp>
+#include <arc_utilities/simple_rrt_planner.hpp>
+#include <uncertainty_planning_core/simple_pid_controller.hpp>
+#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
+#include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
+#include <uncertainty_planning_core/simplese2_robot_helpers.hpp>
+#include <uncertainty_planning_core/se2_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -29,23 +29,25 @@
 
 using namespace uncertainty_contact_planning;
 
-inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> move_robot(const Eigen::Matrix<double, 3, 1>& target_config, const bool reset, ros::ServiceClient& robot_control_service)
+inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> move_robot(const Eigen::Matrix<double, 3, 1>& target_config, const Eigen::Matrix<double, 3, 1>& expected_result_config, const double duration, const bool reset, ros::ServiceClient& robot_control_service)
 {
+    UNUSED(expected_result_config);
     const Eigen::Affine3d target_transform = Eigen::Translation3d(target_config(0), target_config(1), 0.0) * Eigen::Quaterniond(Eigen::AngleAxisd(target_config(2), Eigen::Vector3d::UnitZ()));
     const geometry_msgs::PoseStamped target_pose = EigenHelpersConversions::EigenAffine3dToGeometryPoseStamped(target_transform, "world");
     // Put together service call
     uncertainty_planning_core::Simple6dofRobotMove::Request req;
-    req.target = target_pose;
-    req.time_limit = ros::Duration(10.0);
+    req.time_limit = ros::Duration(duration);
     if (reset)
     {
         std::cout << "Resetting robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
-        req.reset = true;
+        req.start = target_pose;
+        req.mode = uncertainty_planning_core::Simple6dofRobotMove::Request::RESET;
     }
     else
     {
         std::cout << "Commanding robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
-        req.reset = false;
+        req.target = target_pose;
+        req.mode = uncertainty_planning_core::Simple6dofRobotMove::Request::EXECUTE;
     }
     uncertainty_planning_core::Simple6dofRobotMove::Response res;
     // Call service
@@ -101,24 +103,23 @@ void set_uncertainty(const double max_translation_error, const double max_rotati
 
 void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceClient& robot_control_service, ros::ServiceClient& set_uncertainty_service)
 {
-    const common_config::OPTIONS options = se2_common_config::GetOptions(common_config::OPTIONS::EXECUTION);
+    const uncertainty_planning_core::OPTIONS options = se2_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
     const std::pair<Eigen::Matrix<double, 3, 1>, Eigen::Matrix<double, 3, 1>> start_and_goal = se2_common_config::GetStartAndGoal();
     const simplese2_robot_helpers::SimpleSE2BaseSampler sampler = se2_common_config::GetSampler();
     const simplese2_robot_helpers::ROBOT_CONFIG robot_config = se2_common_config::GetDefaultRobotConfig(options);
     const simplese2_robot_helpers::SimpleSE2Robot robot = se2_common_config::GetRobot(robot_config);
-    uncertainty_contact_planning::UncertaintyPlanningSpace<simplese2_robot_helpers::SimpleSE2Robot, simplese2_robot_helpers::SimpleSE2BaseSampler, Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::EigenMatrixD31Serializer, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, simplese2_robot_helpers::SimpleSE2Interpolator, std::allocator<Eigen::Matrix<double, 3, 1>>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se2_maze_blocked", options.environment_resolution);
     // Load the policy
     try
     {
-        auto policy = planning_space.LoadPolicy(options.planned_policy_file);
+        auto policy = uncertainty_planning_core::LoadSE2Policy(options.planned_policy_file);
         policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
         std::map<std::string, double> complete_policy_stats;
     #ifndef FORCE_DEBUG
         std::cout << "Press ENTER to simulate policy..." << std::endl;
         std::cin.get();
     #endif
-        const auto policy_simulation_results = planning_space.SimulateExectionPolicy(policy, start_and_goal.first, start_and_goal.second, options.num_policy_simulations, options.max_exec_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher, true, 0.001, true);
+        const auto policy_simulation_results = uncertainty_planning_core::SimulateSE2UncertaintyPolicy(options, robot, sampler, policy, start_and_goal.first, start_and_goal.second, display_debug_publisher);
         const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
         const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second.first;
         std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;
@@ -132,15 +133,15 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
             std::cout << "Setting actuation uncertainty..." << std::endl;
             set_uncertainty(robot_config.max_actuator_noise, robot_config.r_max_actuator_noise, set_uncertainty_service);
         }
-        std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 3, 1>& target_configuration, const bool reset) { return move_robot(target_configuration, reset, robot_control_service); };
-        const auto policy_execution_results = planning_space.ExecuteExectionPolicy(policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_debug_publisher, false, 0.001, false);
+        std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&, const Eigen::Matrix<double, 3, 1>&, const double, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 3, 1>& target_configuration, const Eigen::Matrix<double, 3, 1>& expected_result_configuration, const double duration, const bool reset) { return move_robot(target_configuration, expected_result_configuration, duration, reset, robot_control_service); };
+        const auto policy_execution_results = uncertainty_planning_core::ExecuteSE2UncertaintyPolicy(options, robot, sampler, policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, display_debug_publisher);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
         const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second.first;
         const std::vector<double> policy_execution_times = policy_execution_results.second.second.second;
         std::cout << "Policy execution success: " << PrettyPrint::PrettyPrint(policy_execution_stats) << std::endl;
         complete_policy_stats.insert(policy_execution_stats.begin(), policy_execution_stats.end());
         // Save the executed policy
-        planning_space.SavePolicy(policy_execution_results.first, options.executed_policy_file);
+        uncertainty_planning_core::SaveSE2Policy(policy_execution_results.first, options.executed_policy_file);
         // Print out the results & save them to the log file
         const std::string log_results = "++++++++++\n" + PrettyPrint::PrettyPrint(options) + "\nRESULTS:\n" + PrettyPrint::PrettyPrint(complete_policy_stats, false, "\n") + "\nSimulation step counts: " + PrettyPrint::PrettyPrint(policy_simulation_step_counts) + "\nExecution step counts: " + PrettyPrint::PrettyPrint(policy_execution_step_counts) + "\nExecution times: " + PrettyPrint::PrettyPrint(policy_execution_times);
         std::cout << "Policy results:\n" << log_results << std::endl;

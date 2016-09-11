@@ -19,23 +19,25 @@
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/simplese3_robot_helpers.hpp>
-#include <thruster_robot_controllers/SetActuationError.h>
-#include <uncertainty_planning_core/se3_common_config.hpp>
+#include <uncertainty_planning_core/simplese2_robot_helpers.hpp>
+#include <uncertainty_planning_core/baxter_linked_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 
 using namespace uncertainty_contact_planning;
 
-void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher)
+void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher)
 {
-    const uncertainty_planning_core::OPTIONS options = se3_common_config::GetOptions();
+    const uncertainty_planning_core::OPTIONS options = baxter_linked_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
-    const std::pair<Eigen::Affine3d, Eigen::Affine3d> start_and_goal = se3_common_config::GetStartAndGoal();
-    const simplese3_robot_helpers::SimpleSE3BaseSampler sampler = se3_common_config::GetSampler();
-    const simplese3_robot_helpers::ROBOT_CONFIG robot_config = se3_common_config::GetDefaultRobotConfig(options);
-    const simplese3_robot_helpers::SimpleSE3Robot robot = se3_common_config::GetRobot(robot_config);
-    auto planner_result = uncertainty_planning_core::PlanSE3Uncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
+    const std::vector<double> joint_uncertainty_params = baxter_linked_common_config::GetJointUncertaintyParams(options);
+    assert(joint_uncertainty_params.size() == 7);
+    const std::pair<baxter_linked_common_config::SLC, baxter_linked_common_config::SLC> start_and_goal = baxter_linked_common_config::GetStartAndGoal();
+    const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
+    const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
+    const Eigen::Affine3d base_transform = baxter_linked_common_config::GetBaseTransform();
+    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params);
+    auto planner_result = uncertainty_planning_core::PlanBaxterUncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;
     const double p_goal_reached = planner_stats.at("P(goal reached)");
@@ -43,8 +45,8 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher)
     {
         std::cout << "Planner reached goal, saving & loading policy" << std::endl;
         // Save the policy
-        assert(uncertainty_planning_core::SaveSE3Policy(policy, options.planned_policy_file));
-        const auto loaded_policy = uncertainty_planning_core::LoadSE3Policy(options.planned_policy_file);
+        assert(uncertainty_planning_core::SaveBaxterPolicy(policy, options.planned_policy_file));
+        const auto loaded_policy = uncertainty_planning_core::LoadBaxterPolicy(options.planned_policy_file);
         std::vector<uint8_t> policy_buffer;
         policy.SerializeSelf(policy_buffer);
         std::vector<uint8_t> loaded_policy_buffer;
@@ -77,10 +79,10 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher)
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "se3_contact_planning_node");
+    ros::init(argc, argv, "linked_contact_planning_node");
     ros::NodeHandle nh;
     ROS_INFO("Starting Nomdp Contact Planning Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
-    peg_in_hole_env_se3(display_debug_publisher);
+    peg_in_hole_env_linked(display_debug_publisher);
     return 0;
 }

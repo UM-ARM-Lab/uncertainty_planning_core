@@ -20,37 +20,21 @@
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 #include <uncertainty_planning_core/simplese2_robot_helpers.hpp>
-#include "se2_common_config.hpp"
-
-#ifdef USE_ROS
-    #include <ros/ros.h>
-    #include <visualization_msgs/MarkerArray.h>
-#endif
+#include <uncertainty_planning_core/se2_common_config.hpp>
+#include <ros/ros.h>
+#include <visualization_msgs/MarkerArray.h>
 
 using namespace uncertainty_contact_planning;
 
-#ifdef USE_ROS
 void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher)
 {
-    const common_config::OPTIONS options = se2_common_config::GetOptions(common_config::OPTIONS::PLANNING);
-#else
-void peg_in_hole_env_se2(int argc, char** argv)
-{
-    const common_config::OPTIONS options = se2_common_config::GetOptions(argc, argv, common_config::OPTIONS::PLANNING);
-#endif
+    const uncertainty_planning_core::OPTIONS options = se2_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
     const std::pair<Eigen::Matrix<double, 3, 1>, Eigen::Matrix<double, 3, 1>> start_and_goal = se2_common_config::GetStartAndGoal();
     const simplese2_robot_helpers::SimpleSE2BaseSampler sampler = se2_common_config::GetSampler();
     const simplese2_robot_helpers::ROBOT_CONFIG robot_config = se2_common_config::GetDefaultRobotConfig(options);
     const simplese2_robot_helpers::SimpleSE2Robot robot = se2_common_config::GetRobot(robot_config);
-    uncertainty_contact_planning::UncertaintyPlanningSpace<simplese2_robot_helpers::SimpleSE2Robot, simplese2_robot_helpers::SimpleSE2BaseSampler, Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::EigenMatrixD31Serializer, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, simplese2_robot_helpers::SimpleSE2Interpolator, std::allocator<Eigen::Matrix<double, 3, 1>>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "se2_maze", options.environment_resolution);
-    // Plan
-    const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
-#ifdef USE_ROS
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher);
-#else
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment);
-#endif
+    auto planner_result = uncertainty_planning_core::PlanSE2Uncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;
     const double p_goal_reached = planner_stats.at("P(goal reached)");
@@ -58,8 +42,8 @@ void peg_in_hole_env_se2(int argc, char** argv)
     {
         std::cout << "Planner reached goal, saving & loading policy" << std::endl;
         // Save the policy
-        assert(planning_space.SavePolicy(policy, options.planned_policy_file));
-        const auto loaded_policy = planning_space.LoadPolicy(options.planned_policy_file);
+        assert(uncertainty_planning_core::SaveSE2Policy(policy, options.planned_policy_file));
+        const auto loaded_policy = uncertainty_planning_core::LoadSE2Policy(options.planned_policy_file);
         std::vector<uint8_t> policy_buffer;
         policy.SerializeSelf(policy_buffer);
         std::vector<uint8_t> loaded_policy_buffer;
@@ -92,14 +76,10 @@ void peg_in_hole_env_se2(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-#ifdef USE_ROS
     ros::init(argc, argv, "se2_contact_planning_node");
     ros::NodeHandle nh;
     ROS_INFO("Starting Nomdp Contact Planning Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     peg_in_hole_env_se2(display_debug_publisher);
-#else
-    peg_in_hole_env_se2(argc, argv);
-#endif
     return 0;
 }

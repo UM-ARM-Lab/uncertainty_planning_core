@@ -37,8 +37,8 @@ namespace simple_uncertainty_models
         template<typename RNG>
         inline double GetSensorValue(const double process_value, RNG& rng) const
         {
-            assert(isnan(process_value) == false);
-            assert(isinf(process_value) == false);
+            assert(std::isnan(process_value) == false);
+            assert(std::isinf(process_value) == false);
             double noise = noise_distribution_(rng);
             return process_value + noise;
         }
@@ -65,8 +65,8 @@ namespace simple_uncertainty_models
 
         inline double GetControlValue(const double control_input) const
         {
-            assert(isnan(control_input) == false);
-            assert(isinf(control_input) == false);
+            assert(std::isnan(control_input) == false);
+            assert(std::isinf(control_input) == false);
             double real_control_input = std::min(actuator_limit_, control_input);
             real_control_input = std::max(-actuator_limit_, real_control_input);
             return real_control_input;
@@ -75,8 +75,8 @@ namespace simple_uncertainty_models
         template<typename RNG>
         inline double GetControlValue(const double control_input, RNG& rng) const
         {
-            assert(isnan(control_input) == false);
-            assert(isinf(control_input) == false);
+            assert(std::isnan(control_input) == false);
+            assert(std::isinf(control_input) == false);
             double real_control_input = GetControlValue(control_input);
             const double noise = noise_distribution_(rng);
             const double noisy_control_input = real_control_input + noise;

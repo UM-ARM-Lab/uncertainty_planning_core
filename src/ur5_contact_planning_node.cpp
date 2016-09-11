@@ -20,38 +20,24 @@
 #include "uncertainty_planning_core/simple_uncertainty_models.hpp"
 #include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
 #include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
-#include "baxter_linked_common_config.hpp"
-
-#ifdef USE_ROS
-    #include <ros/ros.h>
-    #include <visualization_msgs/MarkerArray.h>
-#endif
+#include "ur5_linked_common_config.hpp"
+#include <ros/ros.h>
+#include <visualization_msgs/MarkerArray.h>
 
 using namespace uncertainty_contact_planning;
 
-#ifdef USE_ROS
 void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher)
 {
-    const common_config::OPTIONS options = linked_common_config::GetOptions(common_config::OPTIONS::PLANNING);
-#else
-void peg_in_hole_env_linked(int argc, char** argv)
-{
-    const common_config::OPTIONS options = linked_common_config::GetOptions(argc, argv, common_config::OPTIONS::PLANNING);
-#endif
+    const uncertainty_planning_core::OPTIONS options = ur5_linked_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
-    const std::pair<linked_common_config::SLC, linked_common_config::SLC> start_and_goal = linked_common_config::GetStartAndGoal();
-    const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = linked_common_config::GetSampler();
-    const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = linked_common_config::GetDefaultRobotConfig(options);
-    const Eigen::Affine3d base_transform = linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel> robot = linked_common_config::GetRobot(base_transform, robot_config);
-    UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<linked_common_config::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, linked_common_config::SimpleLinkedDistancer, linked_common_config::SimpleLinkedDimDistancer, simplelinked_robot_helpers::SimpleLinkedInterpolator, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64> planning_space(options.clustering_type, false, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.signature_matching_threshold, options.distance_clustering_threshold, options.feasibility_alpha, options.variance_alpha, robot, sampler, "baxter_env", options.environment_resolution);
-    // Plan
-    const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
-#ifdef USE_ROS
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment, display_debug_publisher);
-#else
-    auto planner_result = planning_space.Plan(start_and_goal.first, start_and_goal.second, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, options.enable_contact_manifold_target_adjustment);
-#endif
+    const std::vector<double> joint_uncertainty_params = ur5_linked_common_config::GetJointUncertaintyParams(options);
+    assert(joint_uncertainty_params.size() == 6);
+    const std::pair<ur5_linked_common_config::SLC, ur5_linked_common_config::SLC> start_and_goal = ur5_linked_common_config::GetStartAndGoal();
+    const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = ur5_linked_common_config::GetSampler();
+    const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = ur5_linked_common_config::GetDefaultRobotConfig(options);
+    const Eigen::Affine3d base_transform = ur5_linked_common_config::GetBaseTransform();
+    const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_linked_common_config::UR5JointActuatorModel> robot = ur5_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params);
+    auto planner_result = uncertainty_planning_core::PlanUR5Uncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;
     const double p_goal_reached = planner_stats.at("P(goal reached)");
@@ -59,8 +45,8 @@ void peg_in_hole_env_linked(int argc, char** argv)
     {
         std::cout << "Planner reached goal, saving & loading policy" << std::endl;
         // Save the policy
-        assert(planning_space.SavePolicy(policy, options.planned_policy_file));
-        const auto loaded_policy = planning_space.LoadPolicy(options.planned_policy_file);
+        assert(uncertainty_planning_core::SaveUR5Policy(policy, options.planned_policy_file));
+        const auto loaded_policy = uncertainty_planning_core::LoadUR5Policy(options.planned_policy_file);
         std::vector<uint8_t> policy_buffer;
         policy.SerializeSelf(policy_buffer);
         std::vector<uint8_t> loaded_policy_buffer;
@@ -93,14 +79,10 @@ void peg_in_hole_env_linked(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-#ifdef USE_ROS
     ros::init(argc, argv, "linked_contact_planning_node");
     ros::NodeHandle nh;
     ROS_INFO("Starting Nomdp Contact Planning Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     peg_in_hole_env_linked(display_debug_publisher);
-#else
-    peg_in_hole_env_linked(argc, argv);
-#endif
     return 0;
 }

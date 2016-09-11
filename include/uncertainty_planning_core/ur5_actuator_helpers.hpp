@@ -21,11 +21,74 @@
 #include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
 #include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
 
-#ifndef BAXTER_JOINT_ACTUATOR_MODEL_HPP
-#define BAXTER_JOINT_ACTUATOR_MODEL_HPP
+#ifndef UR5_ACTUATOR_HELPERS_HPP
+#define UR5_ACTUATOR_HELPERS_HPP
 
-namespace baxter_joint_actuator_model
+namespace ur5_actuator_helpers
 {
+    class SimpleLinkedDimDistancer
+    {
+    public:
+
+        Eigen::VectorXd operator()(const simplelinked_robot_helpers::SimpleLinkedConfiguration& q1, const simplelinked_robot_helpers::SimpleLinkedConfiguration& q2) const
+        {
+            return Distance(q1, q2);
+        }
+
+        static Eigen::VectorXd Distance(const simplelinked_robot_helpers::SimpleLinkedConfiguration& q1, const simplelinked_robot_helpers::SimpleLinkedConfiguration& q2)
+        {
+            return RawDistance(q1, q2).cwiseAbs();
+        }
+
+        static double RawJointDistance(const simplelinked_robot_helpers::SimpleJointModel& j1, const simplelinked_robot_helpers::SimpleJointModel& j2)
+        {
+            assert(j1.IsContinuous() == j2.IsContinuous());
+            return j1.SignedDistance(j1.GetValue(), j2.GetValue());
+        }
+
+        static Eigen::VectorXd RawDistance(const simplelinked_robot_helpers::SimpleLinkedConfiguration& q1, const simplelinked_robot_helpers::SimpleLinkedConfiguration& q2)
+        {
+            const std::vector<double> distance_weights = {2.0, 2.0, 2.0, 1.0, 1.0, 1.0};
+            assert(q1.size() == q2.size());
+            assert(q1.size() == 6);
+            Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(q1.size()));
+            for (size_t idx = 0; idx < q1.size(); idx++)
+            {
+                const simplelinked_robot_helpers::SimpleJointModel& j1 = q1[idx];
+                const simplelinked_robot_helpers::SimpleJointModel& j2 = q2[idx];
+                const double joint_weight = distance_weights[idx];
+                distances((int64_t)idx) = RawJointDistance(j1, j2) * joint_weight;
+            }
+            return distances;
+        }
+
+        static inline std::string TypeName()
+        {
+            return std::string("UR5SimpleLinkedDimDistancer");
+        }
+    };
+
+    class SimpleLinkedDistancer
+    {
+    public:
+
+        double operator()(const simplelinked_robot_helpers::SimpleLinkedConfiguration& q1, const simplelinked_robot_helpers::SimpleLinkedConfiguration& q2) const
+        {
+            return Distance(q1, q2);
+        }
+
+        static double Distance(const simplelinked_robot_helpers::SimpleLinkedConfiguration& q1, const simplelinked_robot_helpers::SimpleLinkedConfiguration& q2)
+        {
+            const Eigen::VectorXd dim_distances = SimpleLinkedDimDistancer::Distance(q1, q2);
+            return dim_distances.norm();
+        }
+
+        static inline std::string TypeName()
+        {
+            return std::string("UR5SimpleLinkedDistancer");
+        }
+    };
+
     typedef std::vector<std::pair<std::pair<double, double>, std::vector<double>>> JointUncertaintySampleModel;
 
     inline std::vector<double> DownsampleBin(const std::vector<double>& raw_bin, const uint32_t downsampled_size)
@@ -127,16 +190,11 @@ namespace baxter_joint_actuator_model
         return bins;
     }
 
-    class BaxterJointActuatorModel
+    class UR5UncertaintySamplesJointActuatorModel
     {
         bool initialized_;
-        bool has_model_;
         double actuator_limit_;
         std::shared_ptr<JointUncertaintySampleModel> model_ptr_;
-
-        std::vector<std::pair<std::pair<double, double>, std::vector<double>>> model_bins_;
-
-
 
         template<typename RNG>
         inline double GetNoiseValue(const double commanded_velocity, RNG rng) const
@@ -159,11 +217,11 @@ namespace baxter_joint_actuator_model
 
     public:
 
-        BaxterJointActuatorModel(const std::shared_ptr<JointUncertaintySampleModel> model_ptr, const double max_velocity) : initialized_(true), has_model_(true), actuator_limit_(fabs(max_velocity)), model_ptr_(model_ptr) {}
+        UR5UncertaintySamplesJointActuatorModel(const std::shared_ptr<JointUncertaintySampleModel> model_ptr, const double max_velocity) : initialized_(true), actuator_limit_(fabs(max_velocity)), model_ptr_(model_ptr) {}
 
-        BaxterJointActuatorModel(const double max_velocity) : initialized_(true), has_model_(false), actuator_limit_(fabs(max_velocity)) {}
+        UR5UncertaintySamplesJointActuatorModel(const double max_velocity) : initialized_(true), actuator_limit_(fabs(max_velocity)) {}
 
-        BaxterJointActuatorModel() : initialized_(true), has_model_(false), actuator_limit_(0.0) {}
+        UR5UncertaintySamplesJointActuatorModel() : initialized_(true), actuator_limit_(0.0) {}
 
         inline bool IsInitialized() const
         {
@@ -172,8 +230,8 @@ namespace baxter_joint_actuator_model
 
         inline double GetControlValue(const double control_input) const
         {
-            assert(isnan(control_input) == false);
-            assert(isinf(control_input) == false);
+            assert(std::isnan(control_input) == false);
+            assert(std::isinf(control_input) == false);
             double real_control_input = std::min(actuator_limit_, control_input);
             real_control_input = std::max(-actuator_limit_, real_control_input);
             return real_control_input;
@@ -182,14 +240,16 @@ namespace baxter_joint_actuator_model
         template<typename RNG>
         inline double GetControlValue(const double control_input, RNG& rng) const
         {
-            assert(isnan(control_input) == false);
-            assert(isinf(control_input) == false);
+            assert(std::isnan(control_input) == false);
+            assert(std::isinf(control_input) == false);
             double real_control_input = GetControlValue(control_input);
             const double noise = GetNoiseValue(real_control_input, rng);
             const double noisy_control_input = real_control_input + noise;
             return noisy_control_input;
         }
     };
+
+    typedef simple_uncertainty_models::SimpleUncertainVelocityActuator UR5JointActuatorModel;
 }
 
-#endif // BAXTER_JOINT_ACTUATOR_MODEL_HPP
+#endif // UR5_ACTUATOR_HELPERS_HPP

@@ -4,7 +4,7 @@ project(uncertainty_planning_core)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools arc_utilities thruster_robot_controllers message_generation)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities thruster_robot_controllers message_generation)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -45,7 +45,7 @@ find_package(OpenMP)
 add_message_files(DIRECTORY msg FILES ObstacleConfig.msg)
 
 ## Generate services in the 'srv' folder
-add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv)
+add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotMove.srv)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -55,7 +55,7 @@ add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv)
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs)
+generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs control_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -66,7 +66,7 @@ generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs)
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools arc_utilities thruster_robot_controllers message_runtime DEPENDS system_lib rt Eigen)
+catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities thruster_robot_controllers message_runtime DEPENDS system_lib rt Eigen OpenMP)
 
 ###########
 ## Build ##
@@ -78,142 +78,77 @@ catkin_package(CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_
 include_directories(include SYSTEM ${catkin_INCLUDE_DIRS} ${Eigen_INCLUDE_DIRS})
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} -Wall -Wextra -Wconversion")
-set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -Wall -Wextra -Wconversion")
+set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -Wall -Wextra -Wconversion -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINKER_FLAGS}")
 
 set(UNCERTAINTY_PLANNING_CORE_SOURCES
-    include/${PROJECT_NAME}/nomdp_planner_state.hpp
+    include/${PROJECT_NAME}/uncertainty_planner_state.hpp
     include/${PROJECT_NAME}/simple_pid_controller.hpp
     include/${PROJECT_NAME}/simple_uncertainty_models.hpp
     include/${PROJECT_NAME}/simple_particle_contact_simulator.hpp
-    include/${PROJECT_NAME}/nomdp_contact_planning.hpp
-    include/${PROJECT_NAME}/execution_policy.hpp)
-
-# Robot-type specific sources
-set(LINKED_SOURCES ${UNCERTAINTY_PLANNING_CORE_SOURCES} include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp)
-set(SE3_SOURCES ${UNCERTAINTY_PLANNING_CORE_SOURCES} include/${PROJECT_NAME}/simplese3_robot_helpers.hpp)
-set(SE2_SOURCES ${UNCERTAINTY_PLANNING_CORE_SOURCES} include/${PROJECT_NAME}/simplese2_robot_helpers.hpp)
-
-# Planning executable sources
-set(LINKED_PLANNER_SOURCES ${LINKED_SOURCES} src/common_config.hpp src/baxter_joint_actuator_model.hpp src/baxter_linked_common_config.hpp src/linked_contact_planning_node.cpp)
-set(SE3_PLANNER_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_common_config.hpp src/se3_contact_planning_node.cpp)
-set(SE3_CLUTTERED_PLANNER_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_cluttered_common_config.hpp src/se3_cluttered_contact_planning_node.cpp)
-set(SE3_NEW_CLUTTERED_PLANNER_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_new_cluttered_common_config.hpp src/se3_new_cluttered_contact_planning_node.cpp)
-set(SE2_PLANNER_SOURCES ${SE2_SOURCES} src/common_config.hpp src/se2_common_config.hpp src/se2_contact_planning_node.cpp)
-
-# Policy execution sources
-set(LINKED_EXECUTION_SOURCES ${LINKED_SOURCES} src/common_config.hpp src/baxter_joint_actuator_model.hpp src/baxter_linked_common_config.hpp src/linked_contact_execution_node.cpp)
-set(SE3_EXECUTION_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_common_config.hpp src/se3_contact_execution_node.cpp)
-set(SE3_CLUTTERED_EXECUTION_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_cluttered_common_config.hpp src/se3_cluttered_contact_execution_node.cpp)
-set(SE3_NEW_CLUTTERED_EXECUTION_SOURCES ${SE3_SOURCES} src/common_config.hpp src/se3_new_cluttered_common_config.hpp src/se3_new_cluttered_contact_execution_node.cpp)
-set(SE2_EXECUTION_SOURCES ${SE2_SOURCES} src/common_config.hpp src/se2_common_config.hpp src/se2_contact_execution_node.cpp)
+    include/${PROJECT_NAME}/uncertainty_contact_planning.hpp
+    include/${PROJECT_NAME}/execution_policy.hpp
+    include/${PROJECT_NAME}/simplese2_robot_helpers.hpp
+    include/${PROJECT_NAME}/simplese3_robot_helpers.hpp
+    include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp
+    include/${PROJECT_NAME}/baxter_actuator_helpers.hpp
+    include/${PROJECT_NAME}/ur5_actuator_helpers.hpp
+    include/${PROJECT_NAME}/uncertainty_planning_core.hpp
+    src/${PROJECT_NAME}/uncertainty_planning_core.cpp)
 
 ###################################################################################################################
-# ROS-ENABLED VERSIONS
+# CORE LIBRARY
 ###################################################################################################################
 
-add_executable(linked_contact_planning_node_parallel ${LINKED_PLANNER_SOURCES})
-add_dependencies(linked_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(linked_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(linked_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -Og -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
-
-add_executable(se3_contact_planning_node_parallel ${SE3_PLANNER_SOURCES})
-add_dependencies(se3_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
-
-add_executable(se3_cluttered_contact_planning_node_parallel ${SE3_CLUTTERED_PLANNER_SOURCES})
-add_dependencies(se3_cluttered_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_cluttered_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_cluttered_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
-
-add_executable(se3_new_cluttered_contact_planning_node_parallel ${SE3_NEW_CLUTTERED_PLANNER_SOURCES})
-add_dependencies(se3_new_cluttered_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_new_cluttered_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_new_cluttered_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
-
-add_executable(se2_contact_planning_node_parallel ${SE2_PLANNER_SOURCES})
-add_dependencies(se2_contact_planning_node_parallel ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se2_contact_planning_node_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se2_contact_planning_node_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DENABLE_DEBUG_PRINTS -DEIGEN_DONT_PARALLELIZE")
+add_library(${PROJECT_NAME} ${UNCERTAINTY_PLANNING_CORE_SOURCES})
+add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} rt)
 
 ###################################################################################################################
-# ROS-DISABLED VERSIONS
+# SE(3) Frontends
 ###################################################################################################################
 
-add_executable(linked_contact_planning_node_no_ros_parallel ${LINKED_PLANNER_SOURCES})
-add_dependencies(linked_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(linked_contact_planning_node_no_ros_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(linked_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE -DDISABLE_ROS_INTERFACE -DENABLE_ROS_PARAMETERS")
+add_executable(se3_contact_planning_node include/${PROJECT_NAME}/se3_common_config.hpp src/se3_contact_planning_node.cpp)
+add_dependencies(se3_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(se3_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
 
-add_executable(se3_contact_planning_node_no_ros_parallel ${SE3_PLANNER_SOURCES})
-add_dependencies(se3_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(se3_contact_planning_node_no_ros_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE -DDISABLE_ROS_INTERFACE -DENABLE_ROS_PARAMETERS")
-
-add_executable(se3_cluttered_contact_planning_node_no_ros_parallel ${SE3_CLUTTERED_PLANNER_SOURCES})
-add_dependencies(se3_cluttered_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(se3_cluttered_contact_planning_node_no_ros_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_cluttered_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE -DDISABLE_ROS_INTERFACE -DENABLE_ROS_PARAMETERS")
-
-add_executable(se3_new_cluttered_contact_planning_node_no_ros_parallel ${SE3_NEW_CLUTTERED_PLANNER_SOURCES})
-add_dependencies(se3_new_cluttered_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(se3_new_cluttered_contact_planning_node_no_ros_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se3_new_cluttered_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE -DDISABLE_ROS_INTERFACE -DENABLE_ROS_PARAMETERS")
-
-add_executable(se2_contact_planning_node_no_ros_parallel ${SE2_PLANNER_SOURCES})
-add_dependencies(se2_contact_planning_node_no_ros_parallel ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(se2_contact_planning_node_no_ros_parallel ${catkin_LIBRARIES} rt)
-set_target_properties(se2_contact_planning_node_no_ros_parallel PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE -DDISABLE_ROS_INTERFACE -DENABLE_ROS_PARAMETERS")
-
-###################################################################################################################
-# SIMULATION AND EXECUTION LINKED
-###################################################################################################################
-
-add_executable(linked_contact_execution_node ${LINKED_EXECUTION_SOURCES})
-add_dependencies(linked_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(linked_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(linked_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
-
-###################################################################################################################
-# SIMULATION AND EXECUTION SE(3) PEG IN HOLE
-###################################################################################################################
-
-add_executable(se3_contact_execution_node ${SE3_EXECUTION_SOURCES})
+add_executable(se3_contact_execution_node include/${PROJECT_NAME}/se3_common_config.hpp src/se3_contact_execution_node.cpp)
 add_dependencies(se3_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(se3_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+target_link_libraries(se3_contact_execution_node ${PROJECT_NAME} ${catkin_LIBRARIES} rt)
 
 ###################################################################################################################
-# SIMULATION AND EXECUTION SE(3) CLUTTERED
+# SE(2) Frontends
 ###################################################################################################################
 
-add_executable(se3_cluttered_contact_execution_node ${SE3_CLUTTERED_EXECUTION_SOURCES})
-add_dependencies(se3_cluttered_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_cluttered_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(se3_cluttered_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+add_executable(se2_contact_planning_node include/${PROJECT_NAME}/se2_common_config.hpp src/se2_contact_planning_node.cpp)
+add_dependencies(se2_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(se2_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
 
-###################################################################################################################
-# SIMULATION AND EXECUTION SE(3) NEW CLUTTERED
-###################################################################################################################
-
-add_executable(se3_new_cluttered_contact_execution_node ${SE3_NEW_CLUTTERED_EXECUTION_SOURCES})
-add_dependencies(se3_new_cluttered_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_new_cluttered_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(se3_new_cluttered_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
-
-###################################################################################################################
-# SIMULATION AND EXECUTION SE(2)
-###################################################################################################################
-
-add_executable(se2_contact_execution_node_debug ${SE2_EXECUTION_SOURCES})
-add_dependencies(se2_contact_execution_node_debug ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se2_contact_execution_node_debug ${catkin_LIBRARIES} rt)
-set_target_properties(se2_contact_execution_node_debug PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
-
-add_executable(se2_contact_execution_node ${SE2_EXECUTION_SOURCES})
+add_executable(se2_contact_execution_node include/${PROJECT_NAME}/se2_common_config.hpp src/se2_contact_execution_node.cpp)
 add_dependencies(se2_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se2_contact_execution_node ${catkin_LIBRARIES} rt)
-set_target_properties(se2_contact_execution_node PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g -DFORCE_DEBUG -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+target_link_libraries(se2_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
 
+###################################################################################################################
+# Baxter Frontends
+###################################################################################################################
+
+add_executable(baxter_contact_planning_node include/${PROJECT_NAME}/baxter_linked_common_config.hpp src/baxter_contact_planning_node.cpp)
+add_dependencies(baxter_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(baxter_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
+
+add_executable(baxter_contact_execution_node include/${PROJECT_NAME}/baxter_linked_common_config.hpp src/baxter_contact_execution_node.cpp)
+add_dependencies(baxter_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(baxter_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
+
+####################################################################################################################
+## Universal Robots Frontends
+####################################################################################################################
+
+#add_executable(ur5_contact_planning_node include/${PROJECT_NAME}/ur5_linked_common_config.hpp src/ur5_contact_planning_node.cpp)
+#add_dependencies(ur5_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+#target_link_libraries(ur5_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
+
+#add_executable(ur5_contact_execution_node include/${PROJECT_NAME}/ur5_linked_common_config.hpp src/ur5_contact_execution_node.cpp)
+#add_dependencies(ur5_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+#target_link_libraries(ur5_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)

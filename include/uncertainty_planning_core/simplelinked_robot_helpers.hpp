@@ -199,8 +199,8 @@ namespace simplelinked_robot_helpers
 
         inline double EnforceLimits(const double value) const
         {
-            assert(isnan(value) == false);
-            assert(isinf(value) == false);
+            assert(std::isnan(value) == false);
+            assert(std::isinf(value) == false);
             if (IsContinuous())
             {
                 return EigenHelpers::EnforceContinuousRevoluteBounds(value);
@@ -245,6 +245,11 @@ namespace simplelinked_robot_helpers
             return SignedDistance(GetValue(), v);
         }
 
+        inline double SignedDistance(const SimpleJointModel& other) const
+        {
+            return SignedDistance(GetValue(), other.GetValue());
+        }
+
         inline double Distance(const double v1, const double v2) const
         {
             return fabs(SignedDistance(v1, v2));
@@ -255,18 +260,23 @@ namespace simplelinked_robot_helpers
             return fabs(SignedDistance(GetValue(), v));
         }
 
+        inline double Distance(const SimpleJointModel& other) const
+        {
+            return fabs(SignedDistance(GetValue(), other.GetValue()));
+        }
+
         inline SimpleJointModel CopyWithNewValue(const double value) const
         {
             return SimpleJointModel(limits_, value, type_);
         }
     };
-}
 
-std::ostream& operator<<(std::ostream& strm, const simplelinked_robot_helpers::SimpleJointModel& joint_model)
-{
-    const std::pair<double, double> limits = joint_model.GetLimits();
-    strm << joint_model.GetValue() << "[" << limits.first << "," << limits.second << ")";
-    return strm;
+    std::ostream& operator<<(std::ostream& strm, const SimpleJointModel& joint_model)
+    {
+        const std::pair<double, double> limits = joint_model.GetLimits();
+        strm << joint_model.GetValue() << "[" << limits.first << "," << limits.second << ")";
+        return strm;
+    }
 }
 
 namespace simplelinked_robot_helpers
@@ -465,7 +475,7 @@ namespace simplelinked_robot_helpers
         static Eigen::VectorXd RawDistance(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2)
         {
             assert(q1.size() == q2.size());
-            Eigen::VectorXd distances = Eigen::VectorXd::Zero(q1.size());
+            Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(q1.size()));
             for (size_t idx = 0; idx < q1.size(); idx++)
             {
                 const SimpleJointModel& j1 = q1[idx];
@@ -564,8 +574,17 @@ namespace simplelinked_robot_helpers
     struct RobotLink
     {
         Eigen::Affine3d link_transform;
-        EigenHelpers::VectorVector3d link_points;
+        std::shared_ptr<EigenHelpers::VectorVector3d> link_points;
         std::string link_name;
+
+        RobotLink() : link_points(new EigenHelpers::VectorVector3d()) {}
+
+        RobotLink(const std::shared_ptr<EigenHelpers::VectorVector3d>& points, const std::string& name) : link_points(points), link_name(name) {}
+
+        inline void SetLinkPoints(const std::shared_ptr<EigenHelpers::VectorVector3d>& points)
+        {
+            link_points = points;
+        }
     };
 
     template<typename ActuatorModel>
@@ -576,6 +595,7 @@ namespace simplelinked_robot_helpers
         Eigen::Affine3d joint_transform;
         Eigen::Vector3d joint_axis;
         SimpleJointModel joint_model;
+        std::string name;
         JointControllerGroup<ActuatorModel> joint_controller;
     };
 
@@ -603,9 +623,9 @@ namespace simplelinked_robot_helpers
                 // Get the current joint
                 const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Get the parent link
-                const RobotLink& parent_link = links_[current_joint.parent_link_index];
+                const RobotLink& parent_link = links_[(size_t)current_joint.parent_link_index];
                 // Get the child link
-                RobotLink& child_link = links_[current_joint.child_link_index];
+                RobotLink& child_link = links_[(size_t)current_joint.child_link_index];
                 // Get the parent_link transform
                 const Eigen::Affine3d parent_transform = parent_link.link_transform;
                 // Get the parent_link->joint transform
@@ -728,14 +748,26 @@ namespace simplelinked_robot_helpers
                 }
             }
             // Make sure the links all have unique names
-            std::map<std::string, uint32_t> name_check_map;
+            std::map<std::string, uint32_t> link_name_check_map;
             for (size_t idx = 0; idx < links.size(); idx++)
             {
                 const std::string& link_name = links[idx].link_name;
-                name_check_map[link_name]++;
-                if (name_check_map[link_name] > 1)
+                link_name_check_map[link_name]++;
+                if (link_name_check_map[link_name] > 1)
                 {
                     std::cerr << "Link " << link_name << " is not unique" << std::endl;
+                    return false;
+                }
+            }
+            // Make sure the joints all have unique names
+            std::map<std::string, uint32_t> joint_name_check_map;
+            for (size_t idx = 0; idx < joints.size(); idx++)
+            {
+                const std::string& joint_name = joints[idx].name;
+                joint_name_check_map[joint_name]++;
+                if (joint_name_check_map[joint_name] > 1)
+                {
+                    std::cerr << "Joint " << joint_name << " is not unique" << std::endl;
                     return false;
                 }
             }
@@ -744,7 +776,7 @@ namespace simplelinked_robot_helpers
 
         static inline Eigen::MatrixXi GenerateAllowedSelfColllisionMap(const size_t num_links, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions)
         {
-            Eigen::MatrixXi allowed_self_collision_map = Eigen::MatrixXi::Identity(num_links, num_links);
+            Eigen::MatrixXi allowed_self_collision_map = Eigen::MatrixXi::Identity((ssize_t)(num_links), (ssize_t)(num_links));
             for (size_t idx = 0; idx < allowed_self_collisions.size(); idx++)
             {
                 const std::pair<size_t, size_t>& allowed_self_collision = allowed_self_collisions[idx];
@@ -760,16 +792,16 @@ namespace simplelinked_robot_helpers
         inline double ComputeMaxMotionPerStep() const
         {
             double max_motion = 0.0;
-            const std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> robot_links_points = GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = GetRawLinksPoints();
             // Generate motion primitives
             std::vector<Eigen::VectorXd> motion_primitives;
             motion_primitives.reserve(GetNumActiveJoints() * 2);
-            for (size_t joint_idx = 0; joint_idx < GetNumActiveJoints(); joint_idx++)
+            for (ssize_t joint_idx = 0; joint_idx < (ssize_t)GetNumActiveJoints(); joint_idx++)
             {
-                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(GetNumActiveJoints());
+                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero((ssize_t)GetNumActiveJoints());
                 raw_motion_plus(joint_idx) = 1.0;
                 motion_primitives.push_back(raw_motion_plus);
-                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(GetNumActiveJoints());
+                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero((ssize_t)GetNumActiveJoints());
                 raw_motion_neg(joint_idx) = -1.0;
                 motion_primitives.push_back(raw_motion_neg);
             }
@@ -778,7 +810,7 @@ namespace simplelinked_robot_helpers
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d link_points = robot_links_points[link_idx].second;
+                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -813,7 +845,7 @@ namespace simplelinked_robot_helpers
             num_active_joints_ = GetNumActiveJoints();
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
-            UpdatePosition(initial_position);
+            ResetPosition(initial_position);
             max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
@@ -831,9 +863,37 @@ namespace simplelinked_robot_helpers
             num_active_joints_ = GetNumActiveJoints();
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
-            UpdatePosition(initial_position);
+            ResetPosition(initial_position);
             max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
+        }
+
+        inline SimpleLinkedRobot()
+        {
+            initialized_ = false;
+        }
+
+        inline std::vector<std::string> GetActiveJointNames() const
+        {
+            std::vector<std::string> active_joint_names;
+            active_joint_names.reserve(num_active_joints_);
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (!(current_joint.joint_model.IsFixed()))
+                {
+                    active_joint_names.push_back(current_joint.name);
+                }
+            }
+            active_joint_names.shrink_to_fit();
+            assert(active_joint_names.size() == num_active_joints_);
+            return active_joint_names;
+        }
+
+        inline bool IsInitialized() const
+        {
+            return initialized_;
         }
 
         inline void SetBaseTransform(const Eigen::Affine3d& base_transform)
@@ -861,19 +921,23 @@ namespace simplelinked_robot_helpers
             }
         }
 
-        inline std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> GetRawLinksPoints() const
         {
-            std::vector<std::pair<std::string, EigenHelpers::VectorVector3d>> links_points(links_.size());
+            std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> links_points;
             for (size_t idx = 0; idx < links_.size(); idx++)
             {
                 const RobotLink& current_link = links_[idx];
-                links_points[idx].first = current_link.link_name;
-                links_points[idx].second = current_link.link_points;
+                links_points.push_back(std::make_pair(current_link.link_name, current_link.link_points));
             }
             return links_points;
         }
 
         inline void UpdatePosition(const SimpleLinkedConfiguration& position)
+        {
+            SetConfig(position);
+        }
+
+        inline void ResetPosition(const SimpleLinkedConfiguration& position)
         {
             SetConfig(position);
             ResetControllers();
@@ -944,7 +1008,7 @@ namespace simplelinked_robot_helpers
         }
 
         template<typename PRNG>
-        inline Eigen::VectorXd GenerateControlAction(const SimpleLinkedConfiguration& target, PRNG& rng)
+        inline Eigen::VectorXd GenerateControlAction(const SimpleLinkedConfiguration& target, const double controller_interval, PRNG& rng)
         {
             // Get the current position
             const SimpleLinkedConfiguration current = GetPosition(rng);
@@ -964,7 +1028,7 @@ namespace simplelinked_robot_helpers
                 else
                 {
                     const double joint_error = current_error(control_idx);
-                    const double joint_term = current_joint.joint_controller.controller.ComputeFeedbackTerm(joint_error, 1.0);
+                    const double joint_term = current_joint.joint_controller.controller.ComputeFeedbackTerm(joint_error, controller_interval);
                     const double joint_control = current_joint.joint_controller.actuator.GetControlValue(joint_term);
                     control_action(control_idx) = joint_control;
                     control_idx++;
@@ -1041,7 +1105,7 @@ namespace simplelinked_robot_helpers
             // Transform the point into world frame
             const Eigen::Vector3d world_point = link_transform * link_relative_point;
             // Make the jacobian storage
-            Eigen::Matrix<double, 6, Eigen::Dynamic> jacobian = Eigen::Matrix<double, 6, Eigen::Dynamic>::Zero(6, num_active_joints_);
+            Eigen::Matrix<double, 6, Eigen::Dynamic> jacobian = Eigen::Matrix<double, 6, Eigen::Dynamic>::Zero((ssize_t)6, (ssize_t)num_active_joints_);
             // First, check if the link name is a valid link name
             bool link_found = false;
             for (size_t idx = 0; idx < links_.size(); idx++)
@@ -1071,7 +1135,7 @@ namespace simplelinked_robot_helpers
                 // Get the current joint
                 const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
                 // Get the child link
-                const RobotLink& child_link = links_[current_joint.child_link_index];
+                const RobotLink& child_link = links_[(size_t)current_joint.child_link_index];
                 // Get the transform of the current joint
                 const Eigen::Affine3d joint_transform = child_link.link_transform;
                 // Compute the jacobian for the current joint
