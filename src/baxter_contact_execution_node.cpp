@@ -242,8 +242,8 @@ int main(int argc, char** argv)
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::SimpleLinkedRobotMove>("simple_linked_robot_move");
     ros::ServiceClient set_uncertainty_service = nh.serviceClient<baxter_robot_interface::SetActuationError>("baxter_robot/set_actuation_uncertainty");
-    std::cout << set_uncertainty_service.getService() << std::endl;
-    set_uncertainty_service.waitForExistence();
+    //std::cout << set_uncertainty_service.getService() << std::endl;
+    //set_uncertainty_service.waitForExistence();
     peg_in_hole_env_linked(display_debug_publisher, robot_control_service, set_uncertainty_service);
     return 0;
 }

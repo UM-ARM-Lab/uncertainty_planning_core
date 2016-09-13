@@ -43,7 +43,7 @@ class ExecuteServer(object):
 
     def service_handler(self, request):
         rospy.loginfo("Received execution service call")
-        if request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.RESET:
+        if request.mode == uncertainty_planning_core.srv.SimpleLinkedRobotMoveRequest.RESET:
             rospy.loginfo("Resetting to " + str(zip(request.joint_name, request.start_position)))
             self.command_stop()
             rospy.sleep(2.5)
@@ -52,10 +52,10 @@ class ExecuteServer(object):
             result.joint_names = request.joint_name
             result.actual.positions = request.start_position
             trajectory = [result]
-        elif request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.EXECUTE:
+        elif request.mode == uncertainty_planning_core.srv.SimpleLinkedRobotMoveRequest.EXECUTE:
             rospy.loginfo("Executing to " + str(zip(request.joint_name, request.target_position)))
             trajectory = self.command_to_target(request.joint_name, request.target_position, request.expected_result_position, request.max_execution_time)
-        elif request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.EXECUTE_FROM_START:
+        elif request.mode == uncertainty_planning_core.srv.SimpleLinkedRobotMoveRequest.EXECUTE_FROM_START:
             rospy.loginfo("First, resetting to " + str(zip(request.joint_name, request.start_position)))
             self.command_stop()
             rospy.sleep(2.5)
@@ -69,8 +69,11 @@ class ExecuteServer(object):
         response = uncertainty_planning_core.srv.SimpleLinkedRobotMoveResponse()
         response.trajectory = trajectory
         rospy.loginfo("Response with " + str(len(response.trajectory)) + " states")
-        reached_state = response.trajectory[-1]
-        rospy.loginfo("Reached " + str(zip(reached_state.joint_names, reached_state.actual.positions)))
+        if len(response.trajectory) > 0:
+            reached_state = response.trajectory[-1]
+            rospy.loginfo("Reached " + str(zip(reached_state.joint_names, reached_state.actual.positions)))
+        else:
+            rospy.logwarn("Response trajectory is empty")
         return response
 
     def command_teleport(self, joint_names, target_positions):

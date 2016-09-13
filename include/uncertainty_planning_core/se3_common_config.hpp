@@ -76,7 +76,7 @@ namespace se3_common_config
         const double ki = 0.0;
         const double kd = 0.01;
         const double i_clamp = 0.0;
-        const double velocity_limit = 1.0; //0.25; // 1.0;
+        const double velocity_limit = 4.0; //0.25; // 1.0;
         const double angular_velocity_limit = velocity_limit * 0.25;
         const double max_sensor_noise = options.sensor_error;
         const double max_angular_sensor_noise = max_sensor_noise * 0.25;

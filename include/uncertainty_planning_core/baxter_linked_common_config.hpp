@@ -330,7 +330,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_s0_joint_model(right_s0_model_samples, 0.5);
         const BaxterJointActuatorModel right_s0_joint_model(-fabs(s0_noise), fabs(s0_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG s0_config = joint_config;
-        s0_config.velocity_limit = 0.5;
+        s0_config.velocity_limit = 0.27;
         right_s0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s0_config, right_s0_joint_model);
         // Base pitch
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_s1;
@@ -344,7 +344,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_s1_joint_model(right_s1_model_samples, 0.5);
         const BaxterJointActuatorModel right_s1_joint_model(-fabs(s1_noise), fabs(s1_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG s1_config = joint_config;
-        s1_config.velocity_limit = 0.5;
+        s1_config.velocity_limit = 0.27;
         right_s1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s1_config, right_s1_joint_model);
         // Elbow pitch
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_e0;
@@ -358,7 +358,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_e0_joint_model(right_e0_model_samples, 0.5);
         const BaxterJointActuatorModel right_e0_joint_model(-fabs(e0_noise), fabs(e0_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG e0_config = joint_config;
-        e0_config.velocity_limit = 0.5;
+        e0_config.velocity_limit = 0.27;
         right_e0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e0_config, right_e0_joint_model);
         // Elbow roll
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_e1;
@@ -372,7 +372,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_e1_joint_model(right_e1_model_samples, 0.5);
         const BaxterJointActuatorModel right_e1_joint_model(-fabs(e1_noise), fabs(e1_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG e1_config = joint_config;
-        e1_config.velocity_limit = 0.5;
+        e1_config.velocity_limit = 0.27;
         right_e1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e1_config, right_e1_joint_model);
         // Wrist pitch
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w0;
@@ -386,7 +386,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_w0_joint_model(right_w0_model_samples, 1.0);
         const BaxterJointActuatorModel right_w0_joint_model(-fabs(w0_noise), fabs(w0_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w0_config = joint_config;
-        w0_config.velocity_limit = 1.0;
+        w0_config.velocity_limit = 0.3;
         right_w0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w0_config, right_w0_joint_model);
         // Wrist roll
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w1;
@@ -400,7 +400,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_w1_joint_model(right_w1_model_samples, 1.0);
         const BaxterJointActuatorModel right_w1_joint_model(-fabs(w1_noise), fabs(w1_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w1_config = joint_config;
-        w1_config.velocity_limit = 1.0;
+        w1_config.velocity_limit = 0.3;
         right_w1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w1_config, right_w1_joint_model);
         // Wrist roll
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w2;
@@ -414,7 +414,7 @@ namespace baxter_linked_common_config
         //const BaxterJointActuatorModel right_w2_joint_model(right_w2_model_samples, 1.0);
         const BaxterJointActuatorModel right_w2_joint_model(-fabs(w2_noise), fabs(w2_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w2_config = joint_config;
-        w2_config.velocity_limit = 1.0;
+        w2_config.velocity_limit = 0.5;
         right_w2.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w2_config, right_w2_joint_model);
         std::vector<simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel>>joints = {right_arm_mount_joint, right_s0, right_s1, right_e0, right_e1, right_w0, right_w1, right_w2};
         const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration);

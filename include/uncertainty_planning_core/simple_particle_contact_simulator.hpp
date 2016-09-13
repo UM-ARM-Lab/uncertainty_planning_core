@@ -491,11 +491,11 @@ namespace uncertainty_planning_tools
             }
             else if (environment_id == "peg_in_hole")
             {
-                double grid_x_size = 12.0;
-                double grid_y_size = 12.0;
-                double grid_z_size = 12.0;
+                double grid_x_size = 14.0;
+                double grid_y_size = 14.0;
+                double grid_z_size = 14.0;
                 // The grid origin is the minimum point, with identity rotation
-                Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
+                Eigen::Translation3d grid_origin_translation(-2.0, -2.0, -2.0);
                 Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
@@ -514,7 +514,7 @@ namespace uncertainty_planning_tools
                             // Set the object we belong to
                             // We assume that all objects are convex, so we can set the convex region as 1
                             // "Bottom bottom"
-                            if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8)  || y_idx >= (grid.GetNumYCells() - 8) || z_idx >= (grid.GetNumZCells() - 8))
+                            if (x_idx <= 16 || y_idx <= 16 || z_idx <= 16 || x_idx >= (grid.GetNumXCells() - 16)  || y_idx >= (grid.GetNumYCells() - 16) || z_idx >= (grid.GetNumZCells() - 16))
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
                                 grid.Set(x_idx, y_idx, z_idx, buffer_cell);
@@ -2513,6 +2513,8 @@ namespace uncertainty_planning_tools
             return sqrt(max_point_motion_squared);
         }
 
+        // TODO - Why, if every resolve starts at a safe, valid state, and must end at a safe, valid, state, do some resolve operations increase penetration distance, especially those that resolve in OOB environment?! How are some resolves pathologically bad? Why does the speed of the robot, which should be completely independent of microstep size, play a role?
+
         inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(Robot robot, const Eigen::VectorXd& control_input, const double controller_interval, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const uint64_t call_number, ros::Publisher& display_pub) const
         {
             UNUSED(display_pub);
@@ -2783,9 +2785,19 @@ namespace uncertainty_planning_tools
                     const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
                     const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    if (this->environment_sdf_.CheckInBounds(current_point_location) == false)
+                    const bool previous_in_bounds = this->environment_sdf_.CheckInBounds(previous_point_location);
+                    const bool current_in_bounds = this->environment_sdf_.CheckInBounds(current_point_location);
+                    if (previous_in_bounds == false)
                     {
-                        const std::string msg = "Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
+                        const std::string msg = "(Previous) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
+                        arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
+#ifdef ASSERT_ON_OUT_OF_BOUNDS
+                        assert(false);
+#endif
+                    }
+                    if (current_in_bounds == false)
+                    {
+                        const std::string msg = "(Current) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
                         arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
 #ifdef ASSERT_ON_OUT_OF_BOUNDS
                         assert(false);
@@ -2793,7 +2805,7 @@ namespace uncertainty_planning_tools
                     }
                     const float distance = this->environment_sdf_.Get(current_point_location);
                     // We only work with points in collision
-                    if (distance < resolution_distance_threshold_)
+                    if (distance < resolution_distance_threshold_ && current_in_bounds && previous_in_bounds)
                     {
                         // We query the surface normal map for the gradient to move out of contact using the particle motion
                         const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
@@ -2809,7 +2821,7 @@ namespace uncertainty_planning_tools
                         // - We know that the current location corresponds to a collision location
                         // - We know that the point has moved a short distance, and thus has not moved over meaningful intermediate cells
                         // So, we can assume that the collision/free boundary lies exactly halfway between the previous location's cell
-                        // and the current location's cell. (WE NEED TO CHECK< MAY REQUIRE LINE SEARCH)
+                        // and the current location's cell. (WE NEED TO CHECK, MAY REQUIRE LINE SEARCH)
                         // Additionally, we project the current cell->current vector onto the
                         // previous cell->current cell vector to adjust the estimate
                         const std::vector<int64_t> previous_cell_indices = this->environment_sdf_.LocationToGridIndex(previous_point_location);

@@ -48,7 +48,12 @@ namespace baxter_actuator_helpers
 
         static Eigen::VectorXd RawDistance(const simplelinked_robot_helpers::SimpleLinkedConfiguration& q1, const simplelinked_robot_helpers::SimpleLinkedConfiguration& q2)
         {
-            const std::vector<double> distance_weights = {2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0};
+            const std::vector<double> max_velocities = {0.27, 0.27, 0.27, 0.27, 0.3, 0.3, 0.5};
+            std::vector<double> distance_weights(max_velocities.size(), 0.0);
+            for (size_t idx = 0; idx < max_velocities.size(); idx++)
+            {
+                distance_weights[idx] = 1.0 / max_velocities[idx];
+            }
             assert(q1.size() == q2.size());
             assert(q1.size() == 7);
             Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(q1.size()));
