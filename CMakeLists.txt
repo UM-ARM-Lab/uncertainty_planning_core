@@ -106,6 +106,18 @@ add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_genc
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} rt)
 
 ###################################################################################################################
+# Simulator Demonstration Frontend
+###################################################################################################################
+
+add_executable(simulator_demonstration_node include/${PROJECT_NAME}/se3_common_config.hpp
+                                            include/${PROJECT_NAME}/se2_common_config.hpp
+                                            include/${PROJECT_NAME}/baxter_linked_common_config.hpp
+                                            include/${PROJECT_NAME}/ur5_linked_common_config.hpp
+                                            src/simulator_demonstration_node.cpp)
+add_dependencies(simulator_demonstration_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(simulator_demonstration_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
+
+###################################################################################################################
 # SE(3) Frontends
 ###################################################################################################################
 

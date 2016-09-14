@@ -174,6 +174,9 @@ namespace ur5_linked_common_config
 
     inline void MakeCylinderPoints(const double radius, const double length, const double resolution, const Eigen::Vector3d& axis, const std::shared_ptr<EigenHelpers::VectorVector3d>& points)
     {
+        UNUSED(radius);
+        UNUSED(length);
+        UNUSED(axis);
         points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         points->push_back(Eigen::Vector3d(resolution, 0.0, 0.0));
         points->push_back(Eigen::Vector3d(0.0, resolution, 0.0));

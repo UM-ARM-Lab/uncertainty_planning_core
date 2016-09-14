@@ -141,6 +141,8 @@ namespace uncertainty_planning_core
 
     SE2Policy LoadSE2Policy(const std::string& filename);
 
+    std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> DemonstrateSE2Simulator(const OPTIONS& options, const simplese2_robot_helpers::SimpleSE2Robot& robot, const simplese2_robot_helpers::SimpleSE2BaseSampler& sampler, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher);
+
     std::pair<SE2Policy, std::map<std::string, double>> PlanSE2Uncertainty(const OPTIONS& options, const simplese2_robot_helpers::SimpleSE2Robot& robot, const simplese2_robot_helpers::SimpleSE2BaseSampler& sampler, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher);
 
     std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE2UncertaintyPolicy(const OPTIONS& options, const simplese2_robot_helpers::SimpleSE2Robot& robot, const simplese2_robot_helpers::SimpleSE2BaseSampler& sampler, SE2Policy policy, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher);
@@ -152,6 +154,8 @@ namespace uncertainty_planning_core
     bool SaveSE3Policy(const SE3Policy& policy, const std::string& filename);
 
     SE3Policy LoadSE3Policy(const std::string& filename);
+
+    EigenHelpers::VectorAffine3d DemonstrateSE3Simulator(const OPTIONS& options, const simplese3_robot_helpers::SimpleSE3Robot& robot, const simplese3_robot_helpers::SimpleSE3BaseSampler& sampler, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, ros::Publisher& display_debug_publisher);
 
     std::pair<SE3Policy, std::map<std::string, double>> PlanSE3Uncertainty(const OPTIONS& options, const simplese3_robot_helpers::SimpleSE3Robot& robot, const simplese3_robot_helpers::SimpleSE3BaseSampler& sampler, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, ros::Publisher& display_debug_publisher);
 
@@ -165,6 +169,8 @@ namespace uncertainty_planning_core
 
     BaxterPolicy LoadBaxterPolicy(const std::string& filename);
 
+    std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>> DemonstrateBaxterSimulator(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+
     std::pair<BaxterPolicy, std::map<std::string, double>> PlanBaxterUncertainty(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
 
     std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateBaxterUncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
@@ -176,6 +182,8 @@ namespace uncertainty_planning_core
     bool SaveUR5Policy(const UR5Policy& policy, const std::string& filename);
 
     UR5Policy LoadUR5Policy(const std::string& filename);
+
+    std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>> DemonstrateUR5Simulator(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
 
     std::pair<UR5Policy, std::map<std::string, double>> PlanUR5Uncertainty(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
 

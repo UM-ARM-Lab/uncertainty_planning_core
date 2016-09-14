@@ -90,6 +90,27 @@ namespace uncertainty_planning_tools
         std::vector<ForwardSimulationResolverTrace<Configuration, ConfigAlloc>> resolver_steps;
     };
 
+    template<typename Configuration, typename ConfigAlloc=std::allocator<Configuration>>
+    inline std::vector<Configuration, ConfigAlloc> ExtractTrajectoryFromTrace(const ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace)
+    {
+        std::vector<Configuration, ConfigAlloc> execution_trajectory;
+        execution_trajectory.reserve(trace.resolver_steps.size());
+        for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
+        {
+            const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
+            for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
+            {
+                // Get the current trace segment
+                const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
+                // Get the last (collision-free resolved) config of the segment
+                const Configuration& resolved_config = contact_resolution_trace.contact_resolution_steps.back();
+                execution_trajectory.push_back(resolved_config);
+            }
+        }
+        execution_trajectory.shrink_to_fit();
+        return execution_trajectory;
+    }
+
     struct OBSTACLE_CONFIG
     {
         uint32_t object_id;
