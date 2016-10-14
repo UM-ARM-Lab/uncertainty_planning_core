@@ -71,7 +71,7 @@ void demonstrate_baxter(ros::Publisher& display_debug_publisher)
 
 void demonstrate_ur5(ros::Publisher& display_debug_publisher)
 {
-    std::cout << "Demonstrating Baxter..." << std::endl;
+    std::cout << "Demonstrating UR5..." << std::endl;
     const uncertainty_planning_core::OPTIONS options = ur5_linked_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
     const std::vector<double> joint_uncertainty_params = ur5_linked_common_config::GetJointUncertaintyParams(options);
@@ -86,13 +86,32 @@ void demonstrate_ur5(ros::Publisher& display_debug_publisher)
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "se3_contact_planning_node");
+    ros::init(argc, argv, "simulator_demonstration_node");
     ros::NodeHandle nh;
-    ROS_INFO("Starting Nomdp Contact Planning Node...");
+    ROS_INFO("Starting Simulator Demonstration Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
-    demonstrate_se2(display_debug_publisher);
-    demonstrate_se3(display_debug_publisher);
-    demonstrate_baxter(display_debug_publisher);
-    demonstrate_ur5(display_debug_publisher);
+    std::string robot_type;
+    ros::NodeHandle nhp("~");
+    nhp.param(std::string("robot_type"), robot_type, std::string("baxter"));
+    if (robot_type == "se2")
+    {
+        demonstrate_se2(display_debug_publisher);
+    }
+    else if (robot_type == "se3")
+    {
+        demonstrate_se3(display_debug_publisher);
+    }
+    else if (robot_type == "baxter")
+    {
+        demonstrate_baxter(display_debug_publisher);
+    }
+    else if (robot_type == "ur5")
+    {
+        demonstrate_ur5(display_debug_publisher);
+    }
+    else
+    {
+        std::cout << "Robot type [" << robot_type << "] is not recognized" << std::endl;
+    }
     return 0;
 }

@@ -46,7 +46,7 @@ class ExecuteServer(object):
         elif request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.EXECUTE:
             rospy.loginfo("Executing to " + str(request.target))
             robot_target = request.target
-            trajectory = self.command_to_target(robot_target, request.time_limit)
+            trajectory = self.command_to_target(robot_target, request.time_limit, request.execution_shortcut_distance)
         elif request.mode == uncertainty_planning_core.srv.Simple6dofRobotMoveRequest.EXECUTE_FROM_START:
             rospy.loginfo("First, resetting to " + str(request.start))
             self.command_stop()
@@ -54,7 +54,7 @@ class ExecuteServer(object):
             self.command_teleport(request.start)
             rospy.loginfo("Executing to " + str(request.target))
             robot_target = request.target
-            trajectory = self.command_to_target(robot_target, request.time_limit)
+            trajectory = self.command_to_target(robot_target, request.time_limit, request.execution_shortcut_distance)
         else:
             rospy.logerr("Invalid mode command")
             trajectory = []
@@ -70,10 +70,11 @@ class ExecuteServer(object):
         req.target_pose = target_pose
         self.teleport_client.call(req)
 
-    def command_to_target(self, target_pose, time_limit):
+    def command_to_target(self, target_pose, time_limit, execution_shortcut_distance):
         goal = thruster_robot_controllers.msg.GoToPoseTargetGoal()
         goal.max_execution_time = time_limit
         goal.target_pose = target_pose
+        goal.execution_shortcut_distance = execution_shortcut_distance
         self.command_action_client.send_goal(goal)
         self.command_action_client.wait_for_result()
         result = self.command_action_client.get_result()

@@ -29,7 +29,7 @@
 
 using namespace uncertainty_contact_planning;
 
-inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> move_robot(const Eigen::Matrix<double, 3, 1>& target_config, const Eigen::Matrix<double, 3, 1>& expected_result_config, const double duration, const bool reset, ros::ServiceClient& robot_control_service)
+inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> move_robot(const Eigen::Matrix<double, 3, 1>& target_config, const Eigen::Matrix<double, 3, 1>& expected_result_config, const double duration, const double execution_shortcut_distance, const bool reset, ros::ServiceClient& robot_control_service)
 {
     UNUSED(expected_result_config);
     const Eigen::Affine3d target_transform = Eigen::Translation3d(target_config(0), target_config(1), 0.0) * Eigen::Quaterniond(Eigen::AngleAxisd(target_config(2), Eigen::Vector3d::UnitZ()));
@@ -37,6 +37,7 @@ inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<dou
     // Put together service call
     uncertainty_planning_core::Simple6dofRobotMove::Request req;
     req.time_limit = ros::Duration(duration);
+    req.execution_shortcut_distance = execution_shortcut_distance;
     if (reset)
     {
         std::cout << "Resetting robot to transform: " << PrettyPrint::PrettyPrint(target_transform) << std::endl;
@@ -133,7 +134,7 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
             std::cout << "Setting actuation uncertainty..." << std::endl;
             set_uncertainty(robot_config.max_actuator_noise, robot_config.r_max_actuator_noise, set_uncertainty_service);
         }
-        std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&, const Eigen::Matrix<double, 3, 1>&, const double, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 3, 1>& target_configuration, const Eigen::Matrix<double, 3, 1>& expected_result_configuration, const double duration, const bool reset) { return move_robot(target_configuration, expected_result_configuration, duration, reset, robot_control_service); };
+        std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&, const Eigen::Matrix<double, 3, 1>&, const double, const double, const bool)> robot_execution_fn = [&] (const Eigen::Matrix<double, 3, 1>& target_configuration, const Eigen::Matrix<double, 3, 1>& expected_result_configuration, const double duration, const double execution_shortcut_distance, const bool reset) { return move_robot(target_configuration, expected_result_configuration, duration, execution_shortcut_distance, reset, robot_control_service); };
         const auto policy_execution_results = uncertainty_planning_core::ExecuteSE2UncertaintyPolicy(options, robot, sampler, policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, display_debug_publisher);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
         const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second.first;

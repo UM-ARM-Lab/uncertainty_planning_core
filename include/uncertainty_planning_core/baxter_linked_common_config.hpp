@@ -44,21 +44,21 @@ namespace baxter_linked_common_config
 #else
         options.environment_resolution = RESOLUTION;
 #endif
-        options.planner_time_limit = 300.0;
-        options.goal_bias = 0.1;
-        options.step_size = M_PI;
+        options.planner_time_limit = 360.0;
+        options.goal_bias = 0.15;
+        options.step_size = 1.0;
         options.step_duration = 10.0;
         options.goal_probability_threshold = 0.51;
         options.goal_distance_threshold = 0.15; // 0.05;
-        options.connect_after_first_solution = 0.0;
-        options.signature_matching_threshold = 0.99;
+        options.connect_after_first_solution = 0.25;
+        options.signature_matching_threshold = 0.0;
         options.distance_clustering_threshold = M_PI_2;
         options.feasibility_alpha = 0.75;
         options.variance_alpha = 0.75;
-        options.actuator_error = M_PI * 0.02;
+        options.actuator_error = 0.0;
         options.sensor_error = 0.0;
         options.edge_attempt_count = 50u;
-        options.num_particles = 24u;
+        options.num_particles = 1u;
         options.use_contact = true;
         options.use_reverse = true;
         options.use_spur_actions = true;
@@ -67,7 +67,7 @@ namespace baxter_linked_common_config
         options.num_policy_simulations = 1u;
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
-        options.debug_level = 0;
+        options.debug_level = 15u;
         options.enable_contact_manifold_target_adjustment = false;
         options.planner_log_file = "/tmp/baxter_planner_log.txt";
         options.policy_log_file = "/tmp/baxter_policy_log.txt";
@@ -84,9 +84,9 @@ namespace baxter_linked_common_config
     inline simplelinked_robot_helpers::ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
     {
         const double env_resolution = options.environment_resolution;
-        const double kp = 0.1;
+        const double kp = 1.0;
         const double ki = 0.0;
-        const double kd = 0.01;
+        const double kd = 0.1;
         const double i_clamp = 0.0;
         const double velocity_limit = env_resolution * 2.0;
         const double max_sensor_noise = options.sensor_error;
@@ -117,6 +117,7 @@ namespace baxter_linked_common_config
         left_arm_configuration[4] = SJM(std::pair<double, double>(-3.059, 3.059), left_w0, SJM::REVOLUTE); // left_w0
         const double left_w1 = joint_values[5];
         left_arm_configuration[5] = SJM(std::pair<double, double>(-1.57079632679, 2.094), left_w1, SJM::REVOLUTE); // left_w1
+        //left_arm_configuration[5] = SJM(std::pair<double, double>(-1.218, 2.094), left_w1, SJM::REVOLUTE); // left_w1
         const double left_w2 = joint_values[6];
         left_arm_configuration[6] = SJM(std::pair<double, double>(-3.059, 3.059), left_w2, SJM::REVOLUTE); // left_w2
         return left_arm_configuration;
@@ -138,6 +139,7 @@ namespace baxter_linked_common_config
         right_arm_configuration[4] = SJM(std::pair<double, double>(-3.059, 3.059), right_w0, SJM::REVOLUTE); // right_w0
         const double right_w1 = joint_values[5];
         right_arm_configuration[5] = SJM(std::pair<double, double>(-1.57079632679, 2.094), right_w1, SJM::REVOLUTE); // right_w1
+        //right_arm_configuration[5] = SJM(std::pair<double, double>(-1.218, 2.094), right_w1, SJM::REVOLUTE); // right_w1
         const double right_w2 = joint_values[6];
         right_arm_configuration[6] = SJM(std::pair<double, double>(-3.059, 3.059), right_w2, SJM::REVOLUTE); // right_w2
         return right_arm_configuration;
@@ -146,9 +148,8 @@ namespace baxter_linked_common_config
     inline std::pair<SLC, SLC> GetStartAndGoal()
     {
         // Define the goals of the plan
-        //const SLC goal = MakeBaxterRightArmConfiguration(std::vector<double>{0.5821457090025145, -0.27496605622846043, 0.016490293469768196, 1.1508690861110316, -0.24045148850103862, -0.8448399189278917, 0.06366020269724466});
         const SLC goal = MakeBaxterRightArmConfiguration(std::vector<double>{0.5821457090025145, -0.27496605622846043, 0.016490293469768196, 1.1508690861110316, -0.24045148850103862, -0.89, 0.06366020269724466});
-        const SLC start = MakeBaxterRightArmConfiguration(std::vector<double>{0.11926700625809092, 1.9155585088719105, -0.27534955142543177, -0.47284957786567877, -1.2931458041874038, -1.4549807773093149, -0.2918398448952});
+        const SLC start = MakeBaxterRightArmConfiguration(std::vector<double>{0.119267, 1.047, -0.27535, -0.05, -1.29315, -1.218, -0.29184});
         return std::make_pair(start, goal);
     }
 
@@ -304,8 +305,8 @@ namespace baxter_linked_common_config
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.2));
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.225));
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.25));
-        right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.275));
-        right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.3));
+        //right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.26));
+        //right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.3));
         std::vector<simplelinked_robot_helpers::RobotLink> links = {torso, right_arm_mount, right_upper_shoulder, right_lower_shoulder, right_upper_elbow, right_lower_elbow, right_upper_forearm, right_lower_forearm, right_wrist};
         std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7), std::pair<size_t, size_t>(7, 8)};
         // right_s0

@@ -173,6 +173,7 @@ namespace uncertainty_contact_planning
         mutable uint64_t goal_reaching_successful_;
         mutable double total_goal_reached_probability_;
         mutable double time_to_first_solution_;
+        mutable double elapsed_clustering_time_;
         mutable NomdpPlanningTree nearest_neighbors_storage_;
         mutable SpatialClusteringPerformance clustering_performance_;
 
@@ -369,6 +370,7 @@ namespace uncertainty_contact_planning
             split_id_ = 0;
             cluster_calls_ = 0;
             cluster_fallback_calls_ = 0;
+            elapsed_clustering_time_ = 0.0;
             particles_stored_ = 0;
             particles_simulated_ = 0;
             goal_candidates_evaluated_ = 0;
@@ -408,76 +410,83 @@ namespace uncertainty_contact_planning
             display_pub.publish(simulator_step_display_rep);
             // Wait for input
             std::cout << "Press ENTER to solve..." << std::endl;
-#ifndef FORCE_DEBUG
             std::cin.get();
-#endif
             uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             simulator_ptr_->ForwardSimulateRobot(robot_, start, goal, rng_, step_duration_, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, enable_contact_manifold_target_adjustment, trace, true, display_pub);
             // Wait for input
             std::cout << "Press ENTER to draw..." << std::endl;
-#ifndef FORCE_DEBUG
             std::cin.get();
-#endif
-            // Draw the action
-            std_msgs::ColorRGBA free_color;
-            free_color.r = 0.0;
-            free_color.g = 1.0;
-            free_color.b = 0.0;
-            free_color.a = 1.0;
-            std_msgs::ColorRGBA colliding_color;
-            colliding_color.r = 1.0;
-            colliding_color.g = 0.0;
-            colliding_color.b = 0.0;
-            colliding_color.a = 1.0;
-            std_msgs::ColorRGBA control_input_color;
-            control_input_color.r = 1.0;
-            control_input_color.g = 1.0;
-            control_input_color.b = 0.0;
-            control_input_color.a = 1.0;
-            std_msgs::ColorRGBA control_step_color;
-            control_step_color.r = 0.0;
-            control_step_color.g = 1.0;
-            control_step_color.b = 1.0;
-            control_step_color.a = 1.0;
-            // Keep track of previous position
-            Configuration previous_config = start;
-            for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
+            if (debug_level_ >= 20)
             {
-                const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
-                const Eigen::VectorXd& control_input_step = step_trace.control_input_step;
-                // Draw the control input for the entire trace segment
-                const Eigen::VectorXd& control_input = step_trace.control_input;
-                visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, previous_config, control_input, control_input_color);
-                control_step_marker.ns = "control_input_state";
-                control_step_marker.id = 1;
-                visualization_msgs::MarkerArray control_display_rep;
-                control_display_rep.markers.push_back(control_step_marker);
-                display_pub.publish(control_display_rep);
-                for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
+                // Draw the action
+                std_msgs::ColorRGBA free_color;
+                free_color.r = 0.0;
+                free_color.g = 1.0;
+                free_color.b = 0.0;
+                free_color.a = 1.0;
+                std_msgs::ColorRGBA colliding_color;
+                colliding_color.r = 1.0;
+                colliding_color.g = 0.0;
+                colliding_color.b = 0.0;
+                colliding_color.a = 1.0;
+                std_msgs::ColorRGBA control_input_color;
+                control_input_color.r = 1.0;
+                control_input_color.g = 1.0;
+                control_input_color.b = 0.0;
+                control_input_color.a = 1.0;
+                std_msgs::ColorRGBA control_step_color;
+                control_step_color.r = 0.0;
+                control_step_color.g = 1.0;
+                control_step_color.b = 1.0;
+                control_step_color.a = 1.0;
+                // Keep track of previous position
+                Configuration previous_config = start;
+                for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
                 {
-                    // Get the current trace segment
-                    const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
-                    for (size_t contact_resolution_step_idx = 0; contact_resolution_step_idx < contact_resolution_trace.contact_resolution_steps.size(); contact_resolution_step_idx++)
+                    const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
+                    const Eigen::VectorXd& control_input_step = step_trace.control_input_step;
+                    // Draw the control input for the entire trace segment
+                    const Eigen::VectorXd& control_input = step_trace.control_input;
+                    visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, previous_config, control_input, control_input_color);
+                    control_step_marker.ns = "control_input_state";
+                    control_step_marker.id = 1;
+                    visualization_msgs::MarkerArray control_display_rep;
+                    control_display_rep.markers.push_back(control_step_marker);
+                    display_pub.publish(control_display_rep);
+                    for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
                     {
-                        const Configuration& current_config = contact_resolution_trace.contact_resolution_steps[contact_resolution_step_idx];
-                        previous_config = current_config;
-                        const std_msgs::ColorRGBA& current_color = (contact_resolution_step_idx == (contact_resolution_trace.contact_resolution_steps.size() - 1)) ? free_color : colliding_color;
-                        visualization_msgs::Marker step_marker = DrawRobotConfiguration(robot_, current_config, current_color);
-                        step_marker.ns = "step_state";
-                        step_marker.id = 1;
-                        visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, current_config, -control_input_step, control_step_color);
-                        control_step_marker.ns = "control_step_state";
-                        control_step_marker.id = 1;
-                        visualization_msgs::MarkerArray simulator_step_display_rep;
-                        simulator_step_display_rep.markers.push_back(step_marker);
-                        simulator_step_display_rep.markers.push_back(control_step_marker);
-                        display_pub.publish(simulator_step_display_rep);
-                        // Wait for input
-                        //std::cout << "Press ENTER to continue..." << std::endl;
-                        ros::Duration(0.05).sleep();
-                        //std::cin.get();
+                        // Get the current trace segment
+                        const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
+                        for (size_t contact_resolution_step_idx = 0; contact_resolution_step_idx < contact_resolution_trace.contact_resolution_steps.size(); contact_resolution_step_idx++)
+                        {
+                            const Configuration& current_config = contact_resolution_trace.contact_resolution_steps[contact_resolution_step_idx];
+                            previous_config = current_config;
+                            const std_msgs::ColorRGBA& current_color = (contact_resolution_step_idx == (contact_resolution_trace.contact_resolution_steps.size() - 1)) ? free_color : colliding_color;
+                            visualization_msgs::Marker step_marker = DrawRobotConfiguration(robot_, current_config, current_color);
+                            step_marker.ns = "step_state";
+                            step_marker.id = 1;
+                            visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, current_config, -control_input_step, control_step_color);
+                            control_step_marker.ns = "control_step_state";
+                            control_step_marker.id = 1;
+                            visualization_msgs::MarkerArray simulator_step_display_rep;
+                            simulator_step_display_rep.markers.push_back(step_marker);
+                            simulator_step_display_rep.markers.push_back(control_step_marker);
+                            display_pub.publish(simulator_step_display_rep);
+                            // Wait for input
+                            //std::cout << "Press ENTER to continue..." << std::endl;
+                            ros::Duration(0.05).sleep();
+                            //std::cin.get();
+                        }
                     }
                 }
+            }
+            else
+            {
+                const std::vector<Configuration, ConfigAlloc> trajectory = uncertainty_planning_tools::ExtractTrajectoryFromTrace(trace);
+                const double time_interval = 1.0 / 25.0;
+                const uint32_t rand_suffix = std::uniform_int_distribution<uint32_t>(1, 1000000)(rng_);
+                const std::string ns = "simulator_test_" + std::to_string(rand_suffix);
+                DrawParticlePolicyExecution(ns, trajectory, display_pub, time_interval, MakeColor(0.0f, 0.25f, 0.5f, 1.0f));
             }
             return trace;
         }
@@ -543,7 +552,7 @@ namespace uncertainty_contact_planning
             planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
             planning_results.second["Time to first solution"] = time_to_first_solution_;
             clustering_performance_.ExportResults();
-            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
+            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering, which took " << elapsed_clustering_time_ << " seconds of total runtime" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
             const std::map<std::string, double> simulator_resolve_statistics = simulator_ptr_->GetStatistics();
             planning_results.second.insert(simulator_resolve_statistics.begin(), simulator_resolve_statistics.end());
@@ -839,7 +848,7 @@ namespace uncertainty_contact_planning
             return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 
-        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<NomdpPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const double, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user, const double draw_wait) const
         {
             // Buffer for a teensy bit of time
             for (size_t iter = 0; iter < 100; iter++)
@@ -1014,7 +1023,7 @@ namespace uncertainty_contact_planning
             return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const bool)>& move_fn, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<NomdpPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(NomdpPlanningPolicy policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const double, const bool)>& move_fn, const double exec_time_limit, ros::Publisher& display_pub, const bool wait_for_user) const
         {
             std::cout << "Drawing environment..." << std::endl;
             display_pub.publish(simulator_ptr_->ExportAllForDisplay());
@@ -1042,9 +1051,10 @@ namespace uncertainty_contact_planning
             }
             // Let's do this
             std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, display_pub); };
+            const double step_shortcut_distance = (goal_distance_threshold_ * 0.5);
             // Reset the robot first
             std::cout << "Reseting before policy execution..." << std::endl;
-            move_fn(start, start, step_duration_, true);
+            move_fn(start, start, step_duration_, step_shortcut_distance, true);
             std::cout << "Executing policy..." << std::endl;
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
@@ -1109,7 +1119,7 @@ namespace uncertainty_contact_planning
                     std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
                 }
                 // Simulate fowards
-                const std::vector<Configuration, ConfigAlloc> execution_states = move_fn(action, expected_result, step_duration_, false);
+                const std::vector<Configuration, ConfigAlloc> execution_states = move_fn(action, expected_result, step_duration_, step_shortcut_distance, false);
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
                 const Configuration result_config = particle_trajectory.back();
                 // Check if we've reached the goal
@@ -1134,26 +1144,12 @@ namespace uncertainty_contact_planning
         {
             uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             simulator_ptr_->ForwardSimulateRobot(robot_, current_config, action, rng, step_duration_, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, enable_contact_manifold_target_adjustment, trace, true, display_pub);
-            std::vector<Configuration, ConfigAlloc> execution_trace;
-            execution_trace.reserve(trace.resolver_steps.size());
-            for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
+            std::vector<Configuration, ConfigAlloc> execution_trajectory = uncertainty_planning_tools::ExtractTrajectoryFromTrace(trace);
+            if (execution_trajectory.empty())
             {
-                const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
-                for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
-                {
-                    // Get the current trace segment
-                    const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
-                    // Get the last (collision-free resolved) config of the segment
-                    const Configuration& resolved_config = contact_resolution_trace.contact_resolution_steps.back();
-                    execution_trace.push_back(resolved_config);
-                }
+                std::cerr << "Exec trajectory is empty, this should not happen!" << std::endl;
             }
-            execution_trace.shrink_to_fit();
-            if (execution_trace.empty())
-            {
-                std::cerr << "Exec trace is empty, this should not happen!" << std::endl;
-            }
-            return execution_trace;
+            return execution_trajectory;
         }
 
         /*
@@ -1343,7 +1339,7 @@ namespace uncertainty_contact_planning
             configuration_marker.scale.z = simulator_ptr_->GetResolution();
             configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
             configuration_marker.color = real_color;
-            // Make the indivudal points
+            // Make the individual points
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
@@ -1424,7 +1420,7 @@ namespace uncertainty_contact_planning
             configuration_marker.scale.z = simulator_ptr_->GetResolution() * 0.5;
             configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
             configuration_marker.color = real_color;
-            // Make the indivudal points
+            // Make the individual points
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
             // Now, go through the links and points of the robot for collision checking
@@ -1932,7 +1928,7 @@ namespace uncertainty_contact_planning
                 const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(current_cluster, distance_fn);
                 // Check the max element of the distance matrix
                 const double max_distance = distance_matrix.maxCoeff();
-                std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
+                //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
                 if (max_distance <= distance_threshold)
                 {
                     std::cout << "Cluster by convex region of " << current_cluster.size() << " elements has max distance " << max_distance << " below distance threshold " << distance_threshold << ", not performing additional hierarchical clustering" << std::endl;
@@ -1947,7 +1943,7 @@ namespace uncertainty_contact_planning
                     std::cout << "Additional hierarchical clustering produced " << new_clustering.size() << " clusters" << std::endl;
                     for (size_t ndx = 0; ndx < new_clustering.size(); ndx++)
                     {
-                        std::cout << "Resulting cluster " << ndx << ":\n" << PrettyPrint::PrettyPrint(new_clustering[ndx]) << std::endl;
+                        //std::cout << "Resulting cluster " << ndx << ":\n" << PrettyPrint::PrettyPrint(new_clustering[ndx]) << std::endl;
                         intermediate_clusters.push_back(new_clustering[ndx]);
                     }
                 }
@@ -1966,10 +1962,11 @@ namespace uncertainty_contact_planning
             {
                 return std::vector<std::vector<std::pair<Configuration, bool>>>{particles};
             }
+            const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             cluster_calls_++;
             // Perform a first pass of clustering using spatial features
             const std::vector<std::vector<size_t>> initial_clusters = PerformSpatialFeatureClustering(particles, display_pub);
-            std::cout << "Initial clustering: " << PrettyPrint::PrettyPrint(initial_clusters, true) << std::endl;
+            //std::cout << "Initial clustering: " << PrettyPrint::PrettyPrint(initial_clusters, true) << std::endl;
             // Now, for each of the initial clusters, we run a second pass of distance-threshold hierarchical clustering
             const std::vector<std::vector<size_t>> final_index_clusters = RunDistanceClusteringOnInitialClusters(initial_clusters, particles);
             // Before we return, we need to convert the index clusters to configuration clusters
@@ -1998,6 +1995,9 @@ namespace uncertainty_contact_planning
             final_clusters.shrink_to_fit();
             assert(total_particles == particles.size());
             // Now, return the clusters and probability table
+            const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = end - start;
+            elapsed_clustering_time_ += elapsed.count();
             return final_clusters;
         }
 
@@ -2198,7 +2198,7 @@ namespace uncertainty_contact_planning
                     // Problem here is that we end up with more probability mass in the children than the parent (we'll figure this out later)
                 }
             }
-            if (debug_level_ >= 20)
+            if (debug_level_ >= 30)
             {
                 std::cout << "Press ENTER to add new states..." << std::endl;
                 std::cin.get();

@@ -60,7 +60,7 @@ namespace simple_pid_controller
             kp_ = fabs(kp);
             ki_ = fabs(ki);
             kd_ = fabs(kd);
-            integral_clamp_ = fabs(integral_clamp);
+            integral_clamp_ = std::abs(integral_clamp);
             error_integral_ = 0.0;
             last_error_ = 0.0;
             initialized_ = true;
@@ -69,22 +69,22 @@ namespace simple_pid_controller
         inline double ComputeFeedbackTerm(const double target_value, const double process_value, const double timestep)
         {
             // Get the current error
-            double current_error = target_value - process_value;
+            const double current_error = target_value - process_value;
             return ComputeFeedbackTerm(current_error, timestep);
         }
 
         inline double ComputeFeedbackTerm(const double current_error, const double timestep)
         {
             // Update the integral error
-            error_integral_ += (((current_error * 0.5) + (last_error_ * 0.5)) * timestep);
-            error_integral_ = std::min(integral_clamp_, error_integral_);
-            error_integral_ = std::max(-integral_clamp_, error_integral_);
+            const double timestep_error_integral = ((current_error * 0.5) + (last_error_ * 0.5)) * timestep; // Trapezoidal integration over the timestep
+            const double new_error_integral = error_integral_ + timestep_error_integral;
+            error_integral_ = std::max(-integral_clamp_, std::min(integral_clamp_, new_error_integral));
             // Update the derivative error
-            double error_derivative = (current_error - last_error_) / timestep;
+            const double error_derivative = (current_error - last_error_) / timestep;
             // Update the stored error
             last_error_ = current_error;
             // Compute the correction
-            double correction = (current_error * kp_) + (error_integral_ * ki_) + (error_derivative * kd_);
+            const double correction = (current_error * kp_) + (error_integral_ * ki_) + (error_derivative * kd_);
             return correction;
         }
     };

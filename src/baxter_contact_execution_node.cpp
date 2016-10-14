@@ -94,13 +94,14 @@ inline baxter_linked_common_config::SLC ExtractConfig(const std::vector<std::str
     return current_config;
 }
 
-inline std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linked_common_config::SLC>> move_robot(const std::vector<std::string>& joint_names, const baxter_linked_common_config::SLC& target_config, const baxter_linked_common_config::SLC& expected_result_configuration, const double duration, const bool reset, ros::ServiceClient& robot_control_service)
+inline std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linked_common_config::SLC>> move_robot(const std::vector<std::string>& joint_names, const baxter_linked_common_config::SLC& target_config, const baxter_linked_common_config::SLC& expected_result_configuration, const double duration, const double execution_shortcut_distance, const bool reset, ros::ServiceClient& robot_control_service)
 {
     // Put together service call
     uncertainty_planning_core::SimpleLinkedRobotMove::Request req;
     assert(joint_names.size() == target_config.size());
     req.joint_name = joint_names;
     req.max_execution_time = ros::Duration(duration);
+    req.execution_shortcut_distance = execution_shortcut_distance;
     if (reset)
     {
         std::cout << "Resetting robot to config: " << PrettyPrint::PrettyPrint(joint_names) << ":\n" << PrettyPrint::PrettyPrint(target_config) << std::endl;
@@ -197,7 +198,7 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
             set_uncertainty(joint_uncertainty_params[0], joint_uncertainty_params[1], joint_uncertainty_params[2], joint_uncertainty_params[3], joint_uncertainty_params[4], joint_uncertainty_params[5], joint_uncertainty_params[6], set_uncertainty_service);
         }
         const std::vector<std::string> joint_names = robot.GetActiveJointNames();
-        std::function<std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linked_common_config::SLC>>(const baxter_linked_common_config::SLC&, const baxter_linked_common_config::SLC&, const double, const bool)> robot_execution_fn = [&] (const baxter_linked_common_config::SLC& target_configuration, const baxter_linked_common_config::SLC& expected_result_configuration, const double duration, const bool reset) { return move_robot(joint_names, target_configuration, expected_result_configuration, duration, reset, robot_control_service); };
+        std::function<std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linked_common_config::SLC>>(const baxter_linked_common_config::SLC&, const baxter_linked_common_config::SLC&, const double, const double, const bool)> robot_execution_fn = [&] (const baxter_linked_common_config::SLC& target_configuration, const baxter_linked_common_config::SLC& expected_result_configuration, const double duration, const double execution_shortcut_distance, const bool reset) { return move_robot(joint_names, target_configuration, expected_result_configuration, duration, execution_shortcut_distance, reset, robot_control_service); };
         options.step_duration = 45.0;
         const auto policy_execution_results = uncertainty_planning_core::ExecuteBaxterUncertaintyPolicy(options, robot, sampler, policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, display_debug_publisher);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
