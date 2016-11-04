@@ -76,8 +76,6 @@ namespace simple_uncertainty_models
         template<typename RNG>
         inline double GetControlValue(const double control_input, RNG& rng) const
         {
-            assert(std::isnan(control_input) == false);
-            assert(std::isinf(control_input) == false);
             const double real_control_input = GetControlValue(control_input);
             // This is the version used in WAFR SE(2) and SE(3)
             //const double noise = noise_distribution_(rng) * noise_bound_;
