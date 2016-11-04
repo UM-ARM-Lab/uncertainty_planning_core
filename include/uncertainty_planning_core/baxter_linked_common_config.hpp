@@ -38,25 +38,26 @@ namespace baxter_linked_common_config
     {
         uncertainty_planning_core::OPTIONS options;
         options.clustering_type = uncertainty_contact_planning::CONVEX_REGION_SIGNATURE;
-        options.environment_name = "baxter_env";
+        options.environment_name = "baxter_blocked_test_mod_env";// "baxter_blocked_env"; // "baxter_wrist_key_env";
 #ifdef OVERRIDE_FIXED_RESOLUTION
         options.environment_resolution = 0.025;
 #else
         options.environment_resolution = RESOLUTION;
 #endif
-        options.planner_time_limit = 360.0;
+        options.planner_time_limit = 600.0;
         options.goal_bias = 0.15;
         options.step_size = 1.0;
         options.step_duration = 10.0;
         options.goal_probability_threshold = 0.51;
         options.goal_distance_threshold = 0.15; // 0.05;
         options.connect_after_first_solution = 0.25;
-        options.signature_matching_threshold = 0.0;
+        options.signature_matching_threshold = 0.1;
         options.distance_clustering_threshold = M_PI_2;
         options.feasibility_alpha = 0.75;
         options.variance_alpha = 0.75;
         options.actuator_error = 0.0;
         options.sensor_error = 0.0;
+        options.simulation_controller_frequency = 25.0;
         options.edge_attempt_count = 50u;
         options.num_particles = 1u;
         options.use_contact = true;
@@ -67,7 +68,7 @@ namespace baxter_linked_common_config
         options.num_policy_simulations = 1u;
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
-        options.debug_level = 15u;
+        options.debug_level = 0u;
         options.enable_contact_manifold_target_adjustment = false;
         options.planner_log_file = "/tmp/baxter_planner_log.txt";
         options.policy_log_file = "/tmp/baxter_policy_log.txt";
@@ -161,7 +162,11 @@ namespace baxter_linked_common_config
 
     inline std::vector<double> GetJointUncertaintyParams(const uncertainty_planning_core::OPTIONS& options)
     {
-        std::vector<double> uncertainty_params(7, options.actuator_error);
+        // This is the old version
+//        const std::vector<double> base_joint_velocities = {0.27, 0.27, 0.27, 0.27, 0.3, 0.3, 0.5};
+//        const std::vector<double> scaled_joint_velocities = EigenHelpers::Multiply(base_joint_velocities, 0.75);
+//        const std::vector<double> uncertainty_params = EigenHelpers::Multiply(scaled_joint_velocities, options.actuator_error);
+        const std::vector<double> uncertainty_params(7, options.actuator_error);
         return uncertainty_params;
     }
 
@@ -187,7 +192,70 @@ namespace baxter_linked_common_config
     //typedef baxter_joint_actuator_model::BaxterJointActuatorModel BaxterJointActuatorModel;
     typedef simple_uncertainty_models::SimpleUncertainVelocityActuator BaxterJointActuatorModel;
 
-    inline simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params)
+    inline void GetEndEffectorPoints(simplelinked_robot_helpers::RobotLink& end_effector_link, const std::string& environment_id)
+    {
+        if (environment_id == "baxter_wrist_key_env")
+        {
+            // Key
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.175));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.2));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.225));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.25));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.35));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.025, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.025, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.025, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.025, 0.35));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.05, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.05, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.05, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.05, 0.35));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.075, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.075, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.075, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.075, 0.35));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.35));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.35));
+            //
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.275));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.3));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.325));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.35));
+        }
+        else if (environment_id == "baxter_blocked_test_env")
+        {
+            // Peg
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.175));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.2));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.225));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.24));
+        }
+        else
+        {
+            // Peg
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.175));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.2));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.225));
+            end_effector_link.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.25));
+        }
+    }
+
+    inline simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::string& environment_id)
     {
         const double s0_noise = joint_uncertainty_params[0];
         const double s1_noise = joint_uncertainty_params[1];
@@ -300,13 +368,8 @@ namespace baxter_linked_common_config
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.1));
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.125));
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.15));
-        // Peg
-        right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.175));
-        right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.2));
-        right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.225));
-        right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.25));
-        //right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.26));
-        //right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.3));
+        // Get the end of the wrist/EE shape
+        GetEndEffectorPoints(right_wrist, environment_id);
         std::vector<simplelinked_robot_helpers::RobotLink> links = {torso, right_arm_mount, right_upper_shoulder, right_lower_shoulder, right_upper_elbow, right_lower_elbow, right_upper_forearm, right_lower_forearm, right_wrist};
         std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7), std::pair<size_t, size_t>(7, 8)};
         // right_s0
@@ -329,9 +392,9 @@ namespace baxter_linked_common_config
         right_s0.joint_model = reference_configuration[0];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_s0_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_s0.csv", 0.5, 50.0, 50.0));
         //const BaxterJointActuatorModel right_s0_joint_model(right_s0_model_samples, 0.5);
-        const BaxterJointActuatorModel right_s0_joint_model(-fabs(s0_noise), fabs(s0_noise), 0.5);
+        const BaxterJointActuatorModel right_s0_joint_model(fabs(s0_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG s0_config = joint_config;
-        s0_config.velocity_limit = 0.27;
+        s0_config.velocity_limit = 0.27 * 0.75;
         right_s0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s0_config, right_s0_joint_model);
         // Base pitch
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_s1;
@@ -343,9 +406,9 @@ namespace baxter_linked_common_config
         right_s1.joint_model = reference_configuration[1];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_s1_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_s1.csv", 0.5, 50.0, 50.0));
         //const BaxterJointActuatorModel right_s1_joint_model(right_s1_model_samples, 0.5);
-        const BaxterJointActuatorModel right_s1_joint_model(-fabs(s1_noise), fabs(s1_noise), 0.5);
+        const BaxterJointActuatorModel right_s1_joint_model(fabs(s1_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG s1_config = joint_config;
-        s1_config.velocity_limit = 0.27;
+        s1_config.velocity_limit = 0.27 * 0.75;
         right_s1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s1_config, right_s1_joint_model);
         // Elbow pitch
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_e0;
@@ -357,9 +420,9 @@ namespace baxter_linked_common_config
         right_e0.joint_model = reference_configuration[2];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_e0_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_e0.csv", 0.5, 50.0, 50.0));
         //const BaxterJointActuatorModel right_e0_joint_model(right_e0_model_samples, 0.5);
-        const BaxterJointActuatorModel right_e0_joint_model(-fabs(e0_noise), fabs(e0_noise), 0.5);
+        const BaxterJointActuatorModel right_e0_joint_model(fabs(e0_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG e0_config = joint_config;
-        e0_config.velocity_limit = 0.27;
+        e0_config.velocity_limit = 0.27 * 0.75;
         right_e0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e0_config, right_e0_joint_model);
         // Elbow roll
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_e1;
@@ -371,9 +434,9 @@ namespace baxter_linked_common_config
         right_e1.joint_model = reference_configuration[3];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_e1_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_e1.csv", 0.5, 50.0, 50.0));
         //const BaxterJointActuatorModel right_e1_joint_model(right_e1_model_samples, 0.5);
-        const BaxterJointActuatorModel right_e1_joint_model(-fabs(e1_noise), fabs(e1_noise), 0.5);
+        const BaxterJointActuatorModel right_e1_joint_model(fabs(e1_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG e1_config = joint_config;
-        e1_config.velocity_limit = 0.27;
+        e1_config.velocity_limit = 0.27 * 0.75;
         right_e1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e1_config, right_e1_joint_model);
         // Wrist pitch
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w0;
@@ -385,9 +448,9 @@ namespace baxter_linked_common_config
         right_w0.joint_model = reference_configuration[4];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_w0_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_w0.csv", 1.0, 50.0, 50.0));
         //const BaxterJointActuatorModel right_w0_joint_model(right_w0_model_samples, 1.0);
-        const BaxterJointActuatorModel right_w0_joint_model(-fabs(w0_noise), fabs(w0_noise), 1.0);
+        const BaxterJointActuatorModel right_w0_joint_model(fabs(w0_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w0_config = joint_config;
-        w0_config.velocity_limit = 0.3;
+        w0_config.velocity_limit = 0.3 * 0.75;
         right_w0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w0_config, right_w0_joint_model);
         // Wrist roll
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w1;
@@ -399,9 +462,9 @@ namespace baxter_linked_common_config
         right_w1.joint_model = reference_configuration[5];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_w1_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_w1.csv", 1.0, 50.0, 50.0));
         //const BaxterJointActuatorModel right_w1_joint_model(right_w1_model_samples, 1.0);
-        const BaxterJointActuatorModel right_w1_joint_model(-fabs(w1_noise), fabs(w1_noise), 1.0);
+        const BaxterJointActuatorModel right_w1_joint_model(fabs(w1_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w1_config = joint_config;
-        w1_config.velocity_limit = 0.3;
+        w1_config.velocity_limit = 0.3 * 0.75;
         right_w1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w1_config, right_w1_joint_model);
         // Wrist roll
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w2;
@@ -413,9 +476,9 @@ namespace baxter_linked_common_config
         right_w2.joint_model = reference_configuration[6];
         //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_w2_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_w2.csv", 1.0, 50.0, 50.0));
         //const BaxterJointActuatorModel right_w2_joint_model(right_w2_model_samples, 1.0);
-        const BaxterJointActuatorModel right_w2_joint_model(-fabs(w2_noise), fabs(w2_noise), 1.0);
+        const BaxterJointActuatorModel right_w2_joint_model(fabs(w2_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w2_config = joint_config;
-        w2_config.velocity_limit = 0.5;
+        w2_config.velocity_limit = 0.5 * 0.75;
         right_w2.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w2_config, right_w2_joint_model);
         std::vector<simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel>>joints = {right_arm_mount_joint, right_s0, right_s1, right_e0, right_e1, right_w0, right_w1, right_w2};
         const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration);

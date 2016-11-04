@@ -20,7 +20,6 @@
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 #include <uncertainty_planning_core/simplese3_robot_helpers.hpp>
-#include <thruster_robot_controllers/SetActuationError.h>
 #include <uncertainty_planning_core/se2_common_config.hpp>
 #include <uncertainty_planning_core/se3_common_config.hpp>
 #include <uncertainty_planning_core/baxter_linked_common_config.hpp>
@@ -65,7 +64,7 @@ void demonstrate_baxter(ros::Publisher& display_debug_publisher)
     const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
     const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = baxter_linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params);
+    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, options.environment_name);
     uncertainty_planning_core::DemonstrateBaxterSimulator(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
 }
 

@@ -276,7 +276,7 @@ namespace ur5_linked_common_config
         shoulder_pan_joint.joint_model = reference_configuration[0];
         simplelinked_robot_helpers::ROBOT_CONFIG shoulder_pan_joint_config = joint_config;
         shoulder_pan_joint_config.velocity_limit = 3.15;
-        const UR5JointActuatorModel shoulder_pan_joint_model(-fabs(shoulder_pan_joint_noise), fabs(shoulder_pan_joint_noise), shoulder_pan_joint_config.velocity_limit);
+        const UR5JointActuatorModel shoulder_pan_joint_model(fabs(shoulder_pan_joint_noise), shoulder_pan_joint_config.velocity_limit);
         shoulder_pan_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(shoulder_pan_joint_config, shoulder_pan_joint_model);
         // Shoulder lift
         simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> shoulder_lift_joint;
@@ -288,7 +288,7 @@ namespace ur5_linked_common_config
         shoulder_lift_joint.joint_model = reference_configuration[1];
         simplelinked_robot_helpers::ROBOT_CONFIG shoulder_lift_joint_config = joint_config;
         shoulder_lift_joint_config.velocity_limit = 3.15;
-        const UR5JointActuatorModel shoulder_lift_joint_model(-fabs(shoulder_lift_joint_noise), fabs(shoulder_lift_joint_noise), shoulder_lift_joint_config.velocity_limit);
+        const UR5JointActuatorModel shoulder_lift_joint_model(fabs(shoulder_lift_joint_noise), shoulder_lift_joint_config.velocity_limit);
         shoulder_lift_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(shoulder_lift_joint_config, shoulder_lift_joint_model);
         // Elbow
         simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> elbow_joint;
@@ -300,7 +300,7 @@ namespace ur5_linked_common_config
         elbow_joint.joint_model = reference_configuration[2];
         simplelinked_robot_helpers::ROBOT_CONFIG elbow_joint_config = joint_config;
         elbow_joint_config.velocity_limit = 3.15;
-        const UR5JointActuatorModel elbow_joint_model(-fabs(elbow_joint_noise), fabs(elbow_joint_noise), elbow_joint_config.velocity_limit);
+        const UR5JointActuatorModel elbow_joint_model(fabs(elbow_joint_noise), elbow_joint_config.velocity_limit);
         elbow_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(elbow_joint_config, elbow_joint_model);
         // Wrist 1
         simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> wrist_1_joint;
@@ -312,7 +312,7 @@ namespace ur5_linked_common_config
         wrist_1_joint.joint_model = reference_configuration[3];
         simplelinked_robot_helpers::ROBOT_CONFIG wrist_1_joint_config = joint_config;
         wrist_1_joint_config.velocity_limit = 3.2;
-        const UR5JointActuatorModel wrist_1_joint_model(-fabs(wrist_1_joint_noise), fabs(wrist_1_joint_noise), wrist_1_joint_config.velocity_limit);
+        const UR5JointActuatorModel wrist_1_joint_model(fabs(wrist_1_joint_noise), wrist_1_joint_config.velocity_limit);
         wrist_1_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(wrist_1_joint_config, wrist_1_joint_model);
         // Wrist 2
         simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> wrist_2_joint;
@@ -324,7 +324,7 @@ namespace ur5_linked_common_config
         wrist_2_joint.joint_model = reference_configuration[4];
         simplelinked_robot_helpers::ROBOT_CONFIG wrist_2_joint_config = joint_config;
         wrist_2_joint_config.velocity_limit = 3.2;
-        const UR5JointActuatorModel wrist_2_joint_model(-fabs(wrist_2_joint_noise), fabs(wrist_2_joint_noise), wrist_2_joint_config.velocity_limit);
+        const UR5JointActuatorModel wrist_2_joint_model(fabs(wrist_2_joint_noise), wrist_2_joint_config.velocity_limit);
         wrist_2_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(wrist_2_joint_config, wrist_2_joint_model);
         // Wrist 3
         simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> wrist_3_joint;
@@ -336,7 +336,7 @@ namespace ur5_linked_common_config
         wrist_3_joint.joint_model = reference_configuration[5];
         simplelinked_robot_helpers::ROBOT_CONFIG wrist_3_joint_config = joint_config;
         wrist_3_joint_config.velocity_limit = 3.2;
-        const UR5JointActuatorModel wrist_3_joint_model(-fabs(wrist_3_joint_noise), fabs(wrist_3_joint_noise), wrist_3_joint_config.velocity_limit);
+        const UR5JointActuatorModel wrist_3_joint_model(fabs(wrist_3_joint_noise), wrist_3_joint_config.velocity_limit);
         wrist_3_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(wrist_3_joint_config, wrist_3_joint_model);
         // Fixed wrist->EE joint
         simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> ee_fixed_joint;

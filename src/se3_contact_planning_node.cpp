@@ -20,7 +20,6 @@
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 #include <uncertainty_planning_core/simplese3_robot_helpers.hpp>
-#include <thruster_robot_controllers/SetActuationError.h>
 #include <uncertainty_planning_core/se3_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>

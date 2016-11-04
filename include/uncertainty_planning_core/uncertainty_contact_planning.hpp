@@ -32,20 +32,18 @@
 #ifndef UNCERTAINTY_CONTACT_PLANNING_HPP
 #define UNCERTAINTY_CONTACT_PLANNING_HPP
 
-uint32_t get_num_omp_threads(void)
+inline uint32_t get_num_omp_threads(void)
 {
-    int th_id = 0;
-    uint32_t nthreads = 0u;
-    #pragma omp parallel private(th_id)
+#if defined(_OPENMP)
+    uint32_t num_threads = 0;
+    #pragma omp parallel
     {
-        th_id = omp_get_thread_num();
-        #pragma omp barrier
-        if (th_id == 0)
-        {
-            nthreads = (uint32_t)omp_get_num_threads();
-        }
+        num_threads = (uint32_t)omp_get_num_threads();
     }
-    return nthreads;
+    return num_threads;
+#else
+    return 1;
+#endif
 }
 
 namespace uncertainty_contact_planning
@@ -174,6 +172,7 @@ namespace uncertainty_contact_planning
         mutable double total_goal_reached_probability_;
         mutable double time_to_first_solution_;
         mutable double elapsed_clustering_time_;
+        mutable double elapsed_simulation_time_;
         mutable NomdpPlanningTree nearest_neighbors_storage_;
         mutable SpatialClusteringPerformance clustering_performance_;
 
@@ -371,6 +370,7 @@ namespace uncertainty_contact_planning
             cluster_calls_ = 0;
             cluster_fallback_calls_ = 0;
             elapsed_clustering_time_ = 0.0;
+            elapsed_simulation_time_ = 0.0;
             particles_stored_ = 0;
             particles_simulated_ = 0;
             goal_candidates_evaluated_ = 0;
@@ -552,10 +552,12 @@ namespace uncertainty_contact_planning
             planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
             planning_results.second["Time to first solution"] = time_to_first_solution_;
             clustering_performance_.ExportResults();
-            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, of which " << cluster_fallback_calls_ << " required hierarchical distance clustering, which took " << elapsed_clustering_time_ << " seconds of total runtime" << std::endl;
+            std::cout << "Planner performed " << cluster_calls_ << " clustering calls, which took " << elapsed_clustering_time_ << " seconds of total runtime of which " << cluster_fallback_calls_ << " required hierarchical distance clustering" << std::endl;
             std::cout << "Planner statistics: " << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
             const std::map<std::string, double> simulator_resolve_statistics = simulator_ptr_->GetStatistics();
             planning_results.second.insert(simulator_resolve_statistics.begin(), simulator_resolve_statistics.end());
+            planning_results.second["elapsed_clustering_time"] = elapsed_clustering_time_;
+            planning_results.second["elapsed_simulation_time"] = elapsed_simulation_time_;
             planning_results.second["Particles stored"] = (double)particles_stored_;
             planning_results.second["Particles simulated"] = (double)particles_simulated_;
             planning_results.second["Goal candidates evaluated"] = (double)goal_candidates_evaluated_;
@@ -893,7 +895,8 @@ namespace uncertainty_contact_planning
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 const std::string ns = "policy_execution_" + std::to_string(idx + 1);
-                DrawParticlePolicyExecution(ns, particle_executions[idx], display_pub, draw_wait, MakeColor(0.0f, 0.8f, 0.0f, 0.25f));
+                //DrawParticlePolicyExecution(ns, particle_executions[idx], display_pub, draw_wait, MakeColor(0.0f, 0.8f, 0.0f, 0.25f));
+                DrawParticlePolicyExecution(ns, particle_executions[idx], display_pub, draw_wait, MakeColor(0.0f, 0.0f, 0.0f, 1.0f));
             }
             const double policy_success = (double)reached_goal / (double)num_executions;
             std::map<std::string, double> policy_statistics;
@@ -1184,13 +1187,17 @@ namespace uncertainty_contact_planning
             }
         }
 
-        inline Eigen::Vector3d Get3DPointForConfig(Robot robot, const Configuration& config) const
+        inline Eigen::Vector3d Get3DPointForConfig(const Robot& immutable_robot, const Configuration& config) const
         {
+            Robot robot = immutable_robot;
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
             robot.UpdatePosition(config);
             const std::string& link_name = robot_links_points.back().first;
+            const EigenHelpers::VectorVector3d& link_points = (*robot_links_points.back().second);
             const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
-            const Eigen::Vector3d config_point = link_transform * Eigen::Vector3d(0.0, 0.0, 0.0);
+            //const Eigen::Vector3d link_relative_point(0.0, 0.0, 0.0);
+            const Eigen::Vector3d& link_relative_point = link_points.back();
+            const Eigen::Vector3d config_point = link_transform * link_relative_point;
             return config_point;
         }
 
@@ -1248,9 +1255,9 @@ namespace uncertainty_contact_planning
                     edge_marker.lifetime = ros::Duration(0.0);
                     edge_marker.type = visualization_msgs::Marker::ARROW;
                     edge_marker.header.frame_id = simulator_ptr_->GetFrame();
-                    edge_marker.scale.x = simulator_ptr_->GetResolution();
-                    edge_marker.scale.y = simulator_ptr_->GetResolution() * 3.0;
-                    edge_marker.scale.z = simulator_ptr_->GetResolution() * 2.0;
+                    edge_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
+                    edge_marker.scale.y = simulator_ptr_->GetResolution() * 1.5;
+                    edge_marker.scale.z = simulator_ptr_->GetResolution() * 1.5;
                     edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
                     if (current_index < previous_index)
                     {
@@ -1304,9 +1311,9 @@ namespace uncertainty_contact_planning
                 edge_marker.lifetime = ros::Duration(0.0);
                 edge_marker.type = visualization_msgs::Marker::ARROW;
                 edge_marker.header.frame_id = simulator_ptr_->GetFrame();
-                edge_marker.scale.x = simulator_ptr_->GetResolution();
-                edge_marker.scale.y = simulator_ptr_->GetResolution() * 3.0;
-                edge_marker.scale.z = simulator_ptr_->GetResolution() * 2.0;
+                edge_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
+                edge_marker.scale.y = simulator_ptr_->GetResolution() * 1.5;
+                edge_marker.scale.z = simulator_ptr_->GetResolution() * 1.5;
                 edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
                 edge_marker.color = color;
                 edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(previous_point));
@@ -1323,8 +1330,9 @@ namespace uncertainty_contact_planning
             display_pub.publish(policy_markers);
         }
 
-        inline visualization_msgs::Marker DrawRobotConfiguration(Robot robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
+        inline visualization_msgs::Marker DrawRobotConfiguration(const Robot& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
         {
+            Robot robot = immutable_robot;
             std_msgs::ColorRGBA real_color = color;
             visualization_msgs::Marker configuration_marker;
             configuration_marker.action = visualization_msgs::Marker::ADD;
@@ -1378,8 +1386,9 @@ namespace uncertainty_contact_planning
             return configuration_marker;
         }
 
-        inline visualization_msgs::MarkerArray DrawParticles(Robot robot, const std::vector<Configuration, ConfigAlloc>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
+        inline visualization_msgs::MarkerArray DrawParticles(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
         {
+            Robot robot = immutable_robot;
             visualization_msgs::MarkerArray markers;
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
@@ -1391,8 +1400,9 @@ namespace uncertainty_contact_planning
             return markers;
         }
 
-        inline visualization_msgs::MarkerArray DrawParticles(Robot robot, const std::vector<std::pair<Configuration, bool>>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
+        inline visualization_msgs::MarkerArray DrawParticles(const Robot& immutable_robot, const std::vector<std::pair<Configuration, bool>>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
         {
+            Robot robot = immutable_robot;
             visualization_msgs::MarkerArray markers;
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
@@ -1404,8 +1414,9 @@ namespace uncertainty_contact_planning
             return markers;
         }
 
-        inline visualization_msgs::Marker DrawRobotControlInput(Robot robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color) const
+        inline visualization_msgs::Marker DrawRobotControlInput(const Robot& immutable_robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color) const
         {
+            Robot robot = immutable_robot;
             std_msgs::ColorRGBA real_color = color;
             visualization_msgs::Marker configuration_marker;
             configuration_marker.action = visualization_msgs::Marker::ADD;
@@ -1480,7 +1491,7 @@ namespace uncertainty_contact_planning
             UNUSED(planner_nodes);
             // Get the nearest neighbor (ignoring the disabled states)
             std::vector<std::pair<int64_t, double>> per_thread_bests(get_num_omp_threads(), std::pair<int64_t, double>(-1, INFINITY));
-            #pragma omp parallel for schedule(guided)
+            #pragma omp parallel for
             for (size_t idx = 0; idx < nearest_neighbors_storage_.size(); idx++)
             {
                 const NomdpPlanningTreeState& current_state = nearest_neighbors_storage_[idx];
@@ -1488,7 +1499,11 @@ namespace uncertainty_contact_planning
                 if (current_state.GetValueImmutable().UseForNearestNeighbors())
                 {
                     const double state_distance = StateDistance(current_state.GetValueImmutable(), random_state);
+#if defined(_OPENMP)
                     const size_t current_thread_id = (size_t)omp_get_thread_num();
+#else
+                    const size_t current_thread_id = 0;
+#endif
                     if (state_distance < per_thread_bests[current_thread_id].second)
                     {
                         per_thread_bests[current_thread_id].first = (int64_t)idx;
@@ -1555,7 +1570,7 @@ namespace uncertainty_contact_planning
             // Collect the signatures for each particle
             std::vector<std::vector<std::vector<uint32_t>>> particle_region_signatures(particles.size());
             // Loop through all the particles
-            #pragma omp parallel for schedule(guided)
+            #pragma omp parallel for
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
                 const std::pair<Configuration, bool>& particle = particles[idx];
@@ -1564,8 +1579,9 @@ namespace uncertainty_contact_planning
             return particle_region_signatures;
         }
 
-        inline std::vector<std::vector<uint32_t>> ComputeConfigurationConvexRegionSignature(Robot robot, const Configuration& configuration) const
+        inline std::vector<std::vector<uint32_t>> ComputeConfigurationConvexRegionSignature(const Robot& immutable_robot, const Configuration& configuration) const
         {
+            Robot robot = immutable_robot;
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
@@ -1684,8 +1700,9 @@ namespace uncertainty_contact_planning
             return true;
         }
 
-        inline bool CheckActuationCenterStraightLinePath(Robot robot, const Configuration& start, const Configuration& end) const
+        inline bool CheckActuationCenterStraightLinePath(const Robot& immutable_robot, const Configuration& start, const Configuration& end) const
         {
+            Robot robot = immutable_robot;
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
             EigenHelpers::VectorVector3d start_config_actuation_centers(robot_links_points.size());
@@ -1735,7 +1752,7 @@ namespace uncertainty_contact_planning
             assert(particles.size() > 1);
             // Assemble the actuation center to actuation center feasibility matrix
             Eigen::MatrixXd distance_matrix = Eigen::MatrixXd::Zero((ssize_t)(particles.size()), (ssize_t)(particles.size()));
-            #pragma omp parallel for schedule(guided)
+            #pragma omp parallel for
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
                 for (size_t jdx = idx; jdx < particles.size(); jdx++)
@@ -2006,6 +2023,7 @@ namespace uncertainty_contact_planning
          */
         inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> ForwardSimulateParticles(const NomdpPlanningState& nearest, const NomdpPlanningState& target, const double step_duration, const bool enable_contact_manifold_target_adjustment, const bool allow_contacts, ros::Publisher& display_pub) const
         {
+            const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             // First, compute a target state
             const Configuration target_point = target.GetExpectation();
             // Get the initial particles
@@ -2024,17 +2042,6 @@ namespace uncertainty_contact_planning
             {
                 display_pub.publish(DrawParticles(robot_, initial_particles, MakeColor(0.1f, 0.1f, 0.1f, 1.0f), "initial_particles"));
             }
-//            // Forward propagate each of the particles
-//            std::vector<std::pair<Configuration, bool>> propagated_points(num_particles_);
-//            // We want to parallelize this as much as possible!
-//            #pragma omp parallel for schedule(guided)
-//            for (size_t idx = 0; idx < num_particles_; idx++)
-//            {
-//                const Configuration& initial_particle = initial_particles[idx];
-//                uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
-//                int th_id = omp_get_thread_num();
-//                propagated_points[idx] = simulator_ptr_->ForwardSimulateRobot(robot_, initial_particle, target_point, rngs_[th_id], step_duration, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, allow_contacts, enable_contact_manifold_target_adjustment, trace, false);
-//            }
             // Forward propagate each of the particles
             std::vector<Configuration, ConfigAlloc> target_position;
             target_position.reserve(1);
@@ -2042,6 +2049,9 @@ namespace uncertainty_contact_planning
             target_position.shrink_to_fit();
             const std::vector<std::pair<Configuration, bool>> propagated_points = simulator_ptr_->ForwardSimulateRobots(robot_, initial_particles, target_position, rngs_, step_duration, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, allow_contacts, enable_contact_manifold_target_adjustment, display_pub);
             particles_simulated_ += num_particles_;
+            const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = end - start;
+            elapsed_simulation_time_ += elapsed.count();
             return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points);
         }
 

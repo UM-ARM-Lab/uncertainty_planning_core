@@ -62,6 +62,7 @@ namespace uncertainty_planning_core
         // Uncertainty
         double actuator_error;
         double sensor_error;
+        double simulation_controller_frequency;
         // Reverse/repeat params
         uint32_t edge_attempt_count;
         // Particle/execution limits
@@ -116,6 +117,7 @@ namespace uncertainty_planning_core
         options.num_particles = (uint32_t)nhp.param(std::string("num_particles"), (int)options.num_particles);
         options.actuator_error = nhp.param(std::string("actuator_error"), options.actuator_error);
         options.sensor_error = nhp.param(std::string("sensor_error"), options.sensor_error);
+        options.simulation_controller_frequency = nhp.param(std::string("simulation_controller_frequency"), options.simulation_controller_frequency);
         options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
         options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
         options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
@@ -211,6 +213,7 @@ namespace uncertainty_planning_core
         strm << "\nvariance_alpha: " << options.variance_alpha;
         strm << "\nactuator_error: " << options.actuator_error;
         strm << "\nsensor_error: " << options.sensor_error;
+        strm << "\nsimulation_controller_frequency: " << options.simulation_controller_frequency;
         strm << "\nedge_attempt_count: " << options.edge_attempt_count;
         strm << "\npolicy_action_attempt_count: " << options.policy_action_attempt_count;
         strm << "\nnum_particles: " << options.num_particles;

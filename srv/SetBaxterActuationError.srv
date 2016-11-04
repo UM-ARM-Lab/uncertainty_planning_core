@@ -1,0 +1,8 @@
+float64 s0_actuator_error
+float64 s1_actuator_error
+float64 e0_actuator_error
+float64 e1_actuator_error
+float64 w0_actuator_error
+float64 w1_actuator_error
+float64 w2_actuator_error
+---

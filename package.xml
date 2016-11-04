@@ -16,7 +16,6 @@
   <build_depend>sdf_tools</build_depend>
   <build_depend>control_msgs</build_depend>
   <build_depend>arc_utilities</build_depend>
-  <build_depend>thruster_robot_controllers</build_depend>
   <build_depend>message_generation</build_depend>
 
   <run_depend>roscpp</run_depend>
@@ -27,7 +26,6 @@
   <run_depend>sdf_tools</run_depend>
   <run_depend>control_msgs</run_depend>
   <run_depend>arc_utilities</run_depend>
-  <run_depend>thruster_robot_controllers</run_depend>
   <run_depend>message_runtime</run_depend>
 
   <!-- The export tag contains other, unspecified, tags -->

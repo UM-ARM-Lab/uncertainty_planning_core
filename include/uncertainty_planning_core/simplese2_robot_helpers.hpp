@@ -324,9 +324,9 @@ namespace simplese2_robot_helpers
             x_axis_sensor_ = simple_uncertainty_models::SimpleUncertainSensor(-robot_config.max_sensor_noise, robot_config.max_sensor_noise);
             y_axis_sensor_ = simple_uncertainty_models::SimpleUncertainSensor(-robot_config.max_sensor_noise, robot_config.max_sensor_noise);
             zr_axis_sensor_ = simple_uncertainty_models::SimpleUncertainSensor(-robot_config.r_max_sensor_noise, robot_config.r_max_sensor_noise);
-            x_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.max_actuator_noise, robot_config.max_actuator_noise, robot_config.velocity_limit);
-            y_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.max_actuator_noise, robot_config.max_actuator_noise, robot_config.velocity_limit);
-            zr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(-robot_config.r_max_actuator_noise, robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
+            x_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
+            y_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
+            zr_axis_actuator_ = simple_uncertainty_models::SimpleUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
             ResetPosition(initial_position);
             max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;

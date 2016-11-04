@@ -24,7 +24,7 @@
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <uncertainty_planning_core/SimpleLinkedRobotMove.h>
-#include <baxter_robot_interface/SetActuationError.h>
+#include <uncertainty_planning_core/SetBaxterActuationError.h>
 
 using namespace uncertainty_contact_planning;
 
@@ -150,7 +150,7 @@ inline std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linke
 
 void set_uncertainty(const double s0_error, const double s1_error, const double e0_error, const double e1_error, const double w0_error, const double w1_error, const double w2_error, ros::ServiceClient& set_uncertainty_service)
 {
-    baxter_robot_interface::SetActuationErrorRequest req;
+    uncertainty_planning_core::SetBaxterActuationErrorRequest req;
     req.s0_actuator_error = s0_error;
     req.s1_actuator_error = s1_error;
     req.e0_actuator_error = e0_error;
@@ -158,7 +158,7 @@ void set_uncertainty(const double s0_error, const double s1_error, const double 
     req.w0_actuator_error = w0_error;
     req.w1_actuator_error = w1_error;
     req.w2_actuator_error = w2_error;
-    baxter_robot_interface::SetActuationErrorResponse res;
+    uncertainty_planning_core::SetBaxterActuationErrorResponse res;
     if (set_uncertainty_service.call(req, res) == false)
     {
         std::cout << "Failed to set actuator error" << std::endl;
@@ -176,7 +176,7 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
     const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
     const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = baxter_linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params);
+    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, options.environment_name);
     // Load the policy
     try
     {
@@ -184,14 +184,14 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
         policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
         std::map<std::string, double> complete_policy_stats;
         std::cout << "Press ENTER to simulate policy..." << std::endl;
-        std::cin.get();
+        //std::cin.get();
         const auto policy_simulation_results = uncertainty_planning_core::SimulateBaxterUncertaintyPolicy(options, robot, sampler, policy, start_and_goal.first, start_and_goal.second, display_debug_publisher);
         const std::map<std::string, double> policy_simulation_stats = policy_simulation_results.second.first;
         const std::vector<int64_t> policy_simulation_step_counts = policy_simulation_results.second.second.first;
         std::cout << "Policy simulation success: " << PrettyPrint::PrettyPrint(policy_simulation_stats) << std::endl;
         complete_policy_stats.insert(policy_simulation_stats.begin(), policy_simulation_stats.end());
         std::cout << "Press ENTER to execute policy..." << std::endl;
-        std::cin.get();
+        //std::cin.get();
         if (options.num_policy_executions > 0)
         {
             std::cout << "Setting actuation uncertainty..." << std::endl;
@@ -199,7 +199,7 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
         }
         const std::vector<std::string> joint_names = robot.GetActiveJointNames();
         std::function<std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linked_common_config::SLC>>(const baxter_linked_common_config::SLC&, const baxter_linked_common_config::SLC&, const double, const double, const bool)> robot_execution_fn = [&] (const baxter_linked_common_config::SLC& target_configuration, const baxter_linked_common_config::SLC& expected_result_configuration, const double duration, const double execution_shortcut_distance, const bool reset) { return move_robot(joint_names, target_configuration, expected_result_configuration, duration, execution_shortcut_distance, reset, robot_control_service); };
-        options.step_duration = 45.0;
+        //options.step_duration = 45.0;
         const auto policy_execution_results = uncertainty_planning_core::ExecuteBaxterUncertaintyPolicy(options, robot, sampler, policy, start_and_goal.first, start_and_goal.second, robot_execution_fn, display_debug_publisher);
         const std::map<std::string, double> policy_execution_stats = policy_execution_results.second.first;
         const std::vector<int64_t> policy_execution_step_counts = policy_execution_results.second.second.first;
@@ -242,7 +242,7 @@ int main(int argc, char** argv)
     ROS_INFO("Starting Nomdp Contact Execution Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::SimpleLinkedRobotMove>("simple_linked_robot_move");
-    ros::ServiceClient set_uncertainty_service = nh.serviceClient<baxter_robot_interface::SetActuationError>("baxter_robot/set_actuation_uncertainty");
+    ros::ServiceClient set_uncertainty_service = nh.serviceClient<uncertainty_planning_core::SetBaxterActuationError>("baxter_robot/set_actuation_uncertainty");
     //std::cout << set_uncertainty_service.getService() << std::endl;
     //set_uncertainty_service.waitForExistence();
     peg_in_hole_env_linked(display_debug_publisher, robot_control_service, set_uncertainty_service);

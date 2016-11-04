@@ -46,6 +46,7 @@ namespace se2_common_config
         options.variance_alpha = 0.75;
         options.actuator_error = options.environment_resolution * 1.0;
         options.sensor_error = 0.0;
+        options.simulation_controller_frequency = 10.0;
         options.edge_attempt_count = 50u;
         options.num_particles = 24u;
         options.use_contact = true;

@@ -24,12 +24,6 @@
 #ifndef SIMPLE_PARTICLE_CONTACT_SIMULATOR_HPP
 #define SIMPLE_PARTICLE_CONTACT_SIMULATOR_HPP
 
-#ifndef CONTROLLER_FREQUENCY
-    #define CONTROLLER_FREQUENCY 25.0
-#endif
-
-#define CONTROLLER_INTERVAL (1.0 / CONTROLLER_FREQUENCY)
-
 #ifndef MAX_RESOLVER_ITERATIONS
     #define MAX_RESOLVER_ITERATIONS 25
 #endif
@@ -51,6 +45,8 @@
 #endif
 
 #define FAILED_RESOLVES_END_MOTION
+
+#define TRUST_SDF_PENETRATION
 
 //#define USE_J_TRANSPOSE_IN_FAILED_RESOLVES
 
@@ -1069,6 +1065,764 @@ namespace uncertainty_planning_tools
                 //grid.Set(0.0, 0.0, -0.25, sdf_tools::TAGGED_OBJECT_COLLISION_CELL(1.0f, 1u));
                 return grid;
             }
+            else if (environment_id == "baxter_blocked_env")
+            {
+                double grid_x_size = 3.0;
+                double grid_y_size = 3.0;
+                double grid_z_size = 3.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            const double hole_center_x = 1.03;
+                            const double hole_center_y = -0.40;
+                            const double hole_center_z = 0.13;
+                            // Make two obstructing blocks
+                            const double left_block_depth = 4.0 * resolution;
+                            const double right_block_depth = 2.0 * resolution;
+                            const double left_block_width = 10.0 * resolution;
+                            const double left_block_height = 10.0 * resolution;
+                            const double right_block_width = 6.0 * resolution;
+                            const double right_block_height = 4.0 * resolution;
+                            const double left_block_min_x = hole_center_x - left_block_depth;
+                            const double left_block_max_x = hole_center_x;
+                            const double left_block_min_y = hole_center_y + (resolution * 0.0);
+                            const double left_block_max_y = left_block_min_y + left_block_width;
+                            const double left_block_min_z = hole_center_z - (resolution * 12.0);
+                            const double left_block_max_z = left_block_min_z + left_block_height;
+                            const double right_block_min_x = hole_center_x - right_block_depth;
+                            const double right_block_max_x = hole_center_x;
+                            const double right_block_min_y = hole_center_y - (resolution * 6.0);
+                            const double right_block_max_y = right_block_min_y + right_block_width;
+                            const double right_block_min_z = hole_center_z - (resolution * 7.0);
+                            const double right_block_max_z = right_block_min_z + right_block_height;
+                            if (x > left_block_min_x && x <= left_block_max_x && y > left_block_min_y && y <= left_block_max_y && z > left_block_min_z && z <= left_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > right_block_min_x && x <= right_block_max_x && y > right_block_min_y && y <= right_block_max_y && z > right_block_min_z && z <= right_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > hole_center_x)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x <= hole_center_x)
+                            {
+                                if (y > left_block_max_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                }
+                                else if (y <= right_block_min_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                }
+                                if (z > left_block_max_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                }
+                                else if (z <= left_block_min_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                }
+                                if (y <= left_block_min_y)
+                                {
+                                    if (z > right_block_max_z)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                    }
+                                    else if (z <= right_block_min_z)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(6u);
+                                    }
+                                    if (x <= right_block_min_x)
+                                    {
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                        grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(7u);
+                                    }
+                                }
+                                if (x <= left_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(8u);
+                                }
+                            }
+                            // Make the hole
+                            const double hole_width = 0.04;
+                            const double hole_height = 0.04;
+                            const double hole_max_y = hole_center_y + (hole_width * 0.5);
+                            const double hole_min_y = hole_center_y - (hole_width * 0.5);
+                            const double hole_max_z = hole_center_z + (hole_height * 0.5);
+                            const double hole_min_z = hole_center_z - (hole_height * 0.5);
+                            if (y <= hole_max_y && y > hole_min_y && z <= hole_max_z && z > hole_min_z)
+                            {
+                                if (x > hole_center_x)
+                                {
+                                    std::cout << "Real hole X: " << x << " Y: " << y << " Z: " << z << std::endl;
+                                }
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(9u);
+                            }
+                            const double outer_hole_max_y = hole_center_y + (hole_width * 0.5);
+                            const double outer_hole_min_y = hole_center_y - (hole_width * 3.5);
+                            const double outer_hole_max_z = hole_center_z + (hole_height * 1.5);
+                            const double outer_hole_min_z = hole_center_z - (hole_height * 1.5);
+                            if (y <= outer_hole_max_y && y > outer_hole_min_y && z <= outer_hole_max_z && z > outer_hole_min_z)
+                            {
+                                if (x <= hole_center_x + (resolution * 2.0))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(10u);
+                                }
+                            }
+                        }
+                    }
+                }
+                //grid.Set(0.0, 0.0, -0.25, sdf_tools::TAGGED_OBJECT_COLLISION_CELL(1.0f, 1u));
+                return grid;
+            }
+            else if (environment_id == "baxter_blocked_test_env")
+            {
+                double grid_x_size = 3.0;
+                double grid_y_size = 3.0;
+                double grid_z_size = 3.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            const double hole_center_x = 1.03;
+                            const double hole_center_y = -0.40;
+                            const double hole_center_z = 0.13;
+                            // Make two obstructing blocks
+                            const double left_block_depth = 3.0 * resolution;
+                            const double right_block_depth = 2.0 * resolution;
+                            const double left_block_width = 10.0 * resolution;
+                            const double left_block_height = 10.0 * resolution;
+                            const double right_block_width = 6.0 * resolution;
+                            const double right_block_height = 4.0 * resolution;
+                            const double left_block_min_x = hole_center_x - left_block_depth;
+                            const double left_block_max_x = hole_center_x;
+                            const double left_block_min_y = hole_center_y + (resolution * 0.0);
+                            const double left_block_max_y = left_block_min_y + left_block_width;
+                            const double left_block_min_z = hole_center_z - (resolution * 13.0);
+                            const double left_block_max_z = left_block_min_z + left_block_height;
+                            const double right_block_min_x = hole_center_x - right_block_depth;
+                            const double right_block_max_x = hole_center_x;
+                            const double right_block_min_y = hole_center_y - (resolution * 6.0);
+                            const double right_block_max_y = right_block_min_y + right_block_width;
+                            const double right_block_min_z = hole_center_z - (resolution * 7.0);
+                            const double right_block_max_z = right_block_min_z + right_block_height;
+                            const double upper_block_depth = 2.0 * resolution;
+                            const double upper_block_width = 10.0 * resolution;
+                            const double upper_block_height = 6.0 * resolution;
+                            const double upper_block_min_x = hole_center_x - upper_block_depth;
+                            const double upper_block_max_x = hole_center_x;
+                            const double upper_block_min_y = hole_center_y - (resolution * 6.0);
+                            const double upper_block_max_y = upper_block_min_y + upper_block_width;
+                            const double upper_block_min_z = hole_center_z + (resolution * 3.0);
+                            const double upper_block_max_z = upper_block_min_z + upper_block_height;
+                            if (x > upper_block_min_x && x <= upper_block_max_x && y > upper_block_min_y && y <= upper_block_max_y && z > upper_block_min_z && z <= upper_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > left_block_min_x && x <= left_block_max_x && y > left_block_min_y && y <= left_block_max_y && z > left_block_min_z && z <= left_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > right_block_min_x && x <= right_block_max_x && y > right_block_min_y && y <= right_block_max_y && z > right_block_min_z && z <= right_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > hole_center_x)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x <= hole_center_x)
+                            {
+                                // YES
+                                if (y > left_block_max_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                }
+                                // YES
+                                else if (y <= right_block_min_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                }
+                                // YES
+                                if (z > upper_block_max_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                }
+                                // YES
+                                else if (z <= upper_block_min_z && z > left_block_max_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                }
+                                // YES
+                                else if (z <= left_block_min_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                }
+                                // YES
+                                if (z > left_block_max_z && y > upper_block_max_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(6u);
+                                }
+                                // YES
+                                else if (z <= right_block_min_z && y <= left_block_min_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(7u);
+                                }
+                                // YES
+                                if (z > left_block_max_z && x <= upper_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(8u);
+                                }
+                                // YES
+                                if (y <= left_block_min_y && x <= right_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(9u);
+                                }
+                                // YES
+                                if (x <= left_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(10u);
+                                }
+                            }
+                            // Make the hole
+                            const double hole_width = 0.04;
+                            const double hole_height = 0.04;
+                            const double hole_max_y = hole_center_y + (hole_width * 0.5);
+                            const double hole_min_y = hole_center_y - (hole_width * 0.5);
+                            const double hole_max_z = hole_center_z + (hole_height * 0.5);
+                            const double hole_min_z = hole_center_z - (hole_height * 0.5);
+                            if (y <= hole_max_y && y > hole_min_y && z <= hole_max_z && z > hole_min_z)
+                            {
+                                if (x > hole_center_x)
+                                {
+                                    std::cout << "Real hole X: " << x << " Y: " << y << " Z: " << z << std::endl;
+                                }
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(11u);
+                            }
+                            const double outer_hole_max_y = hole_center_y + (hole_width * 0.5);
+                            const double outer_hole_min_y = hole_center_y - (hole_width * 3.5);
+                            const double outer_hole_max_z = hole_center_z + (hole_height * 1.5);
+                            const double outer_hole_min_z = hole_center_z - (hole_height * 1.5);
+                            if (y <= outer_hole_max_y && y > outer_hole_min_y && z <= outer_hole_max_z && z > outer_hole_min_z)
+                            {
+                                if (x <= hole_center_x + (resolution * 1.0))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(12u);
+                                }
+                            }
+                        }
+                    }
+                }
+                //grid.Set(0.0, 0.0, -0.25, sdf_tools::TAGGED_OBJECT_COLLISION_CELL(1.0f, 1u));
+                return grid;
+            }
+            else if (environment_id == "baxter_blocked_test_mod_env")
+            {
+                double grid_x_size = 3.0;
+                double grid_y_size = 3.0;
+                double grid_z_size = 3.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            const double hole_center_x = 1.03;
+                            const double hole_center_y = -0.40;
+                            const double hole_center_z = 0.13;
+                            // Make two obstructing blocks
+                            const double left_block_depth = 3.0 * resolution;
+                            const double right_block_depth = 2.0 * resolution;
+                            const double left_block_width = 10.0 * resolution;
+                            const double left_block_height = 10.0 * resolution;
+                            const double right_block_width = 6.0 * resolution;
+                            const double right_block_height = 4.0 * resolution;
+                            const double left_block_min_x = hole_center_x - left_block_depth;
+                            const double left_block_max_x = hole_center_x;
+                            const double left_block_min_y = hole_center_y + (resolution * 0.0);
+                            const double left_block_max_y = left_block_min_y + left_block_width;
+                            const double left_block_min_z = hole_center_z - (resolution * 13.0);
+                            const double left_block_max_z = left_block_min_z + left_block_height;
+                            const double right_block_min_x = hole_center_x - right_block_depth;
+                            const double right_block_max_x = hole_center_x;
+                            const double right_block_min_y = hole_center_y - (resolution * 6.0);
+                            const double right_block_max_y = right_block_min_y + right_block_width;
+                            const double right_block_min_z = hole_center_z - (resolution * 7.0);
+                            const double right_block_max_z = right_block_min_z + right_block_height;
+                            const double upper_block_depth = 2.0 * resolution;
+                            const double upper_block_width = 10.0 * resolution;
+                            const double upper_block_height = 6.0 * resolution;
+                            const double upper_block_min_x = hole_center_x - upper_block_depth;
+                            const double upper_block_max_x = hole_center_x;
+                            const double upper_block_min_y = hole_center_y - (resolution * 6.0);
+                            const double upper_block_max_y = upper_block_min_y + upper_block_width;
+                            const double upper_block_min_z = hole_center_z + (resolution * 3.0);
+                            const double upper_block_max_z = upper_block_min_z + upper_block_height;
+                            if (x > upper_block_min_x && x <= upper_block_max_x && y > upper_block_min_y && y <= upper_block_max_y && z > upper_block_min_z && z <= upper_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;//2u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > left_block_min_x && x <= left_block_max_x && y > left_block_min_y && y <= left_block_max_y && z > left_block_min_z && z <= left_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;//3u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > right_block_min_x && x <= right_block_max_x && y > right_block_min_y && y <= right_block_max_y && z > right_block_min_z && z <= right_block_max_z)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;//4u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x > hole_center_x)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            else if (x <= hole_center_x)
+                            {
+                                // YES
+                                if (y > left_block_max_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                                }
+                                // YES
+                                else if (y <= right_block_min_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                }
+                                // YES
+                                if (z > upper_block_max_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                }
+                                // YES
+                                else if (z <= upper_block_min_z && z > left_block_max_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                }
+                                // YES
+                                else if (z <= left_block_min_z)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(5u);
+                                }
+                                // YES
+                                if (z > left_block_max_z && y > upper_block_max_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(6u);
+                                }
+                                // YES
+                                else if (z <= right_block_min_z && y <= left_block_min_y)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(7u);
+                                }
+                                // YES
+                                if (z > left_block_max_z && x <= upper_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(8u);
+                                }
+                                // YES
+                                if (y <= left_block_min_y && x <= right_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(9u);
+                                }
+                                // YES
+                                if (x <= left_block_min_x)
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(10u);
+                                }
+                            }
+                            // Make the hole
+                            const double hole_width = 0.04;
+                            const double hole_height = 0.04;
+                            const double hole_max_y = hole_center_y + (hole_width * 0.5);
+                            const double hole_min_y = hole_center_y - (hole_width * 1.0);//0.5);
+                            const double hole_max_z = hole_center_z + (hole_height * 0.5);
+                            const double hole_min_z = hole_center_z - (hole_height * 0.5);
+                            if (y <= hole_max_y && y > hole_min_y && z <= hole_max_z && z > hole_min_z)
+                            {
+                                if (x > hole_center_x)
+                                {
+                                    std::cout << "Real hole X: " << x << " Y: " << y << " Z: " << z << std::endl;
+                                }
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(11u);
+                            }
+//                            const double step_hole_max_y = hole_center_y + (hole_width * 0.5);
+//                            const double step_hole_min_y = hole_center_y - (hole_width * 1.5);
+//                            const double step_hole_max_z = hole_center_z + (hole_height * 0.5);
+//                            const double step_hole_min_z = hole_center_z - (hole_height * 0.5);
+//                            if (y <= step_hole_max_y && y > step_hole_min_y && z <= step_hole_max_z && z > step_hole_min_z)
+//                            {
+//                                if (x <= hole_center_x + (resolution * 2.0))
+//                                {
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(12u);
+//                                }
+//                            }
+                            const double outer_hole_max_y = hole_center_y + (hole_width * 0.5);
+                            const double outer_hole_min_y = hole_center_y - (hole_width * 3.5);
+                            const double outer_hole_max_z = hole_center_z + (hole_height * 1.5);
+                            const double outer_hole_min_z = hole_center_z - (hole_height * 1.5);
+                            if (y <= outer_hole_max_y && y > outer_hole_min_y && z <= outer_hole_max_z && z > outer_hole_min_z)
+                            {
+                                if (x <= hole_center_x + (resolution * 1.0))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(12u);
+                                }
+//                                else if (grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy == 1.0f)
+//                                {
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 5u;
+//                                }
+                            }
+                        }
+                    }
+                }
+                //grid.Set(0.0, 0.0, -0.25, sdf_tools::TAGGED_OBJECT_COLLISION_CELL(1.0f, 1u));
+                return grid;
+            }
+            else if (environment_id == "baxter_wrist_key_env")
+            {
+                double grid_x_size = 3.0;
+                double grid_y_size = 3.0;
+                double grid_z_size = 3.0;
+                // The grid origin is the minimum point, with identity rotation
+                Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
+                Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
+                Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+                // Make the grid
+                sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
+                for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
+                {
+                    for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
+                    {
+                        for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
+                        {
+                            /*
+                                Real hole X: 1.04688 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.07812 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.10938 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.14062 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.17188 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.20312 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.23438 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.26562 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.29688 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.32812 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.35938 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.39062 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.42188 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.45312 Y: -0.390625 Z: 0.140625
+                                Real hole X: 1.48438 Y: -0.390625 Z: 0.140625
+                             */
+                            const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
+                            const double& x = location.x();
+                            const double& y = location.y();
+                            const double& z = location.z();
+                            const double key_tip_x = 1.225;
+                            const double key_base_x = 1.0;
+                            const double key_center_y = -0.390625; //-0.40;
+                            const double key_center_z = 0.140625; //0.13;
+
+
+                            // Solid backing wall
+                            if (x > key_tip_x)
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                            }
+                            // Intervening blocks
+                            else if (x <= key_tip_x && x > key_base_x)
+                            {
+                                if (y > (key_center_y + (resolution * 0.5)) && z <= (key_center_z - (resolution * 0.5)))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                                }
+                                if (y <= (key_center_y - (resolution * 3.5)) && z <= (key_center_z - (resolution * 0.5)))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                                }
+                                if (y > (key_center_y + (resolution * 0.5)) && z > (key_center_z + (resolution * 3.5)))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                                }
+//                                if (y <= (key_center_y - (resolution * 3.5)) && z > (key_center_z + (resolution * 3.5)))
+//                                {
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+//                                }
+                            }
+                            else
+                            {
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+                            }
+                            if (x <= key_tip_x)
+                            {
+                                if (y <= (key_center_y + (resolution * 0.5)) && z > (key_center_z - (resolution * 0.5)))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
+                                }
+                                if (y > (key_center_y - (resolution * 3.5)) && y <= (key_center_y + (resolution * 0.5)))
+                                {
+                                    if (z > (key_center_z - (resolution * 4.5)) && z <= (key_center_z - (resolution * 0.5)))
+                                    {
+                                        if (x <= (key_base_x + (resolution * 3.5)) && x > key_base_x)
+                                        {
+                                            std::cout << "Lip @ " << x << ", " << y << ", " << z << std::endl;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                                        }
+                                    }
+                                    else if (z <= (key_center_z - (resolution * 4.5)))
+                                    {
+                                        if (x > key_base_x)
+                                        {
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 1u;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+                                        }
+                                    }
+                                    if (z > (key_center_z - (resolution * 4.5)))
+                                    {
+                                        if (x > (key_base_x + (resolution * 2.5)))
+                                        {
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                            grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
+                                        }
+                                    }
+                                }
+                                if (z > (key_center_z - (resolution * 0.5)) && z <= (key_center_z + (resolution * 3.5)))
+                                {
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(4u);
+                                }
+                            }
+//                            // Bound the environment?
+//                            else
+//                            {
+//                                if (x_idx < 4 || y_idx < 4 || z_idx < 4 || x_idx >= (grid.GetNumXCells() - 4) || y_idx >= (grid.GetNumYCells() - 4) || z_idx >= (grid.GetNumZCells() - 4))
+//                                {
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 1.0f;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.convex_segment = 0u;
+//                                }
+//                                else
+//                                {
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.component = 0u;
+//                                    grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
+//                                }
+//                            }
+                        }
+                    }
+                }
+                //grid.Set(0.0, 0.0, -0.25, sdf_tools::TAGGED_OBJECT_COLLISION_CELL(1.0f, 1u));
+                return grid;
+            }
             else if (environment_id == "baxter_lip_env")
             {
                 double grid_x_size = 3.0;
@@ -1578,6 +2332,75 @@ namespace uncertainty_planning_tools
             }
         }
 
+        inline void AdjustSurfaceNormalGridForAllFlatSurfaces(const sdf_tools::SignedDistanceField& environment_sdf, SurfaceNormalGrid& surface_normals_grid) const
+        {
+            for (int64_t x_idx = 0; x_idx < environment_sdf.GetNumXCells(); x_idx++)
+            {
+                for (int64_t y_idx = 0; y_idx < environment_sdf.GetNumYCells(); y_idx++)
+                {
+                    for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
+                    {
+                        const float distance = environment_sdf.Get(x_idx, y_idx, z_idx);
+                        if (distance < 0.0)
+                        {
+                            const float xm1_distance = environment_sdf.Get(x_idx - 1, y_idx, z_idx);
+                            const float xp1_distance = environment_sdf.Get(x_idx + 1, y_idx, z_idx);
+                            const float ym1_distance = environment_sdf.Get(x_idx, y_idx - 1, z_idx);
+                            const float yp1_distance = environment_sdf.Get(x_idx, y_idx + 1, z_idx);
+                            const float zm1_distance = environment_sdf.Get(x_idx, y_idx, z_idx - 1);
+                            const float zp1_distance = environment_sdf.Get(x_idx, y_idx, z_idx + 1);
+                            const bool xm1_edge = (xm1_distance > 0.0);
+                            const bool xp1_edge = (xp1_distance > 0.0);
+                            const bool ym1_edge = (ym1_distance > 0.0);
+                            const bool yp1_edge = (yp1_distance > 0.0);
+                            const bool zm1_edge = (zm1_distance > 0.0);
+                            const bool zp1_edge = (zp1_distance > 0.0);
+                            if (xm1_edge || xp1_edge || ym1_edge || yp1_edge || zm1_edge || zp1_edge)
+                            {
+                                surface_normals_grid.ClearStoredSurfaceNormals(x_idx, y_idx, z_idx);
+                                if (xm1_edge)
+                                {
+                                    const Eigen::Vector3d normal(-1.0, 0.0, 0.0);
+                                    const Eigen::Vector3d entry(1.0, 0.0, 0.0);
+                                    surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, normal, entry);
+                                }
+                                if (xp1_edge)
+                                {
+                                    const Eigen::Vector3d normal(1.0, 0.0, 0.0);
+                                    const Eigen::Vector3d entry(-1.0, 0.0, 0.0);
+                                    surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, normal, entry);
+                                }
+                                if (ym1_edge)
+                                {
+                                    const Eigen::Vector3d normal(0.0, -1.0, 0.0);
+                                    const Eigen::Vector3d entry(0.0, 1.0, 0.0);
+                                    surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, normal, entry);
+                                }
+                                if (yp1_edge)
+                                {
+                                    const Eigen::Vector3d normal(0.0, 1.0, 0.0);
+                                    const Eigen::Vector3d entry(0.0, -1.0, 0.0);
+                                    surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, normal, entry);
+                                }
+                                if (zm1_edge)
+                                {
+                                    const Eigen::Vector3d normal(0.0, 0.0, -1.0);
+                                    const Eigen::Vector3d entry(0.0, 0.0, 1.0);
+                                    surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, normal, entry);
+                                }
+                                if (zp1_edge)
+                                {
+                                    const Eigen::Vector3d normal(0.0, 0.0, 1.0);
+                                    const Eigen::Vector3d entry(0.0, 0.0, -1.0);
+                                    surface_normals_grid.InsertSurfaceNormal(x_idx, y_idx, z_idx, normal, entry);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         inline SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::string& environment_id, const sdf_tools::SignedDistanceField& environment_sdf) const
         {
             // Make the grid
@@ -1620,6 +2443,22 @@ namespace uncertainty_planning_tools
                 ;
             }
             else if (environment_id == "baxter_env")
+            {
+                ;
+            }
+            else if (environment_id == "baxter_blocked_env")
+            {
+                //AdjustSurfaceNormalGridForAllFlatSurfaces(environment_sdf, surface_normals_grid);
+            }
+            else if (environment_id == "baxter_blocked_test_env")
+            {
+                //AdjustSurfaceNormalGridForAllFlatSurfaces(environment_sdf, surface_normals_grid);
+            }
+            else if (environment_id == "baxter_blocked_test_mod_env")
+            {
+                //AdjustSurfaceNormalGridForAllFlatSurfaces(environment_sdf, surface_normals_grid);
+            }
+            else if (environment_id == "baxter_wrist_key_env")
             {
                 ;
             }
@@ -1980,8 +2819,9 @@ namespace uncertainty_planning_tools
             return color;
         }
 
-        inline visualization_msgs::Marker DrawRobotConfiguration(Robot robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
+        inline visualization_msgs::Marker DrawRobotConfiguration(const Robot& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
         {
+            Robot robot = immutable_robot;
             std_msgs::ColorRGBA real_color = color;
             visualization_msgs::Marker configuration_marker;
             configuration_marker.action = visualization_msgs::Marker::ADD;
@@ -2035,8 +2875,9 @@ namespace uncertainty_planning_tools
             return configuration_marker;
         }
 
-        inline visualization_msgs::Marker DrawRobotControlInput(Robot robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color) const
+        inline visualization_msgs::Marker DrawRobotControlInput(const Robot& immutable_robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color) const
         {
+            Robot robot = immutable_robot;
             std_msgs::ColorRGBA real_color = color;
             visualization_msgs::Marker configuration_marker;
             configuration_marker.action = visualization_msgs::Marker::ADD;
@@ -2091,9 +2932,9 @@ namespace uncertainty_planning_tools
 
         virtual void ResetStatistics() = 0;
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
+        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(Robot robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_debug_publisher) const = 0;
+        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_debug_publisher) const = 0;
     };
 
     template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
@@ -2102,6 +2943,8 @@ namespace uncertainty_planning_tools
     protected:
 
         bool initialized_;
+        double simulation_controller_frequency_;
+        double simulation_controller_interval_;
         double contact_distance_threshold_;
         double resolution_distance_threshold_;
         mutable std::atomic<uint64_t> simulation_call_;
@@ -2116,19 +2959,23 @@ namespace uncertainty_planning_tools
 
     public:
 
-        SimpleParticleContactSimulator(const std::vector<OBSTACLE_CONFIG>& environment_objects, const double environment_resolution, const int32_t debug_level) : SimulatorInterface<Robot, Configuration, RNG, ConfigAlloc>(environment_objects, environment_resolution, debug_level)
+        SimpleParticleContactSimulator(const std::vector<OBSTACLE_CONFIG>& environment_objects, const double environment_resolution, const double simulation_controller_frequency, const int32_t debug_level) : SimulatorInterface<Robot, Configuration, RNG, ConfigAlloc>(environment_objects, environment_resolution, debug_level)
         {
             contact_distance_threshold_ = 0.0 * environment_resolution;
             resolution_distance_threshold_ = 0.0 * environment_resolution;
+            simulation_controller_frequency_ = std::abs(simulation_controller_frequency);
+            simulation_controller_interval_ = 1.0 / simulation_controller_frequency;
             simulation_call_.store(0);
             ResetStatistics();
             initialized_ = true;
         }
 
-        SimpleParticleContactSimulator(const std::string& environment_id, const double environment_resolution, const int32_t debug_level) : SimulatorInterface<Robot, Configuration, RNG, ConfigAlloc>(environment_id, environment_resolution, debug_level)
+        SimpleParticleContactSimulator(const std::string& environment_id, const double environment_resolution, const double simulation_controller_frequency, const int32_t debug_level) : SimulatorInterface<Robot, Configuration, RNG, ConfigAlloc>(environment_id, environment_resolution, debug_level)
         {
             contact_distance_threshold_ = 0.0 * environment_resolution;
             resolution_distance_threshold_ = 0.0 * environment_resolution;
+            simulation_controller_frequency_ = std::abs(simulation_controller_frequency);
+            simulation_controller_interval_ = 1.0 / simulation_controller_frequency;
             simulation_call_.store(0);
             ResetStatistics();
             initialized_ = true;
@@ -2171,7 +3018,7 @@ namespace uncertainty_planning_tools
             recovered_unsuccessful_resolves_.store(0);
         }
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(Robot robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rngs, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_debug_publisher) const
+        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rngs, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_debug_publisher) const
         {
             if (start_positions.size() > 0)
             {
@@ -2184,14 +3031,19 @@ namespace uncertainty_planning_tools
                 const Configuration& initial_particle = start_positions[idx];
                 const Configuration& target_position = (target_positions.size() == start_positions.size()) ? target_positions[idx] : target_positions.front();
                 uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+#if defined(_OPENMP)
                 const size_t th_id = (size_t)omp_get_thread_num();
-                propagated_points[idx] = ForwardSimulateRobot(robot, initial_particle, target_position, rngs[th_id], forward_simulation_time, simulation_shortcut_distance, use_individual_jacobians, allow_contacts, enable_contact_manifold_target_adjustment, trace, false, display_debug_publisher);
+#else
+                const size_t th_id = 0;
+#endif
+                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, rngs[th_id], forward_simulation_time, simulation_shortcut_distance, use_individual_jacobians, allow_contacts, enable_contact_manifold_target_adjustment, trace, false, display_debug_publisher);
             }
             return propagated_points;
         }
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(Robot robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const
+        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const
         {
+            Robot robot = immutable_robot;
             UNUSED(enable_contact_manifold_target_adjustment);
             simulation_call_.fetch_add(1u);
             const uint64_t call_number = simulation_call_.load();
@@ -2199,17 +3051,22 @@ namespace uncertainty_planning_tools
             robot.ResetPosition(start_position);
             // Forward simulate for the provided number of steps
             bool collided = false;
-            const uint32_t forward_simulation_steps = (uint32_t)(forward_simulation_time * CONTROLLER_FREQUENCY);
+            const uint32_t forward_simulation_steps = std::max((uint32_t)(forward_simulation_time * simulation_controller_frequency_), 1u);
 #ifndef FAILED_RESOLVES_END_MOTION
             bool any_resolve_failed = false;
 #endif
+            if (this->debug_level_ >= 1)
+            {
+                const std::string msg = "[" + std::to_string(call_number) + "] Starting simulation:\nStart: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position);
+                std::cout << msg << std::endl;
+            }
             for (uint32_t step = 0; step < forward_simulation_steps; step++)
             {
                 // Step forward via the simulator
                 // Have robot compute next control input first
                 // Then, in a second function *not* in a callback, apply that control input
-                const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, CONTROLLER_INTERVAL, rng);
-                const std::pair<Configuration, std::pair<bool, bool>> result = ResolveForwardSimulation(robot, control_action, CONTROLLER_INTERVAL, rng, use_individual_jacobians, allow_contacts, trace, enable_tracing, call_number, display_debug_publisher);
+                const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, simulation_controller_interval_, rng);
+                const std::pair<Configuration, std::pair<bool, bool>> result = ResolveForwardSimulation(robot, control_action, simulation_controller_interval_, rng, use_individual_jacobians, allow_contacts, trace, enable_tracing, call_number, display_debug_publisher);
                 const Configuration& resolved_configuration = result.first;
                 const bool resolve_collided = result.second.first;
                 const bool current_resolve_failed = result.second.second;
@@ -2254,8 +3111,11 @@ namespace uncertainty_planning_tools
             }
             // Return the ending position of the robot and if it has collided during simulation
             const Configuration reached_position = robot.GetPosition();
-            const std::string msg = "[" + std::to_string(call_number) + "] Forward simulated in " + std::to_string(forward_simulation_steps) + " steps from\nNearest: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position) + "\nReached: " + PrettyPrint::PrettyPrint(reached_position);
-            arc_helpers::ConditionalPrint(msg, 1, this->debug_level_);
+            if (this->debug_level_ >= 1)
+            {
+                const std::string msg = "[" + std::to_string(call_number) + "] Forward simulated in " + std::to_string(forward_simulation_steps) + " steps from\nStart: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position) + "\nReached: " + PrettyPrint::PrettyPrint(reached_position);
+                std::cout << msg << std::endl;
+            }
             return std::pair<Configuration, bool>(reached_position, collided);
         }
 
@@ -2276,7 +3136,9 @@ namespace uncertainty_planning_tools
                     // Transform the link point into the environment frame
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    if (this->environment_sdf_.CheckInBounds(environment_relative_point) == false)
+                    const std::pair<float, bool> sdf_check = this->environment_sdf_.GetSafe(environment_relative_point);
+                    //const std::pair<double, bool> sdf_check = this->environment_sdf_.EstimateDistance(environment_relative_point);
+                    if (sdf_check.second == false)
                     {
                         const std::string msg = "Point at " + PrettyPrint::PrettyPrint(environment_relative_point) + " out of bounds";
                         std::cerr << msg << std::endl;
@@ -2284,10 +3146,8 @@ namespace uncertainty_planning_tools
                         assert(false);
 #endif
                     }
-                    // Check for collisions
-                    const float distance = this->environment_sdf_.Get(environment_relative_point);
                     // We only work with points in collision
-                    if (distance < contact_distance_threshold_)
+                    if (sdf_check.first < contact_distance_threshold_)
                     {
                         return true;
                         //collided = true;
@@ -2560,6 +3420,7 @@ namespace uncertainty_planning_tools
             // We use a hastable to detect self-collisions
             std::unordered_map<VoxelGrid::GRID_INDEX, std::vector<std::pair<size_t, size_t>>> self_collision_check_map;
             // Now, go through the links and points of the robot for collision checking
+            bool any_candidate_self_collisions = false;
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
@@ -2578,8 +3439,25 @@ namespace uncertainty_planning_tools
                     assert(index.size() == 3);
                     VoxelGrid::GRID_INDEX point_index(index[0], index[1], index[2]);
                     // Insert the index into the map
-                    self_collision_check_map[point_index].push_back(std::pair<size_t, size_t>(link_idx, point_idx));
+                    std::vector<std::pair<size_t, size_t>>& map_cell = self_collision_check_map[point_index];
+                    if (map_cell.size() > 1)
+                    {
+                        any_candidate_self_collisions = true;
+                    }
+                    else if (map_cell.size() == 1)
+                    {
+                        const std::pair<size_t, size_t>& current = map_cell[0];
+                        if (current.first != link_idx)
+                        {
+                            any_candidate_self_collisions = true;
+                        }
+                    }
+                    map_cell.push_back(std::pair<size_t, size_t>(link_idx, point_idx));
                 }
+            }
+            if (any_candidate_self_collisions == false)
+            {
+                return std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>();
             }
             // Compute approximate link masses (in reverse order, since each link's mass is its mass + mass of all further links
             std::map<size_t, double> link_masses;
@@ -2642,7 +3520,7 @@ namespace uncertainty_planning_tools
             }
             else
             {
-                const double min_step_size = this->GetResolution() * 0.015625;
+                const double min_step_size = this->GetResolution() * 0.125; //0.0625; //0.015625;
                 const double step_size = EigenHelpers::Distance(start, end);
                 if (step_size < min_step_size)
                 {
@@ -2666,8 +3544,17 @@ namespace uncertainty_planning_tools
 
         inline double EstimatePointPenetration(const Eigen::Vector3d& point) const
         {
-            if (this->environment_sdf_.CheckInBounds(point))
+            const std::pair<double, bool> distance_check = this->environment_sdf_.EstimateDistance(point);
+            if (distance_check.second)
             {
+                const double current_penetration = distance_check.first;
+                if (current_penetration >= this->resolution_distance_threshold_)
+                {
+                    return 0.0;
+                }
+#ifdef TRUST_SDF_PENETRATION
+                return current_penetration;
+#else
                 const Eigen::Vector3d gradient_direction = EigenHelpers::SafeNormal(EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GetGradient(point, true)));
                 Eigen::Vector3d initial_test = point + (gradient_direction * (this->GetResolution() * 0.25));
                 while (this->environment_sdf_.Get(initial_test) < resolution_distance_threshold_)
@@ -2676,6 +3563,7 @@ namespace uncertainty_planning_tools
                 }
                 const Eigen::Vector3d surface_point = RecursiveLineSearch(point, initial_test, resolution_distance_threshold_);
                 return EigenHelpers::Distance(point, surface_point);
+#endif
             }
             else
             {
@@ -2683,8 +3571,11 @@ namespace uncertainty_planning_tools
             }
         }
 
-        inline double ComputeMaxPointPenetration(const Robot& current_robot) const
+        inline double ComputeMaxPointPenetration(const Robot& current_robot, const Configuration& previous_config) const
         {
+            UNUSED(previous_config);
+            //Robot previous_robot = current_robot;
+            //previous_robot.UpdatePosition(previous_config);
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = current_robot.GetRawLinksPoints();
             // Find the point on the robot that moves the most
             double max_point_penetration = 0.0;
@@ -2695,6 +3586,7 @@ namespace uncertainty_planning_tools
                 const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
                 // Get the *current* transform of the current link
                 const Eigen::Affine3d current_link_transform = current_robot.GetLinkTransform(link_name);
+                //const Eigen::Affine3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -2702,7 +3594,10 @@ namespace uncertainty_planning_tools
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     // Get the current world position
                     const Eigen::Vector3d current_environment_position = current_link_transform * link_relative_point;
+                    //const Eigen::Vector3d previous_environment_position = previous_link_transform * link_relative_point;
+                    //const double penetration = EstimatePenetrationDistance(previous_environment_position, current_environment_position);
                     const double penetration = EstimatePointPenetration(current_environment_position);
+                    //const double penetration = SearchPenetrationDistance(previous_environment_position, current_environment_position);
                     if (penetration > max_point_penetration)
                     {
                         max_point_penetration = penetration;
@@ -2765,14 +3660,15 @@ namespace uncertainty_planning_tools
 
         // TODO - Why, if every resolve starts at a safe, valid state, and must end at a safe, valid, state, do some resolve operations increase penetration distance, especially those that resolve in OOB environment?! How are some resolves pathologically bad? Why does the speed of the robot, which should be completely independent of microstep size, play a role?
 
-        inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(Robot robot, const Eigen::VectorXd& control_input, const double controller_interval, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const uint64_t call_number, ros::Publisher& display_pub) const
+        inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(const Robot& immutable_robot, const Eigen::VectorXd& control_input, const double controller_interval, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const uint64_t call_number, ros::Publisher& display_pub) const
         {
-            UNUSED(display_pub);
-            const std::string msg1 = "[" + std::to_string(call_number) + "] Resolving control input: " + PrettyPrint::PrettyPrint(control_input);
-            arc_helpers::ConditionalPrint(msg1, 25, this->debug_level_);
+            Robot robot = immutable_robot;
             const Eigen::VectorXd real_control_input = control_input * controller_interval;
-            const std::string msg2 = "[" + std::to_string(call_number) + "] Resolving real control input: " + PrettyPrint::PrettyPrint(real_control_input);
-            arc_helpers::ConditionalPrint(msg2, 25, this->debug_level_);
+            if (this->debug_level_ >= 25)
+            {
+                const std::string msg1 = "[" + std::to_string(call_number) + "] Resolving control input: " + PrettyPrint::PrettyPrint(control_input) + "\nReal control input: " + PrettyPrint::PrettyPrint(real_control_input);
+                std::cout << msg1 << std::endl;
+            }
             // Get the list of link name + link points for all the links of the robot
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
             // Step along the control input
@@ -2781,15 +3677,21 @@ namespace uncertainty_planning_tools
             const double max_robot_motion_per_step = robot.GetMaxMotionPerStep();
             const double estimated_step_motion = step_norm * max_robot_motion_per_step;
             const double computed_step_motion = EstimateMaxControlInputWorkspaceMotion(robot, control_input);
-            const double allowed_microstep_distance = this->GetResolution() * 0.25;
+            const double allowed_microstep_distance = this->GetResolution() * 1.0; //0.25;
             const uint32_t number_microsteps = std::max(1u, ((uint32_t)ceil(computed_step_motion / allowed_microstep_distance)));
-            const std::string msg3 = "[" + std::to_string(call_number) + "] Resolving simulation step with estimated motion: " + std::to_string(estimated_step_motion) + " computed motion: " + std::to_string(computed_step_motion) + " in " + std::to_string(number_microsteps) + " microsteps";
-            arc_helpers::ConditionalPrint(msg3, 2, this->debug_level_);
+            if (this->debug_level_ >= 2)
+            {
+                const std::string msg3 = "[" + std::to_string(call_number) + "] Resolving simulation step with estimated motion: " + std::to_string(estimated_step_motion) + " computed motion: " + std::to_string(computed_step_motion) + " in " + std::to_string(number_microsteps) + " microsteps";
+                std::cout << msg3 << std::endl;
+            }
             const Eigen::VectorXd control_input_step = real_control_input * (1.0 / (double)number_microsteps);
             const double computed_microstep_motion = EstimateMaxControlInputWorkspaceMotion(robot, control_input_step);
             assert(computed_microstep_motion <= allowed_microstep_distance);
-            const std::string msg4 = "[" + std::to_string(call_number) + "] Control input step: " + PrettyPrint::PrettyPrint(control_input_step);
-            arc_helpers::ConditionalPrint(msg4, 25, this->debug_level_);
+            if (this->debug_level_ >= 25)
+            {
+                const std::string msg4 = "[" + std::to_string(call_number) + "] Control input step: " + PrettyPrint::PrettyPrint(control_input_step);
+                std::cout << msg4 << std::endl;
+            }
             bool collided = false;
             bool fallback_required = false;
             if (enable_tracing)
@@ -2807,17 +3709,16 @@ namespace uncertainty_planning_tools
                 }
                 // Store the previous configuration of the robot
                 const Configuration previous_configuration = robot.GetPosition();
-                const std::string msg5 = "\x1b[35;1m [" + std::to_string(call_number) + "] Pre-action configuration: " + PrettyPrint::PrettyPrint(previous_configuration) + " \x1b[0m";
-                arc_helpers::ConditionalPrint(msg5, 25, this->debug_level_);
                 // Update the position of the robot
                 robot.ApplyControlInput(control_input_step, rng);
                 const Configuration post_action_configuration = robot.GetPosition(rng);
                 robot.UpdatePosition(post_action_configuration);
-                const std::string msg6 = "\x1b[33;1m [" + std::to_string(call_number) + "] Post-action configuration: " + PrettyPrint::PrettyPrint(post_action_configuration) + " \x1b[0m";
-                arc_helpers::ConditionalPrint(msg6, 25, this->debug_level_);
                 const double apply_step_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, previous_configuration, post_action_configuration);
-                const std::string msg_post_apply = "[" + std::to_string(call_number) + "] Max point motion (apply step) was: " + std::to_string(apply_step_max_motion);
-                arc_helpers::ConditionalPrint(msg_post_apply, 25, this->debug_level_);
+                if (this->debug_level_ >= 25)
+                {
+                    const std::string msg5 = "\x1b[35;1m [" + std::to_string(call_number) + "] Pre-action configuration: " + PrettyPrint::PrettyPrint(previous_configuration) + " \x1b[0m\n\x1b[33;1m [" + std::to_string(call_number) + "] Post-action configuration: " + PrettyPrint::PrettyPrint(post_action_configuration) + " \x1b[0m\n[" + std::to_string(call_number) + "] Max point motion (apply step) was: " + std::to_string(apply_step_max_motion);
+                    std::cout << msg5 << std::endl;
+                }
                 std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, previous_configuration, post_action_configuration, robot_links_points, controller_interval);
                 std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map = collision_check.second;
                 bool in_collision = collision_check.first;
@@ -2839,49 +3740,34 @@ namespace uncertainty_planning_tools
                     {
                         const auto point_jacobians_and_corrections = CollectPointCorrectionsAndJacobians(robot, previous_configuration, active_configuration, robot_links_points, self_collision_map, call_number, rng);
 
-                        Eigen::VectorXd raw_correction_step;
-#ifdef USE_J_TRANSPOSE_IN_FAILED_RESOLVES
-                        if (correction_step_scaling >= 0.0)
+                        const Eigen::VectorXd raw_correction_step = (use_individual_jacobians) ? ComputeResolverCorrectionStepIndividualJacobians(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second) : ComputeResolverCorrectionStepStackedJacobian(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second);
+                        if (this->debug_level_ >= 25)
                         {
-#endif
-                            if (use_individual_jacobians)
-                            {
-                                raw_correction_step = ComputeResolverCorrectionStepIndividualJacobians(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second);
-                            }
-                            else
-                            {
-                                raw_correction_step = ComputeResolverCorrectionStepStackedJacobian(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second);
-                            }
-#ifdef USE_J_TRANSPOSE_IN_FAILED_RESOLVES
+                            const std::string msg7 = "[" + std::to_string(call_number) + "] Raw Cstep: " + PrettyPrint::PrettyPrint(raw_correction_step);
+                            std::cout << msg7 << std::endl;
                         }
-                        else
-                        {
-                            raw_correction_step = ComputeResolverCorrectionStepJacobiansTranspose(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second);
-                            fallback_required = true;
-                        }
-#endif
-                        const std::string msg7 = "[" + std::to_string(call_number) + "] Raw Cstep: " + PrettyPrint::PrettyPrint(raw_correction_step);
-                        arc_helpers::ConditionalPrint(msg7, 25, this->debug_level_);
                         // Scale down the size of the correction step
 //                        const double correction_step_norm = raw_correction_step.norm();
 //                        const double correction_step_motion_estimate = correction_step_norm * max_robot_motion_per_step;
                         const double correction_step_motion_estimate = EstimateMaxControlInputWorkspaceMotion(robot, raw_correction_step);
-                        double allowed_resolve_distance = std::min(apply_step_max_motion, allowed_microstep_distance * 0.25);
-                        const double pre_resolve_max_penetration = ComputeMaxPointPenetration(robot);
+                        double allowed_resolve_distance = std::min(apply_step_max_motion, allowed_microstep_distance * 1.0); //was 0.25
+                        const double pre_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                         uint32_t num_micro_ops = 0u;
-                        while (true)
+                        while (num_micro_ops <= 2)
                         {
                             const double step_fraction = std::max((correction_step_motion_estimate / allowed_resolve_distance), 1.0);
                             const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * fabs(correction_step_scaling);
-                            const std::string msg8 = "[" + std::to_string(call_number) + "] Real scaled Cstep: " + PrettyPrint::PrettyPrint(real_correction_step);
-                            arc_helpers::ConditionalPrint(msg8, 25, this->debug_level_);
+                            if (this->debug_level_ >= 25)
+                            {
+                                const std::string msg8 = "[" + std::to_string(call_number) + "] Real scaled Cstep: " + PrettyPrint::PrettyPrint(real_correction_step);
+                                std::cout << msg8 << std::endl;
+                            }
                             // Apply correction step
                             robot.ApplyControlInput(real_correction_step);
-                            const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot);
+                            const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                             num_micro_ops++;
                             if (post_resolve_max_penetration <= pre_resolve_max_penetration)
                             {
-
                                 break;
                             }
                             else
@@ -2891,16 +3777,15 @@ namespace uncertainty_planning_tools
                             }
                         }
                         const Configuration post_resolve_configuration = robot.GetPosition();
-                        const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot);
-                        const std::string msg9 = "\x1b[36;1m [" + std::to_string(call_number) + "] Post-resolve step configuration after "" micro-ops: " + PrettyPrint::PrettyPrint(post_resolve_configuration) + " \x1b[0m";
-                        arc_helpers::ConditionalPrint(msg9, 25, this->debug_level_);
-                        const double resolve_step_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, post_action_configuration, post_resolve_configuration);
-                        const std::string msg_post_resolve = "[" + std::to_string(call_number) + "] Pre-resolve max penetration was: " + std::to_string(pre_resolve_max_penetration) + " Post-resolve max penetration was: " + std::to_string(post_resolve_max_penetration) + " Max point motion (resolve step) was: " + std::to_string(resolve_step_max_motion);
-                        arc_helpers::ConditionalPrint(msg_post_resolve, 25, this->debug_level_);
+                        const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                         assert(post_resolve_max_penetration <= pre_resolve_max_penetration);
-                        const double iteration_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, previous_configuration, post_resolve_configuration);
-                        const std::string msg_post_iteration = "[" + std::to_string(call_number) + "] Max point motion (iteration) was: " + std::to_string(iteration_max_motion);
-                        arc_helpers::ConditionalPrint(msg_post_iteration, 25, this->debug_level_);
+                        if (this->debug_level_ >= 25)
+                        {
+                            const double resolve_step_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, post_action_configuration, post_resolve_configuration);
+                            const double iteration_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, previous_configuration, post_resolve_configuration);
+                            const std::string msg9 = "\x1b[36;1m [" + std::to_string(call_number) + "] Post-resolve step configuration after " + std::to_string(num_micro_ops) + " micro-ops: " + PrettyPrint::PrettyPrint(post_resolve_configuration) + " \x1b[0m\n[" + std::to_string(call_number) + "] Pre-resolve max penetration was: " + std::to_string(pre_resolve_max_penetration) + " Post-resolve max penetration was: " + std::to_string(post_resolve_max_penetration) + " Max point motion (resolve step) was: " + std::to_string(resolve_step_max_motion) + "\n[" + std::to_string(call_number) + "] Max point motion (iteration) was: " + std::to_string(iteration_max_motion);
+                            std::cout << msg9 << std::endl;
+                        }
                         if (this->debug_level_ >= 26)
                         {
                             std::cout << "Press ENTER to continue..." << std::endl;
@@ -2921,8 +3806,11 @@ namespace uncertainty_planning_tools
                         }
                         if (resolver_iterations > MAX_RESOLVER_ITERATIONS)
                         {
-                            const std::string msg10 = "\x1b[31;1m [" + std::to_string(call_number) + "] Resolver iterations > " + std::to_string(MAX_RESOLVER_ITERATIONS) + ", terminating microstep+resolver at configuration " + PrettyPrint::PrettyPrint(active_configuration) + " and returning previous configuration " + PrettyPrint::PrettyPrint(previous_configuration) + "\nCollision check results:\n" + PrettyPrint::PrettyPrint(new_collision_check, false, "\n") + " \x1b[0m";
-                            arc_helpers::ConditionalPrint(msg10, 2, this->debug_level_);
+                            if (this->debug_level_ >= 2)
+                            {
+                                const std::string msg10 = "\x1b[31;1m [" + std::to_string(call_number) + "] Resolver iterations > " + std::to_string(MAX_RESOLVER_ITERATIONS) + ", terminating microstep+resolver at configuration " + PrettyPrint::PrettyPrint(active_configuration) + " and returning previous configuration " + PrettyPrint::PrettyPrint(previous_configuration) + "\nCollision check results:\n" + PrettyPrint::PrettyPrint(new_collision_check, false, "\n") + " \x1b[0m";
+                                std::cout << msg10 << std::endl;
+                            }
                             if (enable_tracing)
                             {
                                 trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(previous_configuration);
@@ -2972,13 +3860,19 @@ namespace uncertainty_planning_tools
                             }
                         }
                     }
-                    const std::string msg11 = "\x1b[31;1m [" + std::to_string(call_number) + "] Colliding microstep " + std::to_string(micro_step + 1u) + " resolved in " + std::to_string(resolver_iterations) + " iterations \x1b[0m";
-                    arc_helpers::ConditionalPrint(msg11, 25, this->debug_level_);
+                    if (this->debug_level_ >= 25)
+                    {
+                        const std::string msg11 = "\x1b[31;1m [" + std::to_string(call_number) + "] Colliding microstep " + std::to_string(micro_step + 1u) + " resolved in " + std::to_string(resolver_iterations) + " iterations \x1b[0m";
+                        std::cout << msg11 << std::endl;
+                    }
                 }
                 else if (in_collision && (allow_contacts == false))
                 {
-                    const std::string msg12 = "\x1b[31;1m [" + std::to_string(call_number) + "] Colliding microstep " + std::to_string(micro_step + 1u) + " trivially resolved in 1 iteration (allow_contacts==false) \x1b[0m";
-                    arc_helpers::ConditionalPrint(msg12, 25, this->debug_level_);
+                    if (this->debug_level_ >= 25)
+                    {
+                        const std::string msg12 = "\x1b[31;1m [" + std::to_string(call_number) + "] Colliding microstep " + std::to_string(micro_step + 1u) + " trivially resolved in 1 iteration (allow_contacts==false) \x1b[0m";
+                        std::cout << msg12 << std::endl;
+                    }
                     if (enable_tracing)
                     {
                         trace.resolver_steps.back().contact_resolver_steps.back().contact_resolution_steps.push_back(previous_configuration);
@@ -2992,13 +3886,19 @@ namespace uncertainty_planning_tools
                 }
                 else
                 {
-                    const std::string msg13= "\x1b[31;1m [" + std::to_string(call_number) + "] Uncolliding microstep " + std::to_string(micro_step + 1u) + " trivially resolved in 1 iteration \x1b[0m";
-                    arc_helpers::ConditionalPrint(msg13, 25, this->debug_level_);
+                    if (this->debug_level_ >= 25)
+                    {
+                        const std::string msg13= "\x1b[31;1m [" + std::to_string(call_number) + "] Uncolliding microstep " + std::to_string(micro_step + 1u) + " trivially resolved in 1 iteration \x1b[0m";
+                        std::cout << msg13 << std::endl;
+                    }
                     continue;
                 }
             }
-            const std::string msg14 = "\x1b[32;1m [" + std::to_string(call_number) + "] Resolved action, post-action resolution configuration: " + PrettyPrint::PrettyPrint(robot.GetPosition()) + " \x1b[0m";
-            arc_helpers::ConditionalPrint(msg14, 2, this->debug_level_);
+            if (this->debug_level_ >= 2)
+            {
+                const std::string msg14 = "\x1b[32;1m [" + std::to_string(call_number) + "] Resolved action, post-action resolution configuration: " + PrettyPrint::PrettyPrint(robot.GetPosition()) + " \x1b[0m";
+                std::cout << msg14 << std::endl;
+            }
             successful_resolves_.fetch_add(1);
             if (fallback_required)
             {
@@ -3029,7 +3929,7 @@ namespace uncertainty_planning_tools
 #endif
         }
 
-        inline double EstimatePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
+        inline double OriginalEstimatePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
         {
             // We use the penetration distance as a scale
             // We compute the true penetation distance:
@@ -3065,6 +3965,47 @@ namespace uncertainty_planning_tools
             return computed_penetration_distance;
         }
 
+        inline double EstimatePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
+        {
+            const std::vector<int64_t> current_cell_indices = this->environment_sdf_.LocationToGridIndex(current_point_location);
+            const double current_cell_penetration = this->environment_sdf_.Get(current_cell_indices[0], current_cell_indices[1], current_cell_indices[2]);
+            if (current_cell_penetration >= this->resolution_distance_threshold_)
+            {
+                return 0.0;
+            }
+            // We use the penetration distance as a scale
+            // We compute the true penetation distance:
+            // - We know the previous location of the point corresponded to a collision-free location
+            // - We know that the current location corresponds to a collision location
+            // - We know that the point has moved a short distance, and thus has not moved over meaningful intermediate cells
+            // So, we can assume that the collision/free boundary lies exactly halfway between the previous location's cell
+            // and the current location's cell. (WE NEED TO CHECK, MAY REQUIRE LINE SEARCH)
+            // Additionally, we project the current cell->current vector onto the
+            // previous cell->current cell vector to adjust the estimate
+            const std::vector<int64_t> previous_cell_indices = this->environment_sdf_.LocationToGridIndex(previous_point_location);
+            const Eigen::Vector3d previous_cell_location = EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GridIndexToLocation(previous_cell_indices[0], previous_cell_indices[1], previous_cell_indices[2]));
+            const Eigen::Vector3d current_cell_location = EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GridIndexToLocation(current_cell_indices[0], current_cell_indices[1], current_cell_indices[2]));
+            // Check if the previous and current cells are neighboring
+            //const int64_t x_cell_delta = std::abs(previous_cell_indices[0] - current_cell_indices[0]);
+            //const int64_t y_cell_delta = std::abs(previous_cell_indices[1] - current_cell_indices[1]);
+            //const int64_t z_cell_delta = std::abs(previous_cell_indices[2] - current_cell_indices[2]);
+            //assert(x_cell_delta <= 1);
+            //assert(y_cell_delta <= 1);
+            //assert(z_cell_delta <= 1);
+            // Compute projection
+            const Eigen::Vector3d previous_cell_current_cell = current_cell_location - previous_cell_location;
+            const double nominal_penetration_distance = current_cell_penetration;
+            const Eigen::Vector3d current_cell_current = current_point_location - current_cell_location;
+            const Eigen::Vector3d current_cell_current_projected_onto_previous_cell_current_cell = (current_cell_current.dot(previous_cell_current_cell) / previous_cell_current_cell.dot(previous_cell_current_cell)) * previous_cell_current_cell;
+            // Get the norm of the projection, this is the amount we need to adjust by
+            const double adjustment_amount = current_cell_current_projected_onto_previous_cell_current_cell.norm();
+            // Figure out the sign of the adjustment (i.e. if the current location is farther in/out than the current cell
+            const double adjustment = (current_cell_current_projected_onto_previous_cell_current_cell.dot(previous_cell_current_cell) >= 0.0) ? adjustment_amount : -adjustment_amount;
+            // Compute the final penetration distance
+            const double computed_penetration_distance = nominal_penetration_distance + adjustment;
+            return computed_penetration_distance;
+        }
+
         inline double SearchPenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
         {
             const Eigen::Vector3d surface_contact_point = RecursiveLineSearch(current_point_location, previous_point_location, resolution_distance_threshold_);
@@ -3074,21 +4015,49 @@ namespace uncertainty_planning_tools
 
         inline double ComputePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location, const uint64_t call_number) const
         {
-            const double gradient_estimated_penetration_distance = EstimatePointPenetration(current_point_location);
+#ifdef TRUST_SDF_PENETRATION
+            UNUSED(previous_point_location);
+            const double current_penetration = this->environment_sdf_.EstimateDistance(current_point_location).first;
+            if (this->debug_level_ >= 25)
+            {
+                const std::string msg = "[" + std::to_string(call_number) + "] SDF penetration distance: " + std::to_string(current_penetration);
+                std::cout << msg << std::endl;
+            }
+            return current_penetration;
+#else
             if (this->environment_sdf_.Get(previous_point_location) >= resolution_distance_threshold_)
             {
+#ifdef SELECT_MAX_PENETRATION_DISTANCE
+                const double gradient_estimated_penetration_distance = EstimatePointPenetration(current_point_location);
                 const double estimated_penetration_distance = EstimatePenetrationDistance(previous_point_location, current_point_location);
                 const double searched_penetration_distance = SearchPenetrationDistance(previous_point_location, current_point_location);
-                const std::string msg = "[" + std::to_string(call_number) + "] Gradient estimated penetration distance: " + std::to_string(gradient_estimated_penetration_distance) + " Estimated penetration distance: " + std::to_string(estimated_penetration_distance) + " Searched penetration distance: " + std::to_string(searched_penetration_distance);
-                arc_helpers::ConditionalPrint(msg, 25, this->debug_level_);
+                if (this->debug_level_ >= 25)
+                {
+                    const std::string msg = "[" + std::to_string(call_number) + "] Gradient estimated penetration distance: " + std::to_string(gradient_estimated_penetration_distance) + " Estimated penetration distance: " + std::to_string(estimated_penetration_distance) + " Searched penetration distance: " + std::to_string(searched_penetration_distance);
+                    std::cout << msg << std::endl;
+                }
                 return std::max(gradient_estimated_penetration_distance, std::max(estimated_penetration_distance, searched_penetration_distance));
+#else
+                const double searched_penetration_distance = SearchPenetrationDistance(previous_point_location, current_point_location);
+                if (this->debug_level_ >= 25)
+                {
+                    const std::string msg = "[" + std::to_string(call_number) + "] Searched penetration distance: " + std::to_string(searched_penetration_distance);
+                    std::cout << msg << std::endl;
+                }
+                return searched_penetration_distance;
+#endif
             }
             else
             {
-                const std::string msg = "[" + std::to_string(call_number) + "] Gradient estimated penetration distance: " + std::to_string(gradient_estimated_penetration_distance);
-                arc_helpers::ConditionalPrint(msg, 25, this->debug_level_);
+                const double gradient_estimated_penetration_distance = EstimatePointPenetration(current_point_location);
+                if (this->debug_level_ >= 25)
+                {
+                    const std::string msg = "[" + std::to_string(call_number) + "] Gradient estimated penetration distance: " + std::to_string(gradient_estimated_penetration_distance);
+                    std::cout << msg << std::endl;
+                }
                 return gradient_estimated_penetration_distance;
             }
+#endif
         }
 
         inline std::pair<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Matrix<double, Eigen::Dynamic, 1>> CollectPointCorrectionsAndJacobians(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>>& robot_links_points, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map, const uint64_t call_number, RNG& rng) const
@@ -3132,35 +4101,37 @@ namespace uncertainty_planning_tools
                     const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
                     const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    const bool previous_in_bounds = this->environment_sdf_.CheckInBounds(previous_point_location);
-                    const bool current_in_bounds = this->environment_sdf_.CheckInBounds(current_point_location);
-                    if (previous_in_bounds == false)
+                    const std::pair<double, bool> previous_sdf_check = this->environment_sdf_.EstimateDistance(previous_point_location);
+                    const std::pair<double, bool> current_sdf_check = this->environment_sdf_.EstimateDistance(current_point_location);
+                    if (previous_sdf_check.second == false)
                     {
-                        const std::string msg = "(Previous) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
+                        const std::string msg = "[" + std::to_string(call_number) + "] (Previous) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
                         arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
                         assert(false);
                     }
                     else
                     {
-                        const float previous_distance = this->environment_sdf_.Get(previous_point_location);
-                        if (previous_distance < resolution_distance_threshold_)
+                        if (previous_sdf_check.first < resolution_distance_threshold_)
                         {
-                            const std::string msg = "Previous point " + std::to_string(point_idx) + " on link " + std::to_string(link_idx) + " in collision: " + PrettyPrint::PrettyPrint(current_point_location);
+                            const std::string msg = "[" + std::to_string(call_number) + "] Previous point " + std::to_string(point_idx) + " on link " + std::to_string(link_idx) + " in collision: " + PrettyPrint::PrettyPrint(current_point_location);
                             arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
                             //assert(false);
                         }
                     }
-                    if (current_in_bounds == false)
+                    if (current_sdf_check.second == false)
                     {
-                        const std::string msg = "(Current) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
+                        const std::string msg = "[" + std::to_string(call_number) + "] (Current) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
                         arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
 #ifdef ASSERT_ON_OUT_OF_BOUNDS
                         assert(false);
 #endif
                     }
-                    const float distance = this->environment_sdf_.Get(current_point_location);
                     // We only work with points in collision
-                    if (distance < resolution_distance_threshold_ && current_in_bounds && previous_in_bounds)
+#ifdef TRUST_SDF_PENETRATION
+                    if (current_sdf_check.first < resolution_distance_threshold_ && current_sdf_check.second)
+#else
+                    if (current_sdf_check.first < resolution_distance_threshold_ && current_sdf_check.second && previous_sdf_check.second)
+#endif
                     {
                         // We query the surface normal map for the gradient to move out of contact using the particle motion
                         const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
@@ -3171,13 +4142,23 @@ namespace uncertainty_planning_tools
                         const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
                         const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNormal(raw_gradient);
                         // Compute the penetration weight
+
+                        const double sdf_penetration_distance = fabs(resolution_distance_threshold_ - current_sdf_check.first);
+#ifdef TRUST_SDF_PENETRATION
+                        const double penetration_weight = sdf_penetration_distance;
+#else
                         const double computed_penetration_distance = ComputePenetrationDistance(previous_point_location, current_point_location, call_number);
                         const double penetration_weight = computed_penetration_distance * 100.0;
-                        const double sdf_penetration_distance = fabs(resolution_distance_threshold_ - distance);
+#endif
                         // Compute the correction vector
                         const Eigen::Vector3d correction_vector = normed_point_gradient * penetration_weight;
-                        const std::string msg = "[" + std::to_string(call_number) + "] Colliding point (link-relative): " + PrettyPrint::PrettyPrint(link_relative_point) + "\n[" + std::to_string(call_number) + "] Collision location: " + PrettyPrint::PrettyPrint(current_point_location) + "\n[" + std::to_string(call_number) + "] Computed penetration distance: " + std::to_string(computed_penetration_distance) + " SDF penetration distance: " + std::to_string(sdf_penetration_distance) + " Penetration weight: " + std::to_string(penetration_weight) + "\n[" + std::to_string(call_number) + "] Point gradient: " + PrettyPrint::PrettyPrint(correction_vector);
-                        arc_helpers::ConditionalPrint(msg, 25, this->debug_level_);
+#ifndef TRUST_SDF_PENETRATION
+                        if (this->debug_level_ >= 25)
+                        {
+                            const std::string msg = "[" + std::to_string(call_number) + "] Colliding point (link-relative): " + PrettyPrint::PrettyPrint(link_relative_point) + "\n[" + std::to_string(call_number) + "] Collision location: " + PrettyPrint::PrettyPrint(current_point_location) + "\n[" + std::to_string(call_number) + "] Computed penetration distance: " + std::to_string(computed_penetration_distance) + " SDF penetration distance: " + std::to_string(sdf_penetration_distance) + " Penetration weight: " + std::to_string(penetration_weight) + "\n[" + std::to_string(call_number) + "] Point gradient: " + PrettyPrint::PrettyPrint(correction_vector);
+                            std::cout << msg << std::endl;
+                        }
+#endif
                         env_collision_correction.first = true;
                         env_collision_correction.second = correction_vector;
                     }

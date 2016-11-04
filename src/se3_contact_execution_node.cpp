@@ -20,7 +20,7 @@
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 #include <uncertainty_planning_core/simplese3_robot_helpers.hpp>
-#include <thruster_robot_controllers/SetActuationError.h>
+#include <uncertainty_planning_core/SetSimple6dofActuationError.h>
 #include <uncertainty_planning_core/se3_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -72,10 +72,10 @@ inline EigenHelpers::VectorAffine3d move_robot(const Eigen::Affine3d& target_tra
 
 void set_uncertainty(const double max_translation_error, const double max_rotation_error, ros::ServiceClient& set_uncertainty_service)
 {
-    thruster_robot_controllers::SetActuationErrorRequest req;
+    uncertainty_planning_core::SetSimple6dofActuationErrorRequest req;
     req.translation_actuator_error = max_translation_error;
     req.rotation_actuation_error = max_rotation_error;
-    thruster_robot_controllers::SetActuationErrorResponse res;
+    uncertainty_planning_core::SetSimple6dofActuationErrorResponse res;
     if (set_uncertainty_service.call(req, res) == false)
     {
         throw std::invalid_argument("SetActuationError failed");
@@ -157,7 +157,7 @@ int main(int argc, char** argv)
     ROS_INFO("Starting Nomdp Contact Execution Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::Simple6dofRobotMove>("simple_6dof_robot_move");
-    ros::ServiceClient set_uncertainty_service = nh.serviceClient<thruster_robot_controllers::SetActuationError>("simple6dof_robot/set_actuation_uncertainty");
+    ros::ServiceClient set_uncertainty_service = nh.serviceClient<uncertainty_planning_core::SetSimple6dofActuationError>("simple6dof_robot/set_actuation_uncertainty");
     peg_in_hole_env_se3(display_debug_publisher, robot_control_service, set_uncertainty_service);
     return 0;
 }

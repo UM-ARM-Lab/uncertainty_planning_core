@@ -4,7 +4,7 @@ project(uncertainty_planning_core)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities thruster_robot_controllers message_generation)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities message_generation)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -45,7 +45,7 @@ find_package(OpenMP)
 add_message_files(DIRECTORY msg FILES ObstacleConfig.msg)
 
 ## Generate services in the 'srv' folder
-add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotMove.srv)
+add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotMove.srv SetSimple6dofActuationError.srv SetBaxterActuationError.srv)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -66,7 +66,7 @@ generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs control
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities thruster_robot_controllers message_runtime DEPENDS system_lib rt Eigen OpenMP)
+catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities message_runtime DEPENDS system_lib rt Eigen OpenMP)
 
 ###########
 ## Build ##
@@ -81,6 +81,11 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} -Wall -Wextra -Wconversion
 set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -Wall -Wextra -Wconversion -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINKER_FLAGS}")
+
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wconversion")
+#set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -Wall -Wextra -Wconversion -O3 -g -DENABLE_PARALLEL -DEIGEN_DONT_PARALLELIZE")
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+#set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 
 set(UNCERTAINTY_PLANNING_CORE_SOURCES
     include/${PROJECT_NAME}/uncertainty_planner_state.hpp

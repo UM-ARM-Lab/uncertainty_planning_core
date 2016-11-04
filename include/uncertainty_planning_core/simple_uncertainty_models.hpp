@@ -51,12 +51,13 @@ namespace simple_uncertainty_models
         bool initialized_;
         mutable arc_helpers::TruncatedNormalDistribution noise_distribution_;
         double actuator_limit_;
+        double noise_bound_;
 
     public:
 
-        SimpleUncertainVelocityActuator(const double noise_lower_bound, const double noise_upper_bound, const double actuator_limit) : initialized_(true), noise_distribution_(0.0, std::max((fabs(noise_lower_bound) * 0.5), (fabs(noise_upper_bound) * 0.5)), noise_lower_bound, noise_upper_bound), actuator_limit_(fabs(actuator_limit)) {}
+        SimpleUncertainVelocityActuator(const double noise_bound, const double actuator_limit) : initialized_(true), noise_distribution_(0.0, 0.5 , -1.0, 1.0), actuator_limit_(std::abs(actuator_limit)), noise_bound_(std::abs(noise_bound)) {}
 
-        SimpleUncertainVelocityActuator() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0), actuator_limit_(0.0) {}
+        SimpleUncertainVelocityActuator() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0), actuator_limit_(0.0), noise_bound_(0.0) {}
 
         inline bool IsInitialized() const
         {
@@ -77,8 +78,12 @@ namespace simple_uncertainty_models
         {
             assert(std::isnan(control_input) == false);
             assert(std::isinf(control_input) == false);
-            double real_control_input = GetControlValue(control_input);
-            const double noise = noise_distribution_(rng);
+            const double real_control_input = GetControlValue(control_input);
+            // This is the version used in WAFR SE(2) and SE(3)
+            //const double noise = noise_distribution_(rng) * noise_bound_;
+            // This is the version trialled in WAFR R(7), where noise is proportional to velocity
+            const double noise = noise_distribution_(rng) * (noise_bound_ * real_control_input);
+            // Combine noise with control input
             const double noisy_control_input = real_control_input + noise;
             return noisy_control_input;
         }

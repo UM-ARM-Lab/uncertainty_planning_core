@@ -83,13 +83,15 @@ class ExecuteServer(object):
 
     def command_teleport(self, joint_names, target_positions):
         if self.teleport_client is not None:
-            req = gazebo_msgs.srv.SetModelConfigurationRequest()
-            req.model_name = "baxter"
-            req.urdf_param_name = "robot_description"
-            req.joint_names = joint_names
-            req.joint_positions = target_positions
-            res = self.teleport_client.call(req)
-            print(res)
+            names = ["right_s0", "right_s1", "right_e0", "right_e1", "right_w0", "right_w1", "right_w2"]
+            for name in names:
+                req = gazebo_msgs.srv.SetModelConfigurationRequest()
+                req.model_name = "baxter"
+                req.urdf_param_name = "robot_description"
+                req.joint_names = [name]
+                req.joint_positions = [target_positions[joint_names.index(name)]]
+                res = self.teleport_client.call(req)
+                print(res)
         else:
             rospy.loginfo("Teleport ignored")
 
