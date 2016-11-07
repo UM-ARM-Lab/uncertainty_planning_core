@@ -138,7 +138,7 @@ namespace uncertainty_contact_planning
         typedef execution_policy::PolicyGraphBuilder<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> ExecutionPolicyGraphBuilder;
         typedef simple_rrt_planner::SimpleRRTPlannerState<NomdpPlanningState, std::allocator<NomdpPlanningState>> NomdpPlanningTreeState;
         typedef std::vector<NomdpPlanningTreeState> NomdpPlanningTree;
-        typedef execution_policy::Graph<NomdpPlanningState, std::allocator<NomdpPlanningState>> ExecutionPolicyGraph;
+        typedef arc_dijkstras::Graph<NomdpPlanningState, std::allocator<NomdpPlanningState>> ExecutionPolicyGraph;
 
         bool resample_particles_;
         bool simulate_with_individual_jacobians_;
