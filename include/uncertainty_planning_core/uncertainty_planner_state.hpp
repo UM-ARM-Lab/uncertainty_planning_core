@@ -59,6 +59,7 @@ namespace uncertainty_planning_tools
 
         static inline std::string GetQualifiedTypeID()
         {
+            // "Nomdp" is used here to ensure backwards binary compatibility with older serialized policy files. Changing to "Uncertainty" would change the TypeID hash and break deserialization.
             const std::string qualified_type_id = "NomdpPlannerState<" + ConfigSerializer::TypeName() + "_" + AverageFn::TypeName() + "_" + DistanceFn::TypeName() + "_" + DimDistanceFn::TypeName() + ">";
             return qualified_type_id;
         }
@@ -634,7 +635,7 @@ namespace uncertainty_planning_tools
         inline std::string Print() const
         {
             std::ostringstream strm;
-            strm << "Nomdp Planner State (QualifiedTypeID: " << GetQualifiedTypeID() << ") - Expectation: " << PrettyPrint::PrettyPrint(GetExpectation()) << " Command: " << PrettyPrint::PrettyPrint(GetCommand()) << " Variance: " << GetVariance() << " Space-independent Variance: " << GetSpaceIndependentVariance() << " Raw Pfeasibility(parent->this): " << GetRawEdgePfeasibility() << " Effective Pfeasibility(parent->this): " << GetEffectiveEdgePfeasibility() << " Raw Pfeasibility(this->parent): " << GetReverseEdgePfeasibility() << " Pfeasibility(start->this): " << GetMotionPfeasibility();
+            strm << "Uncertainty Planner State (QualifiedTypeID: " << GetQualifiedTypeID() << ") - Expectation: " << PrettyPrint::PrettyPrint(GetExpectation()) << " Command: " << PrettyPrint::PrettyPrint(GetCommand()) << " Variance: " << GetVariance() << " Space-independent Variance: " << GetSpaceIndependentVariance() << " Raw Pfeasibility(parent->this): " << GetRawEdgePfeasibility() << " Effective Pfeasibility(parent->this): " << GetEffectiveEdgePfeasibility() << " Raw Pfeasibility(this->parent): " << GetReverseEdgePfeasibility() << " Pfeasibility(start->this): " << GetMotionPfeasibility();
             return strm.str();
         }
     };

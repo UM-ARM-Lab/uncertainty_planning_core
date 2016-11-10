@@ -23,25 +23,25 @@ namespace execution_policy
     private:
 
         // Typedef so we don't hate ourselves
-        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
-        typedef simple_rrt_planner::SimpleRRTPlannerState<NomdpPlanningState, std::allocator<NomdpPlanningState>> NomdpPlanningTreeState;
-        typedef std::vector<NomdpPlanningTreeState> NomdpPlanningTree;
-        typedef arc_dijkstras::GraphNode<NomdpPlanningState, std::allocator<NomdpPlanningState>> PolicyGraphNode;
-        typedef arc_dijkstras::Graph<NomdpPlanningState, std::allocator<NomdpPlanningState>> PolicyGraph;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> UncertaintyPlanningState;
+        typedef simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> UncertaintyPlanningTreeState;
+        typedef std::vector<UncertaintyPlanningTreeState> UncertaintyPlanningTree;
+        typedef arc_dijkstras::GraphNode<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraphNode;
+        typedef arc_dijkstras::Graph<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraph;
 
         PolicyGraphBuilder() {}
 
     public:
 
-        inline static PolicyGraph BuildPolicyGraphFromPlannerTree(const NomdpPlanningTree& planner_tree, const NomdpPlanningState& goal_state)
+        inline static PolicyGraph BuildPolicyGraphFromPlannerTree(const UncertaintyPlanningTree& planner_tree, const UncertaintyPlanningState& goal_state)
         {
             assert(simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(planner_tree));
             PolicyGraph policy_graph(planner_tree.size() + 1);
             // First pass, add all the nodes to the graph
             for (size_t idx = 0; idx < planner_tree.size(); idx++)
             {
-                const NomdpPlanningTreeState& current_tree_state = planner_tree[idx];
-                const NomdpPlanningState& current_planner_state = current_tree_state.GetValueImmutable();
+                const UncertaintyPlanningTreeState& current_tree_state = planner_tree[idx];
+                const UncertaintyPlanningState& current_planner_state = current_tree_state.GetValueImmutable();
                 policy_graph.AddNode(PolicyGraphNode(current_planner_state));
             }
             policy_graph.AddNode(PolicyGraphNode(goal_state));
@@ -51,8 +51,8 @@ namespace execution_policy
             // Second pass, add all the edges
             for (size_t idx = 0; idx < planner_tree.size(); idx++)
             {
-                const NomdpPlanningTreeState& current_tree_state = planner_tree[idx];
-                const NomdpPlanningState& current_planner_state = current_tree_state.GetValueImmutable();
+                const UncertaintyPlanningTreeState& current_tree_state = planner_tree[idx];
+                const UncertaintyPlanningState& current_planner_state = current_tree_state.GetValueImmutable();
                 const int64_t parent_index = current_tree_state.GetParentIndex();
                 const std::vector<int64_t>& child_indices = current_tree_state.GetChildIndices();
                 if (parent_index >= 0)
@@ -91,7 +91,7 @@ namespace execution_policy
             {
                 const PolicyGraphNode& from_node = graph.GetNodeImmutable(from_index);
                 const PolicyGraphNode& to_node = graph.GetNodeImmutable(to_index);
-                const NomdpPlanningState& to_node_value = to_node.GetValueImmutable();
+                const UncertaintyPlanningState& to_node_value = to_node.GetValueImmutable();
                 // Get the other child states for our action (if there are any)
                 const std::vector<arc_dijkstras::GraphEdge>& all_child_edges = from_node.GetOutEdgesImmutable();
                 std::vector<arc_dijkstras::GraphEdge> same_action_other_child_edges;
@@ -101,7 +101,7 @@ namespace execution_policy
                     const arc_dijkstras::GraphEdge& other_child_edge = all_child_edges[idx];
                     const int64_t child_index = other_child_edge.GetToIndex();
                     const PolicyGraphNode& child_node = graph.GetNodeImmutable(child_index);
-                    const NomdpPlanningState& child_node_value = child_node.GetValueImmutable();
+                    const UncertaintyPlanningState& child_node_value = child_node.GetValueImmutable();
                     // Only other child nodes with the same transition ID, but different state IDs are kept
                     if (child_node_value.GetTransitionId() == to_node_value.GetTransitionId() && child_node_value.GetStateId() != to_node_value.GetStateId())
                     {
@@ -133,7 +133,7 @@ namespace execution_policy
                         const arc_dijkstras::GraphEdge& other_child_edge = same_action_other_child_edges[other_idx];
                         const int64_t child_index = other_child_edge.GetToIndex();
                         const PolicyGraphNode& child_node = graph.GetNodeImmutable(child_index);
-                        const NomdpPlanningState& child_node_value = child_node.GetValueImmutable();
+                        const UncertaintyPlanningState& child_node_value = child_node.GetValueImmutable();
                         const double p_reached_other = percent_active * child_node_value.GetRawEdgePfeasibility();
                         const double p_returned_to_parent = p_reached_other * child_node_value.GetReverseEdgePfeasibility();
                         updated_percent_active += p_returned_to_parent;
@@ -223,7 +223,7 @@ namespace execution_policy
         {
             assert(start_index >= 0);
             assert(start_index < (int64_t)initial_graph.GetNodesImmutable().size());
-            const std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> complete_search_results = arc_dijkstras::SimpleDijkstrasAlgorithm<NomdpPlanningState, std::allocator<NomdpPlanningState>>::PerformDijkstrasAlgorithm(initial_graph, start_index);
+            const std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> complete_search_results = arc_dijkstras::SimpleDijkstrasAlgorithm<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>>::PerformDijkstrasAlgorithm(initial_graph, start_index);
             //std::cout << "Previous index map: " << PrettyPrint::PrettyPrint(search_results.second) << std::endl;
             for (size_t idx = 0; idx < complete_search_results.second.first.size(); idx++)
             {
@@ -240,16 +240,16 @@ namespace execution_policy
     protected:
 
         // Typedef so we don't hate ourselves
-        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> NomdpPlanningState;
-        typedef simple_rrt_planner::SimpleRRTPlannerState<NomdpPlanningState, std::allocator<NomdpPlanningState>> NomdpPlanningTreeState;
-        typedef std::vector<NomdpPlanningTreeState> NomdpPlanningTree;
-        typedef arc_dijkstras::GraphNode<NomdpPlanningState, std::allocator<NomdpPlanningState>> PolicyGraphNode;
-        typedef arc_dijkstras::Graph<NomdpPlanningState, std::allocator<NomdpPlanningState>> PolicyGraph;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> UncertaintyPlanningState;
+        typedef simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> UncertaintyPlanningTreeState;
+        typedef std::vector<UncertaintyPlanningTreeState> UncertaintyPlanningTree;
+        typedef arc_dijkstras::GraphNode<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraphNode;
+        typedef arc_dijkstras::Graph<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraph;
         typedef PolicyGraphBuilder<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> ExecutionPolicyGraphBuilder;
 
         bool initialized_;
         // Raw data used to rebuild the policy graph
-        NomdpPlanningTree planner_tree_;
+        UncertaintyPlanningTree planner_tree_;
         Configuration goal_;
         double marginal_edge_weight_;
         double conformant_planning_threshold_;
@@ -290,16 +290,16 @@ namespace execution_policy
             return std::make_pair(temp_policy, bytes_read);
         }
 
-        inline ExecutionPolicy(const NomdpPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold, const uint32_t policy_action_attempt_count) : initialized_(true), planner_tree_(planner_tree), goal_(goal), marginal_edge_weight_(marginal_edge_weight), conformant_planning_threshold_(conformant_planning_threshold), edge_attempt_threshold_(edge_attempt_threshold), policy_action_attempt_count_(policy_action_attempt_count)
+        inline ExecutionPolicy(const UncertaintyPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold, const uint32_t policy_action_attempt_count) : initialized_(true), planner_tree_(planner_tree), goal_(goal), marginal_edge_weight_(marginal_edge_weight), conformant_planning_threshold_(conformant_planning_threshold), edge_attempt_threshold_(edge_attempt_threshold), policy_action_attempt_count_(policy_action_attempt_count)
         {
             RebuildPolicyGraph();
         }
 
         inline ExecutionPolicy() : initialized_(false) {}
 
-        inline std::pair<PolicyGraph, std::vector<int64_t>> BuildPolicyGraphComponentsFromTree(const NomdpPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold) const
+        inline std::pair<PolicyGraph, std::vector<int64_t>> BuildPolicyGraphComponentsFromTree(const UncertaintyPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold) const
         {
-            const PolicyGraph preliminary_policy_graph = ExecutionPolicyGraphBuilder::BuildPolicyGraphFromPlannerTree(planner_tree, NomdpPlanningState(goal));
+            const PolicyGraph preliminary_policy_graph = ExecutionPolicyGraphBuilder::BuildPolicyGraphFromPlannerTree(planner_tree, UncertaintyPlanningState(goal));
             //std::cout << "Preliminary graph " << preliminary_policy_graph.Print() << std::endl;
             //std::cout << "Policy graph has " << preliminary_policy_graph.GetNodesImmutable().size() << " graph nodes" << std::endl;
             const PolicyGraph intermediate_policy_graph = ExecutionPolicyGraphBuilder::ComputeTrueEdgeWeights(preliminary_policy_graph, marginal_edge_weight, conformant_planning_threshold, edge_attempt_threshold);
@@ -311,7 +311,7 @@ namespace execution_policy
             return std::make_pair(processed_policy_graph_components.first, processed_policy_graph_components.second.first);
         }
 
-        inline std::string PrintTree(const NomdpPlanningTree& planning_tree, const std::vector<int64_t>& previous_index_map, const std::vector<double>& dijkstras_distances) const
+        inline std::string PrintTree(const UncertaintyPlanningTree& planning_tree, const std::vector<int64_t>& previous_index_map, const std::vector<double>& dijkstras_distances) const
         {
             assert(planning_tree.size() > 1);
             std::ostringstream strm;
@@ -320,9 +320,9 @@ namespace execution_policy
             {
                 const int64_t previous_index = previous_index_map[idx];
                 const double distance = dijkstras_distances[idx];
-                const NomdpPlanningTreeState& current_tree_state = planning_tree[idx];
+                const UncertaintyPlanningTreeState& current_tree_state = planning_tree[idx];
                 const int64_t parent_index = current_tree_state.GetParentIndex();
-                const NomdpPlanningState& current_state = current_tree_state.GetValueImmutable();
+                const UncertaintyPlanningState& current_state = current_tree_state.GetValueImmutable();
                 const double raw_edge_probability = current_state.GetRawEdgePfeasibility();
                 const double effective_edge_probability = current_state.GetEffectiveEdgePfeasibility();
                 const double reverse_edge_probability = current_state.GetReverseEdgePfeasibility();
@@ -353,7 +353,7 @@ namespace execution_policy
             // Serialize the initialized
             arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
             // Serialize the planner tree
-            std::function<uint64_t(const NomdpPlanningTreeState&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn = [] (const NomdpPlanningTreeState& state, std::vector<uint8_t>& buffer) { return NomdpPlanningTreeState::Serialize(state, buffer, NomdpPlanningState::Serialize); };
+            std::function<uint64_t(const UncertaintyPlanningTreeState&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn = [] (const UncertaintyPlanningTreeState& state, std::vector<uint8_t>& buffer) { return UncertaintyPlanningTreeState::Serialize(state, buffer, UncertaintyPlanningState::Serialize); };
             arc_helpers::SerializeVector(planner_tree_, buffer, planning_tree_state_serializer_fn);
             // Serialize the goal
             ConfigSerializer::Serialize(goal_, buffer);
@@ -379,8 +379,8 @@ namespace execution_policy
             initialized_ = (bool)initialized_deserialized.first;
             current_position += initialized_deserialized.second;
             // Deserialize the planner tree
-            std::function<std::pair<NomdpPlanningTreeState, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return NomdpPlanningTreeState::Deserialize(buffer, current, NomdpPlanningState::Deserialize); };
-            const std::pair<NomdpPlanningTree, uint64_t> planner_tree_deserialized = arc_helpers::DeserializeVector<NomdpPlanningTreeState>(buffer, current_position, planning_tree_state_deserializer_fn);
+            std::function<std::pair<UncertaintyPlanningTreeState, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return UncertaintyPlanningTreeState::Deserialize(buffer, current, UncertaintyPlanningState::Deserialize); };
+            const std::pair<UncertaintyPlanningTree, uint64_t> planner_tree_deserialized = arc_helpers::DeserializeVector<UncertaintyPlanningTreeState>(buffer, current_position, planning_tree_state_deserializer_fn);
             planner_tree_ = planner_tree_deserialized.first;
             current_position += planner_tree_deserialized.second;
             // Deserialize the goal
@@ -415,7 +415,7 @@ namespace execution_policy
             return initialized_;
         }
 
-        inline const NomdpPlanningTree& GetRawPlannerTree() const
+        inline const UncertaintyPlanningTree& GetRawPlannerTree() const
         {
             assert(initialized_);
             return planner_tree_;
@@ -469,7 +469,7 @@ namespace execution_policy
             assert(current_state_index >= 0);
             assert(current_state_index < (int64_t)previous_index_map_.size());
             const PolicyGraphNode& result_state_policy_node = policy_graph_.GetNodeImmutable(current_state_index);
-            const NomdpPlanningState& result_state = result_state_policy_node.GetValueImmutable();
+            const UncertaintyPlanningState& result_state = result_state_policy_node.GetValueImmutable();
             // Get the action to take
             // Get the previous node, as indicated by Dijkstra's algorithm
             const int64_t target_state_index = previous_index_map_[(size_t)current_state_index];
@@ -478,7 +478,7 @@ namespace execution_policy
                 throw std::invalid_argument("Policy no longer has a solution");
             }
             const PolicyGraphNode& target_state_policy_node = policy_graph_.GetNodeImmutable(target_state_index);
-            const NomdpPlanningState& target_state = target_state_policy_node.GetValueImmutable();
+            const UncertaintyPlanningState& target_state = target_state_policy_node.GetValueImmutable();
             // Figure out the correct action to take
             const uint64_t result_state_id = result_state.GetStateId();
             const uint64_t target_state_id = target_state.GetStateId();
@@ -520,7 +520,7 @@ namespace execution_policy
             assert(initialized_);
             // Get the starting state
             const PolicyGraphNode& first_node = policy_graph_.GetNodeImmutable(0);
-            const NomdpPlanningState& first_node_state = first_node.GetValueImmutable();
+            const UncertaintyPlanningState& first_node_state = first_node.GetValueImmutable();
             const Configuration first_node_config = first_node_state.GetExpectation();
             // Make sure we are close enough to the start state
             const std::vector<std::vector<size_t>> start_check_clusters = particle_clustering_fn(first_node_state.GetParticlePositionsImmutable().first, current_config);
@@ -547,8 +547,8 @@ namespace execution_policy
             // Go through the entire tree and retrieve all states with matching transition IDs
             for (int64_t idx = 0; idx < (int64_t)planner_tree_.size(); idx++)
             {
-                const NomdpPlanningTreeState& candidate_tree_state = planner_tree_[(size_t)idx];
-                const NomdpPlanningState& candidate_state = candidate_tree_state.GetValueImmutable();
+                const UncertaintyPlanningTreeState& candidate_tree_state = planner_tree_[(size_t)idx];
+                const UncertaintyPlanningState& candidate_state = candidate_tree_state.GetValueImmutable();
                 if (candidate_state.GetTransitionId() == performed_transition_id)
                 {
                     const int64_t parent_state_idx = candidate_tree_state.GetParentIndex();
@@ -585,8 +585,8 @@ namespace execution_policy
             {
                 const std::pair<int64_t, bool>& possible_match = expected_possible_result_states[idx];
                 const int64_t possible_match_state_idx = (possible_match.second) ? planner_tree_[(size_t)(possible_match.first)].GetParentIndex() : possible_match.first;
-                const NomdpPlanningTreeState& possible_match_tree_state = planner_tree_[(size_t)possible_match_state_idx];
-                const NomdpPlanningState& possible_match_state = possible_match_tree_state.GetValueImmutable();
+                const UncertaintyPlanningTreeState& possible_match_tree_state = planner_tree_[(size_t)possible_match_state_idx];
+                const UncertaintyPlanningState& possible_match_state = possible_match_tree_state.GetValueImmutable();
                 const std::vector<Configuration, ConfigAlloc>& possible_match_node_particles = possible_match_state.GetParticlePositionsImmutable().first;
                 const std::vector<std::vector<size_t>> possible_match_check_clusters = particle_clustering_fn(possible_match_node_particles, current_config);
                 // If the current config is part of the cluster
@@ -637,8 +637,8 @@ namespace execution_policy
                 if (desired_transition_is_reversal)
                 {
                     const int64_t parent_index = planner_tree_[(size_t)previous_state_index].GetParentIndex();
-                    const NomdpPlanningTreeState& parent_tree_state = planner_tree_[(size_t)parent_index];
-                    const NomdpPlanningState& parent_state = parent_tree_state.GetValueImmutable();
+                    const UncertaintyPlanningTreeState& parent_tree_state = planner_tree_[(size_t)parent_index];
+                    const UncertaintyPlanningState& parent_state = parent_tree_state.GetValueImmutable();
                     command = parent_state.GetExpectation();
                     attempt_count = planner_tree_[(size_t)previous_state_index].GetValueImmutable().GetReverseAttemptAndReachedCounts().first;
                     split_id = performed_transition_id; // Split IDs aren't actually used, other than > 0 meaning children of splits
@@ -649,16 +649,16 @@ namespace execution_policy
                     const std::pair<int64_t, bool>& first_possible_match = expected_possible_result_states.front();
                     assert(first_possible_match.second == false); // Reversals will not result in a parent index lookup
                     const int64_t child_state_idx = first_possible_match.first;
-                    const NomdpPlanningTreeState& child_tree_state = planner_tree_[(size_t)child_state_idx];
-                    const NomdpPlanningState& child_state = child_tree_state.GetValueImmutable();
+                    const UncertaintyPlanningTreeState& child_tree_state = planner_tree_[(size_t)child_state_idx];
+                    const UncertaintyPlanningState& child_state = child_tree_state.GetValueImmutable();
                     command = child_state.GetCommand();
                     attempt_count = child_state.GetAttemptAndReachedCounts().first;
                     split_id = child_state.GetSplitId();
                 }
                 // Put together the new state
-                const NomdpPlanningState new_child_state(new_child_state_id, new_child_particles, attempt_count, reached_count, effective_edge_Pfeasibility, reverse_attempt_count, reverse_reached_count, parent_motion_Pfeasibility, step_size, command, transition_id, reverse_transition_id, split_id);
+                const UncertaintyPlanningState new_child_state(new_child_state_id, new_child_particles, attempt_count, reached_count, effective_edge_Pfeasibility, reverse_attempt_count, reverse_reached_count, parent_motion_Pfeasibility, step_size, command, transition_id, reverse_transition_id, split_id);
                 // We add a new child state to the graph
-                const NomdpPlanningTreeState new_child_tree_state(new_child_state, previous_state_index);
+                const UncertaintyPlanningTreeState new_child_tree_state(new_child_state, previous_state_index);
                 planner_tree_.push_back(new_child_tree_state);
                 // Add the linkage to the parent (link to the last state we just added)
                 const int64_t new_state_index = (int64_t)planner_tree_.size() - 1;
@@ -685,8 +685,8 @@ namespace execution_policy
                 // If the transition was a forward transition, we update the result state
                 if (result_match.second == false)
                 {
-                    NomdpPlanningTreeState& result_tree_state = planner_tree_[(size_t)result_match.first];
-                    NomdpPlanningState& result_state = result_tree_state.GetValueMutable();
+                    UncertaintyPlanningTreeState& result_tree_state = planner_tree_[(size_t)result_match.first];
+                    UncertaintyPlanningState& result_state = result_tree_state.GetValueMutable();
                     const std::pair<uint32_t, uint32_t> counts = result_state.GetAttemptAndReachedCounts();
                     const uint32_t attempt_count = AddWithOverflowClamp(counts.first, policy_action_attempt_count_);
                     const uint32_t reached_count = AddWithOverflowClamp(counts.second, policy_action_attempt_count_);
@@ -696,8 +696,8 @@ namespace execution_policy
                 }
                 else
                 {
-                    NomdpPlanningTreeState& result_child_tree_state = planner_tree_[(size_t)result_match.first];
-                    NomdpPlanningState& result_child_state = result_child_tree_state.GetValueMutable();
+                    UncertaintyPlanningTreeState& result_child_tree_state = planner_tree_[(size_t)result_match.first];
+                    UncertaintyPlanningState& result_child_state = result_child_tree_state.GetValueMutable();
                     const std::pair<uint32_t, uint32_t> counts = result_child_state.GetReverseAttemptAndReachedCounts();
                     const uint32_t attempt_count = AddWithOverflowClamp(counts.first, policy_action_attempt_count_);
                     const uint32_t reached_count = AddWithOverflowClamp(counts.second, policy_action_attempt_count_);
@@ -740,8 +740,8 @@ namespace execution_policy
                 for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
                 {
                     const std::pair<int64_t, bool>& possible_result_match = expected_possible_result_states[idx];
-                    NomdpPlanningTreeState& possible_result_tree_state = planner_tree_[(size_t)possible_result_match.first];
-                    NomdpPlanningState& possible_result_state = possible_result_tree_state.GetValueMutable();
+                    UncertaintyPlanningTreeState& possible_result_tree_state = planner_tree_[(size_t)possible_result_match.first];
+                    UncertaintyPlanningState& possible_result_state = possible_result_tree_state.GetValueMutable();
                     if (possible_result_match.second == false)
                     {
                         const std::pair<uint32_t, uint32_t> counts = possible_result_state.GetAttemptAndReachedCounts();
@@ -798,10 +798,10 @@ namespace execution_policy
             for (size_t idx = 1; idx < planner_tree_.size(); idx++)
             {
                 // Get the current state
-                NomdpPlanningTreeState& current_state = planner_tree_[idx];
+                UncertaintyPlanningTreeState& current_state = planner_tree_[idx];
                 const int64_t parent_index = current_state.GetParentIndex();
                 // Get the parent state
-                const NomdpPlanningTreeState& parent_state = planner_tree_[(size_t)parent_index];
+                const UncertaintyPlanningTreeState& parent_state = planner_tree_[(size_t)parent_index];
                 // If the current state is on a goal branch
                 if (current_state.GetValueImmutable().GetGoalPfeasibility() > 0.0)
                 {
@@ -821,15 +821,15 @@ namespace execution_policy
         inline void UpdateChildTransitionProbabilities(const int64_t current_state_index)
         {
             // Gather all the children, split them by transition, and recompute the P(->)estimated edge probabilities
-            const NomdpPlanningTreeState& current_tree_state = planner_tree_[(size_t)current_state_index];
+            const UncertaintyPlanningTreeState& current_tree_state = planner_tree_[(size_t)current_state_index];
             const std::vector<int64_t>& child_state_indices = current_tree_state.GetChildIndices();
             // Split them by transition IDs
             std::map<uint64_t, std::vector<int64_t>> transition_children_map;
             for (size_t idx = 0; idx < child_state_indices.size(); idx++)
             {
                 const int64_t child_state_index = child_state_indices[idx];
-                const NomdpPlanningTreeState& child_tree_state = planner_tree_[(size_t)child_state_index];
-                const NomdpPlanningState& child_state = child_tree_state.GetValueImmutable();
+                const UncertaintyPlanningTreeState& child_tree_state = planner_tree_[(size_t)child_state_index];
+                const UncertaintyPlanningState& child_state = child_tree_state.GetValueImmutable();
                 const uint64_t child_state_transition_id = child_state.GetTransitionId();
                 transition_children_map[child_state_transition_id].push_back(child_state_index);
             }
@@ -853,8 +853,8 @@ namespace execution_policy
             for (size_t idx = 0; idx < transition_child_states.size(); idx++)
             {
                 const int64_t current_state_index = transition_child_states[idx];
-                NomdpPlanningTreeState& current_tree_state = planner_tree_[(size_t)current_state_index];
-                NomdpPlanningState& current_state = current_tree_state.GetValueMutable();
+                UncertaintyPlanningTreeState& current_tree_state = planner_tree_[(size_t)current_state_index];
+                UncertaintyPlanningState& current_state = current_tree_state.GetValueMutable();
                 double percent_active = 1.0;
                 double p_reached = 0.0;
                 for (uint32_t try_attempt = 0; try_attempt < edge_attempt_threshold_; try_attempt++)
@@ -868,8 +868,8 @@ namespace execution_policy
                         if (other_idx != idx)
                         {
                             const int64_t other_state_index = transition_child_states[other_idx];
-                            const NomdpPlanningTreeState& other_tree_state = planner_tree_[(size_t)other_state_index];
-                            const NomdpPlanningState& other_state = other_tree_state.GetValueImmutable();
+                            const UncertaintyPlanningTreeState& other_tree_state = planner_tree_[(size_t)other_state_index];
+                            const UncertaintyPlanningState& other_state = other_tree_state.GetValueImmutable();
                             const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
                             const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
                             updated_percent_active += p_returned_to_parent;
@@ -892,7 +892,7 @@ namespace execution_policy
 
         inline void UpdateStateGoalReachedProbability(const int64_t current_state_index)
         {
-            NomdpPlanningTreeState& current_tree_state = planner_tree_[(size_t)current_state_index];
+            UncertaintyPlanningTreeState& current_tree_state = planner_tree_[(size_t)current_state_index];
             // Check all the children of the current node, and update the node's goal reached probability accordingly
             //
             // Naively, the goal reached probability of a node is the maximum of the child goal reached probabilities;
@@ -946,24 +946,24 @@ namespace execution_policy
 
         inline double ComputeTransitionGoalProbability(const std::vector<int64_t>& child_node_indices, const uint32_t edge_attempt_threshold) const
         {
-            std::vector<NomdpPlanningState> child_states(child_node_indices.size());
+            std::vector<UncertaintyPlanningState> child_states(child_node_indices.size());
             for (size_t idx = 0; idx < child_node_indices.size(); idx++)
             {
                 // Get the current child
                 const int64_t& current_child_index = child_node_indices[idx];
-                const NomdpPlanningState& current_child = planner_tree_[(size_t)current_child_index].GetValueImmutable();
+                const UncertaintyPlanningState& current_child = planner_tree_[(size_t)current_child_index].GetValueImmutable();
                 child_states[idx] = current_child;
             }
             return ComputeTransitionGoalProbability(child_states, edge_attempt_threshold);
         }
 
-        inline double ComputeTransitionGoalProbability(const std::vector<NomdpPlanningState>& child_nodes, const uint32_t planner_action_try_attempts) const
+        inline double ComputeTransitionGoalProbability(const std::vector<UncertaintyPlanningState>& child_nodes, const uint32_t planner_action_try_attempts) const
         {
             // Let's handle the special cases first
             // The most common case - a non-split transition
             if (child_nodes.size() == 1)
             {
-                const NomdpPlanningState& current_child = child_nodes.front();
+                const UncertaintyPlanningState& current_child = child_nodes.front();
                 return (current_child.GetGoalPfeasibility() * current_child.GetEffectiveEdgePfeasibility());
             }
             // IMPOSSIBLE (but we handle it just to be sure)
@@ -981,7 +981,7 @@ namespace execution_policy
                 for (size_t idx = 0; idx < child_nodes.size(); idx++)
                 {
                     // Get the current child
-                    const NomdpPlanningState& current_child = child_nodes[idx];
+                    const UncertaintyPlanningState& current_child = child_nodes[idx];
                     // For the selected child, we keep track of the probability that we reach the goal directly via the child state AND the probability that we reach the goal from unintended other child states
                     double percent_active = 1.0;
                     double p_we_reached_goal = 0.0;
@@ -1007,7 +1007,7 @@ namespace execution_policy
                             if (other_idx != idx)
                             {
                                 // Get the other child
-                                const NomdpPlanningState& other_child = child_nodes[other_idx];
+                                const UncertaintyPlanningState& other_child = child_nodes[other_idx];
                                 const double p_reached_other = percent_active * other_child.GetRawEdgePfeasibility();
                                 //std::cout << "P(reached) other child " << p_reached_other << std::endl;
                                 const double p_returned_to_parent = p_reached_other * other_child.GetReverseEdgePfeasibility();

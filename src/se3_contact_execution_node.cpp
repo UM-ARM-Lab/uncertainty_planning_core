@@ -154,8 +154,8 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "se3_contact_execution_node");
     ros::NodeHandle nh;
-    ROS_INFO("Starting Nomdp Contact Execution Node...");
-    ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
+    ROS_INFO("Starting SE(3) Contact Execution Node...");
+    ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("uncertainty_planning_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::Simple6dofRobotMove>("simple_6dof_robot_move");
     ros::ServiceClient set_uncertainty_service = nh.serviceClient<uncertainty_planning_core::SetSimple6dofActuationError>("simple6dof_robot/set_actuation_uncertainty");
     peg_in_hole_env_se3(display_debug_publisher, robot_control_service, set_uncertainty_service);

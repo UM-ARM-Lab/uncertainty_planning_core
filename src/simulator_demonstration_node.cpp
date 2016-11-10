@@ -88,7 +88,7 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "simulator_demonstration_node");
     ros::NodeHandle nh;
     ROS_INFO("Starting Simulator Demonstration Node...");
-    ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
+    ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("uncertainty_planning_debug_display_markers", 1, true);
     std::string robot_type;
     ros::NodeHandle nhp("~");
     nhp.param(std::string("robot_type"), robot_type, std::string("baxter"));

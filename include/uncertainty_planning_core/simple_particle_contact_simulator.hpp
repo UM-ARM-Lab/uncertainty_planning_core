@@ -14,9 +14,6 @@
 #include <arc_utilities/voxel_grid.hpp>
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <uncertainty_planning_core/simple_pid_controller.hpp>
-#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
-#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <omp.h>
@@ -392,7 +389,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -519,7 +516,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -598,7 +595,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -739,7 +736,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -824,7 +821,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -970,7 +967,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 1u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 return grid;
             }
@@ -985,7 +982,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 1u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
@@ -1076,7 +1073,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
@@ -1242,7 +1239,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
@@ -1445,7 +1442,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
@@ -1666,7 +1663,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
@@ -1834,7 +1831,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 1u, 0u, 0u);
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 std::cout << "New environment with dimensions (" << grid.GetNumXCells() << ", " << grid.GetNumYCells() << ", " << grid.GetNumZCells() << ")" << std::endl;
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
@@ -1934,7 +1931,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -2004,7 +2001,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -2066,7 +2063,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 1u); // Everything is filled by default
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -2124,7 +2121,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 1u); // Everything is filled by default
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 for (int64_t x_idx = 0; x_idx < grid.GetNumXCells(); x_idx++)
                 {
                     for (int64_t y_idx = 0; y_idx < grid.GetNumYCells(); y_idx++)
@@ -2206,7 +2203,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 return grid;
             }
             else
@@ -2292,7 +2289,7 @@ namespace uncertainty_planning_tools
                 Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
                 // Make the grid
                 sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
-                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "nomdp_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
+                sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
                 // Fill it in
                 for (size_t idx = 0; idx < all_obstacle_cells.size(); idx++)
                 {

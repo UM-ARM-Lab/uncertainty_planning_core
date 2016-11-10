@@ -78,8 +78,8 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "se2_contact_planning_node");
     ros::NodeHandle nh;
-    ROS_INFO("Starting Nomdp Contact Planning Node...");
-    ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("nomdp_debug_display_markers", 1, true);
+    ROS_INFO("Starting SE(2) Contact Planning Node...");
+    ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("uncertainty_planning_debug_display_markers", 1, true);
     peg_in_hole_env_se2(display_debug_publisher);
     return 0;
 }
