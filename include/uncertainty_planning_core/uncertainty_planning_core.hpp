@@ -80,7 +80,6 @@ namespace uncertainty_planning_core
         bool use_contact;
         bool use_reverse;
         bool use_spur_actions;
-        bool enable_contact_manifold_target_adjustment;
         // Log & data files
         std::string planner_log_file;
         std::string policy_log_file;
@@ -225,7 +224,6 @@ namespace uncertainty_planning_core
         strm << "\nuse_contact: " << options.use_contact;
         strm << "\nuse_reverse: " << options.use_reverse;
         strm << "\nuse_spur_actions: " << options.use_spur_actions;
-        strm << "\nenable_contact_manifold_target_adjustment: " << options.enable_contact_manifold_target_adjustment;
         strm << "\nplanner_log_file: " << options.planner_log_file;
         strm << "\npolicy_log_file: " << options.policy_log_file;
         strm << "\nplanned_policy_file: " << options.planned_policy_file;

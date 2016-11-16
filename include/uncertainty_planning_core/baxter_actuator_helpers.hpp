@@ -222,9 +222,9 @@ namespace baxter_actuator_helpers
 
     public:
 
-        BaxterUncertaintySamplesJointActuatorModel(const std::shared_ptr<JointUncertaintySampleModel> model_ptr, const double max_velocity) : initialized_(true), actuator_limit_(fabs(max_velocity)), model_ptr_(model_ptr) {}
+        BaxterUncertaintySamplesJointActuatorModel(const std::shared_ptr<JointUncertaintySampleModel> model_ptr, const double max_velocity) : initialized_(true), actuator_limit_(std::abs(max_velocity)), model_ptr_(model_ptr) {}
 
-        BaxterUncertaintySamplesJointActuatorModel(const double max_velocity) : initialized_(true), actuator_limit_(fabs(max_velocity)) {}
+        BaxterUncertaintySamplesJointActuatorModel(const double max_velocity) : initialized_(true), actuator_limit_(std::abs(max_velocity)) {}
 
         BaxterUncertaintySamplesJointActuatorModel() : initialized_(true), actuator_limit_(0.0) {}
 

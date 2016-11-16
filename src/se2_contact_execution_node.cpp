@@ -72,13 +72,13 @@ inline std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<dou
         const double axis_dot = axis.dot(Eigen::Vector3d::UnitZ());
         const double angle = rotation.angle();
         const double zr = (axis_dot > 0.0) ? angle : -angle;
-        if (((fabs(zr) < 0.00001) || (fabs(axis_dot) > 0.99)) == false)
+        if (((std::abs(zr) < 0.00001) || (std::abs(axis_dot) > 0.99)) == false)
         {
             std::cout << "WARNING - Dot product: " << axis_dot << ", Angle: " << zr << ", Rotation axis: " << PrettyPrint::PrettyPrint(axis) << std::endl;
         }
         const double x = position.x();
         const double y = position.y();
-        if (fabs(position.z()) >= 0.001)
+        if (std::abs(position.z()) >= 0.001)
         {
             std::cout << "WARNING - Z: " << position.z() << std::endl;
         }

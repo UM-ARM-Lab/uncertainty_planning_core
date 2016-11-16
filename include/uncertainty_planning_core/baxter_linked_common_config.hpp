@@ -69,7 +69,6 @@ namespace baxter_linked_common_config
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
         options.debug_level = 0u;
-        options.enable_contact_manifold_target_adjustment = false;
         options.planner_log_file = "/tmp/baxter_planner_log.txt";
         options.policy_log_file = "/tmp/baxter_policy_log.txt";
         options.planned_policy_file = "/tmp/baxter_planned_policy.policy";
@@ -118,7 +117,6 @@ namespace baxter_linked_common_config
         left_arm_configuration[4] = SJM(std::pair<double, double>(-3.059, 3.059), left_w0, SJM::REVOLUTE); // left_w0
         const double left_w1 = joint_values[5];
         left_arm_configuration[5] = SJM(std::pair<double, double>(-1.57079632679, 2.094), left_w1, SJM::REVOLUTE); // left_w1
-        //left_arm_configuration[5] = SJM(std::pair<double, double>(-1.218, 2.094), left_w1, SJM::REVOLUTE); // left_w1
         const double left_w2 = joint_values[6];
         left_arm_configuration[6] = SJM(std::pair<double, double>(-3.059, 3.059), left_w2, SJM::REVOLUTE); // left_w2
         return left_arm_configuration;
@@ -140,7 +138,6 @@ namespace baxter_linked_common_config
         right_arm_configuration[4] = SJM(std::pair<double, double>(-3.059, 3.059), right_w0, SJM::REVOLUTE); // right_w0
         const double right_w1 = joint_values[5];
         right_arm_configuration[5] = SJM(std::pair<double, double>(-1.57079632679, 2.094), right_w1, SJM::REVOLUTE); // right_w1
-        //right_arm_configuration[5] = SJM(std::pair<double, double>(-1.218, 2.094), right_w1, SJM::REVOLUTE); // right_w1
         const double right_w2 = joint_values[6];
         right_arm_configuration[6] = SJM(std::pair<double, double>(-3.059, 3.059), right_w2, SJM::REVOLUTE); // right_w2
         return right_arm_configuration;
@@ -170,24 +167,7 @@ namespace baxter_linked_common_config
         return uncertainty_params;
     }
 
-    inline Eigen::Quaterniond QuaternionFromRPY(const double R, const double P, const double Y)
-    {
-        const Eigen::AngleAxisd roll(R, Eigen::Vector3d::UnitX());
-        const Eigen::AngleAxisd pitch(P, Eigen::Vector3d::UnitY());
-        const Eigen::AngleAxisd yaw(Y, Eigen::Vector3d::UnitZ());
-        const Eigen::Quaterniond quat(roll * pitch * yaw);
-        return quat;
-    }
 
-    /* OSRF CAN GO FUCK THEMSELVES - URDF RPY IS ACTUALLY APPLIED Y*P*R */
-    inline Eigen::Quaterniond QuaternionFromUrdfRPY(const double R, const double P, const double Y)
-    {
-        const Eigen::AngleAxisd roll(R, Eigen::Vector3d::UnitX());
-        const Eigen::AngleAxisd pitch(P, Eigen::Vector3d::UnitY());
-        const Eigen::AngleAxisd yaw(Y, Eigen::Vector3d::UnitZ());
-        const Eigen::Quaterniond quat(yaw * pitch * roll);
-        return quat;
-    }
 
     //typedef baxter_joint_actuator_model::BaxterJointActuatorModel BaxterJointActuatorModel;
     typedef simple_uncertainty_models::SimpleUncertainVelocityActuator BaxterJointActuatorModel;
@@ -378,7 +358,7 @@ namespace baxter_linked_common_config
         right_arm_mount_joint.parent_link_index = 0;
         right_arm_mount_joint.child_link_index = 1;
         right_arm_mount_joint.joint_axis = Eigen::Vector3d::UnitZ();
-        right_arm_mount_joint.joint_transform = Eigen::Translation3d(0.024645, -0.219645, 0.118588) * QuaternionFromUrdfRPY(0.0, 0.0, -0.7854);
+        right_arm_mount_joint.joint_transform = Eigen::Translation3d(0.024645, -0.219645, 0.118588) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, -0.7854);
         right_arm_mount_joint.joint_model = SJM(std::make_pair(0.0, 0.0), 0.0, SJM::FIXED);
         // We don't need an uncertainty model for a fixed joint
         right_arm_mount_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(joint_config);
@@ -388,11 +368,9 @@ namespace baxter_linked_common_config
         right_s0.parent_link_index = 1;
         right_s0.child_link_index = 2;
         right_s0.joint_axis = Eigen::Vector3d::UnitZ();
-        right_s0.joint_transform = Eigen::Translation3d(0.055695, 0.0, 0.011038) * QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
+        right_s0.joint_transform = Eigen::Translation3d(0.055695, 0.0, 0.011038) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
         right_s0.joint_model = reference_configuration[0];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_s0_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_s0.csv", 0.5, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_s0_joint_model(right_s0_model_samples, 0.5);
-        const BaxterJointActuatorModel right_s0_joint_model(fabs(s0_noise), 0.5);
+        const BaxterJointActuatorModel right_s0_joint_model(std::abs(s0_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG s0_config = joint_config;
         s0_config.velocity_limit = 0.27 * 0.75;
         right_s0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s0_config, right_s0_joint_model);
@@ -402,11 +380,9 @@ namespace baxter_linked_common_config
         right_s1.parent_link_index = 2;
         right_s1.child_link_index = 3;
         right_s1.joint_axis = Eigen::Vector3d::UnitZ();
-        right_s1.joint_transform = Eigen::Translation3d(0.069, 0.0, 0.27035) * QuaternionFromUrdfRPY(-1.57079632679, 0.0, 0.0);
+        right_s1.joint_transform = Eigen::Translation3d(0.069, 0.0, 0.27035) * EigenHelpers::QuaternionFromUrdfRPY(-1.57079632679, 0.0, 0.0);
         right_s1.joint_model = reference_configuration[1];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_s1_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_s1.csv", 0.5, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_s1_joint_model(right_s1_model_samples, 0.5);
-        const BaxterJointActuatorModel right_s1_joint_model(fabs(s1_noise), 0.5);
+        const BaxterJointActuatorModel right_s1_joint_model(std::abs(s1_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG s1_config = joint_config;
         s1_config.velocity_limit = 0.27 * 0.75;
         right_s1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s1_config, right_s1_joint_model);
@@ -416,11 +392,9 @@ namespace baxter_linked_common_config
         right_e0.parent_link_index = 3;
         right_e0.child_link_index = 4;
         right_e0.joint_axis = Eigen::Vector3d::UnitZ();
-        right_e0.joint_transform = Eigen::Translation3d(0.102, 0.0, 0.0) * QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
+        right_e0.joint_transform = Eigen::Translation3d(0.102, 0.0, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
         right_e0.joint_model = reference_configuration[2];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_e0_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_e0.csv", 0.5, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_e0_joint_model(right_e0_model_samples, 0.5);
-        const BaxterJointActuatorModel right_e0_joint_model(fabs(e0_noise), 0.5);
+        const BaxterJointActuatorModel right_e0_joint_model(std::abs(e0_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG e0_config = joint_config;
         e0_config.velocity_limit = 0.27 * 0.75;
         right_e0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e0_config, right_e0_joint_model);
@@ -430,11 +404,9 @@ namespace baxter_linked_common_config
         right_e1.parent_link_index = 4;
         right_e1.child_link_index = 5;
         right_e1.joint_axis = Eigen::Vector3d::UnitZ();
-        right_e1.joint_transform = Eigen::Translation3d(0.069, 0.0, 0.26242) * QuaternionFromUrdfRPY(-1.57079632679, -1.57079632679, 0.0);
+        right_e1.joint_transform = Eigen::Translation3d(0.069, 0.0, 0.26242) * EigenHelpers::QuaternionFromUrdfRPY(-1.57079632679, -1.57079632679, 0.0);
         right_e1.joint_model = reference_configuration[3];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_e1_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_e1.csv", 0.5, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_e1_joint_model(right_e1_model_samples, 0.5);
-        const BaxterJointActuatorModel right_e1_joint_model(fabs(e1_noise), 0.5);
+        const BaxterJointActuatorModel right_e1_joint_model(std::abs(e1_noise), 0.5);
         simplelinked_robot_helpers::ROBOT_CONFIG e1_config = joint_config;
         e1_config.velocity_limit = 0.27 * 0.75;
         right_e1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e1_config, right_e1_joint_model);
@@ -444,11 +416,9 @@ namespace baxter_linked_common_config
         right_w0.parent_link_index = 5;
         right_w0.child_link_index = 6;
         right_w0.joint_axis = Eigen::Vector3d::UnitZ();
-        right_w0.joint_transform = Eigen::Translation3d(0.10359, 0.0, 0.0) * QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
+        right_w0.joint_transform = Eigen::Translation3d(0.10359, 0.0, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
         right_w0.joint_model = reference_configuration[4];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_w0_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_w0.csv", 1.0, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_w0_joint_model(right_w0_model_samples, 1.0);
-        const BaxterJointActuatorModel right_w0_joint_model(fabs(w0_noise), 1.0);
+        const BaxterJointActuatorModel right_w0_joint_model(std::abs(w0_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w0_config = joint_config;
         w0_config.velocity_limit = 0.3 * 0.75;
         right_w0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w0_config, right_w0_joint_model);
@@ -458,11 +428,9 @@ namespace baxter_linked_common_config
         right_w1.parent_link_index = 6;
         right_w1.child_link_index = 7;
         right_w1.joint_axis = Eigen::Vector3d::UnitZ();
-        right_w1.joint_transform = Eigen::Translation3d(0.01, 0.0, 0.2707) * QuaternionFromUrdfRPY(-1.57079632679, -1.57079632679, 0.0);
+        right_w1.joint_transform = Eigen::Translation3d(0.01, 0.0, 0.2707) * EigenHelpers::QuaternionFromUrdfRPY(-1.57079632679, -1.57079632679, 0.0);
         right_w1.joint_model = reference_configuration[5];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_w1_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_w1.csv", 1.0, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_w1_joint_model(right_w1_model_samples, 1.0);
-        const BaxterJointActuatorModel right_w1_joint_model(fabs(w1_noise), 1.0);
+        const BaxterJointActuatorModel right_w1_joint_model(std::abs(w1_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w1_config = joint_config;
         w1_config.velocity_limit = 0.3 * 0.75;
         right_w1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w1_config, right_w1_joint_model);
@@ -472,11 +440,9 @@ namespace baxter_linked_common_config
         right_w2.parent_link_index = 7;
         right_w2.child_link_index = 8;
         right_w2.joint_axis = Eigen::Vector3d::UnitZ();
-        right_w2.joint_transform = Eigen::Translation3d(0.115975, 0.0, 0.0) * QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
+        right_w2.joint_transform = Eigen::Translation3d(0.115975, 0.0, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
         right_w2.joint_model = reference_configuration[6];
-        //std::shared_ptr<baxter_joint_actuator_model::JointUncertaintySampleModel> right_w2_model_samples(baxter_joint_actuator_model::LoadModel("/home/calderpg/Dropbox/ROS_workspace/src/Research/baxter_uncertainty_models/right_w2.csv", 1.0, 50.0, 50.0));
-        //const BaxterJointActuatorModel right_w2_joint_model(right_w2_model_samples, 1.0);
-        const BaxterJointActuatorModel right_w2_joint_model(fabs(w2_noise), 1.0);
+        const BaxterJointActuatorModel right_w2_joint_model(std::abs(w2_noise), 1.0);
         simplelinked_robot_helpers::ROBOT_CONFIG w2_config = joint_config;
         w2_config.velocity_limit = 0.5 * 0.75;
         right_w2.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w2_config, right_w2_joint_model);

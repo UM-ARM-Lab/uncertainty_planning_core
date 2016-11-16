@@ -177,7 +177,7 @@ namespace simplese2_robot_helpers
         {
             const Eigen::VectorXd dim_distances = SimpleSE2DimDistancer::Distance(t1, t2);
             const double trans_dist = sqrt((dim_distances(0) * dim_distances(0)) + (dim_distances(1) * dim_distances(1)));
-            const double rots_dist = fabs(dim_distances(2));
+            const double rots_dist = std::abs(dim_distances(2));
             return trans_dist + rots_dist;
         }
 
@@ -283,10 +283,10 @@ namespace simplese2_robot_helpers
             for (ssize_t joint_idx = 0; joint_idx < 3; joint_idx++)
             {
                 Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(3);
-                raw_motion_plus(joint_idx) = 1.0;
+                raw_motion_plus(joint_idx) = 0.125;
                 motion_primitives.push_back(raw_motion_plus);
                 Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(3);
-                raw_motion_neg(joint_idx) = -1.0;
+                raw_motion_neg(joint_idx) = -0.125;
                 motion_primitives.push_back(raw_motion_neg);
             }
             // Go through the robot model & compute how much it moves
@@ -313,7 +313,7 @@ namespace simplese2_robot_helpers
                     }
                 }
             }
-            return max_motion;
+            return (max_motion * 8.0);
         }
 
         inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector3d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)
@@ -489,7 +489,7 @@ namespace simplese2_robot_helpers
             const double translation_action_norm = raw_translation_correction.norm();
             const Eigen::VectorXd real_translation_correction = (translation_action_norm > 0.005) ? (raw_translation_correction / translation_action_norm) * 0.005 : raw_translation_correction;
             // Scale down the rotation
-            const double rotation_action_norm = fabs(raw_rotation_correction);
+            const double rotation_action_norm = std::abs(raw_rotation_correction);
             const double real_rotation_correction = (rotation_action_norm > 0.05) ? (raw_rotation_correction / rotation_action_norm) * 0.05 : raw_rotation_correction;
             // Put them back together
             Eigen::VectorXd real_correction(3);

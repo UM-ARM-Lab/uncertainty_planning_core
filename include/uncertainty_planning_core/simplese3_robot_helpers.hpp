@@ -278,10 +278,10 @@ namespace simplese3_robot_helpers
             for (ssize_t joint_idx = 0; joint_idx < 6; joint_idx++)
             {
                 Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(6);
-                raw_motion_plus(joint_idx) = 1.0;
+                raw_motion_plus(joint_idx) = 0.125;
                 motion_primitives.push_back(raw_motion_plus);
                 Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(6);
-                raw_motion_neg(joint_idx) = -1.0;
+                raw_motion_neg(joint_idx) = -0.125;
                 motion_primitives.push_back(raw_motion_neg);
             }
             // Go through the robot model & compute how much it moves
@@ -308,7 +308,7 @@ namespace simplese3_robot_helpers
                     }
                 }
             }
-            return max_motion;
+            return (max_motion * 8.0);
         }
 
         inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector3d>& robot_points, const Eigen::Affine3d& initial_position, const ROBOT_CONFIG& robot_config) : link_points_(robot_points)

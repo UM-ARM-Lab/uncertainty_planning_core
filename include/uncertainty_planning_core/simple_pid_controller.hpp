@@ -57,9 +57,9 @@ namespace simple_pid_controller
 
         inline void Initialize(const double kp, const double ki, const double kd, const double integral_clamp)
         {
-            kp_ = fabs(kp);
-            ki_ = fabs(ki);
-            kd_ = fabs(kd);
+            kp_ = std::abs(kp);
+            ki_ = std::abs(ki);
+            kd_ = std::abs(kd);
             integral_clamp_ = std::abs(integral_clamp);
             error_integral_ = 0.0;
             last_error_ = 0.0;

@@ -252,17 +252,17 @@ namespace simplelinked_robot_helpers
 
         inline double Distance(const double v1, const double v2) const
         {
-            return fabs(SignedDistance(v1, v2));
+            return std::abs(SignedDistance(v1, v2));
         }
 
         inline double Distance(const double v) const
         {
-            return fabs(SignedDistance(GetValue(), v));
+            return std::abs(SignedDistance(GetValue(), v));
         }
 
         inline double Distance(const SimpleJointModel& other) const
         {
-            return fabs(SignedDistance(GetValue(), other.GetValue()));
+            return std::abs(SignedDistance(GetValue(), other.GetValue()));
         }
 
         inline SimpleJointModel CopyWithNewValue(const double value) const
@@ -740,7 +740,7 @@ namespace simplelinked_robot_helpers
                 last_child_index = current_joint.child_link_index;
                 // Last, check the joint axes
                 const double joint_axis_norm = current_joint.joint_axis.norm();
-                const double error = fabs(joint_axis_norm - 1.0);
+                const double error = std::abs(joint_axis_norm - 1.0);
                 if (error > std::numeric_limits<double>::epsilon())
                 {
                     std::cerr << "Joint axis is not a unit vector" << std::endl;
@@ -799,10 +799,10 @@ namespace simplelinked_robot_helpers
             for (ssize_t joint_idx = 0; joint_idx < (ssize_t)GetNumActiveJoints(); joint_idx++)
             {
                 Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero((ssize_t)GetNumActiveJoints());
-                raw_motion_plus(joint_idx) = 1.0;
+                raw_motion_plus(joint_idx) = 0.125;
                 motion_primitives.push_back(raw_motion_plus);
                 Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero((ssize_t)GetNumActiveJoints());
-                raw_motion_neg(joint_idx) = -1.0;
+                raw_motion_neg(joint_idx) = -0.125;
                 motion_primitives.push_back(raw_motion_neg);
             }
             // Go through the robot model & compute how much it moves
@@ -829,7 +829,7 @@ namespace simplelinked_robot_helpers
                     }
                 }
             }
-            return max_motion;
+            return (max_motion * 8.0);
         }
 
         inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)

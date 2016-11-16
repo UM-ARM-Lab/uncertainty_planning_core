@@ -217,9 +217,9 @@ namespace ur5_actuator_helpers
 
     public:
 
-        UR5UncertaintySamplesJointActuatorModel(const std::shared_ptr<JointUncertaintySampleModel> model_ptr, const double max_velocity) : initialized_(true), actuator_limit_(fabs(max_velocity)), model_ptr_(model_ptr) {}
+        UR5UncertaintySamplesJointActuatorModel(const std::shared_ptr<JointUncertaintySampleModel> model_ptr, const double max_velocity) : initialized_(true), actuator_limit_(std::abs(max_velocity)), model_ptr_(model_ptr) {}
 
-        UR5UncertaintySamplesJointActuatorModel(const double max_velocity) : initialized_(true), actuator_limit_(fabs(max_velocity)) {}
+        UR5UncertaintySamplesJointActuatorModel(const double max_velocity) : initialized_(true), actuator_limit_(std::abs(max_velocity)) {}
 
         UR5UncertaintySamplesJointActuatorModel() : initialized_(true), actuator_limit_(0.0) {}
 

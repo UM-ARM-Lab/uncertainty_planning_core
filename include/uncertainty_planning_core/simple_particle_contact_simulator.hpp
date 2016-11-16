@@ -2929,9 +2929,9 @@ namespace uncertainty_planning_tools
 
         virtual void ResetStatistics() = 0;
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
+        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_debug_publisher) const = 0;
+        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ros::Publisher& display_debug_publisher) const = 0;
     };
 
     template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
@@ -3015,7 +3015,7 @@ namespace uncertainty_planning_tools
             recovered_unsuccessful_resolves_.store(0);
         }
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rngs, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ros::Publisher& display_debug_publisher) const
+        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rngs, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ros::Publisher& display_debug_publisher) const
         {
             if (start_positions.size() > 0)
             {
@@ -3033,15 +3033,14 @@ namespace uncertainty_planning_tools
 #else
                 const size_t th_id = 0;
 #endif
-                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, rngs[th_id], forward_simulation_time, simulation_shortcut_distance, use_individual_jacobians, allow_contacts, enable_contact_manifold_target_adjustment, trace, false, display_debug_publisher);
+                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, rngs[th_id], forward_simulation_time, simulation_shortcut_distance, use_individual_jacobians, allow_contacts, trace, false, display_debug_publisher);
             }
             return propagated_points;
         }
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, const bool enable_contact_manifold_target_adjustment, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const
+        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const
         {
             Robot robot = immutable_robot;
-            UNUSED(enable_contact_manifold_target_adjustment);
             simulation_call_.fetch_add(1u);
             const uint64_t call_number = simulation_call_.load();
             // Configure the robot
@@ -3506,73 +3505,30 @@ namespace uncertainty_planning_tools
             }
         }
 
-        inline Eigen::Vector3d RecursiveLineSearch(const Eigen::Vector3d& start, const Eigen::Vector3d& end, const double target_threshold) const
-        {
-            const double start_value = this->environment_sdf_.Get(start);
-            const double end_value = this->environment_sdf_.Get(end);
-            assert(end_value >= target_threshold);
-            if (start_value >= target_threshold)
-            {
-                return start;
-            }
-            else
-            {
-                const double min_step_size = this->GetResolution() * 0.125; //0.0625; //0.015625;
-                const double step_size = EigenHelpers::Distance(start, end);
-                if (step_size < min_step_size)
-                {
-                    return end;
-                }
-                else
-                {
-                    const Eigen::Vector3d halfway_point = start + ((end - start) * 0.5);
-                    const double halfway_value = this->environment_sdf_.Get(halfway_point);
-                    if (halfway_value >= target_threshold)
-                    {
-                        return RecursiveLineSearch(start, halfway_point, target_threshold);
-                    }
-                    else
-                    {
-                        return RecursiveLineSearch(halfway_point, end, target_threshold);
-                    }
-                }
-            }
-        }
-
         inline double EstimatePointPenetration(const Eigen::Vector3d& point) const
         {
             const std::pair<double, bool> distance_check = this->environment_sdf_.EstimateDistance(point);
             if (distance_check.second)
             {
                 const double current_penetration = distance_check.first;
-                if (current_penetration >= this->resolution_distance_threshold_)
+                if (current_penetration < this->resolution_distance_threshold_)
+                {
+                    return std::abs(this->resolution_distance_threshold_ - current_penetration);
+                }
+                else
                 {
                     return 0.0;
                 }
-#ifdef TRUST_SDF_PENETRATION
-                return current_penetration;
-#else
-                const Eigen::Vector3d gradient_direction = EigenHelpers::SafeNormal(EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GetGradient(point, true)));
-                Eigen::Vector3d initial_test = point + (gradient_direction * (this->GetResolution() * 0.25));
-                while (this->environment_sdf_.Get(initial_test) < resolution_distance_threshold_)
-                {
-                    initial_test = initial_test + (gradient_direction * (this->GetResolution() * 0.25));
-                }
-                const Eigen::Vector3d surface_point = RecursiveLineSearch(point, initial_test, resolution_distance_threshold_);
-                return EigenHelpers::Distance(point, surface_point);
-#endif
             }
             else
             {
-                return INFINITY;
+                return std::numeric_limits<double>::infinity();
             }
         }
 
         inline double ComputeMaxPointPenetration(const Robot& current_robot, const Configuration& previous_config) const
         {
             UNUSED(previous_config);
-            //Robot previous_robot = current_robot;
-            //previous_robot.UpdatePosition(previous_config);
             const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = current_robot.GetRawLinksPoints();
             // Find the point on the robot that moves the most
             double max_point_penetration = 0.0;
@@ -3583,7 +3539,6 @@ namespace uncertainty_planning_tools
                 const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
                 // Get the *current* transform of the current link
                 const Eigen::Affine3d current_link_transform = current_robot.GetLinkTransform(link_name);
-                //const Eigen::Affine3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -3591,16 +3546,14 @@ namespace uncertainty_planning_tools
                     const Eigen::Vector3d& link_relative_point = link_points[point_idx];
                     // Get the current world position
                     const Eigen::Vector3d current_environment_position = current_link_transform * link_relative_point;
-                    //const Eigen::Vector3d previous_environment_position = previous_link_transform * link_relative_point;
-                    //const double penetration = EstimatePenetrationDistance(previous_environment_position, current_environment_position);
                     const double penetration = EstimatePointPenetration(current_environment_position);
-                    //const double penetration = SearchPenetrationDistance(previous_environment_position, current_environment_position);
                     if (penetration > max_point_penetration)
                     {
                         max_point_penetration = penetration;
                     }
                 }
             }
+            std::cout << "MPP " << max_point_penetration << std::endl;
             return max_point_penetration;
         }
 
@@ -3654,8 +3607,6 @@ namespace uncertainty_planning_tools
             next_robot.ApplyControlInput(control_input);
             return EstimateMaxControlInputWorkspaceMotion(current_robot, next_robot);
         }
-
-        // TODO - Why, if every resolve starts at a safe, valid state, and must end at a safe, valid, state, do some resolve operations increase penetration distance, especially those that resolve in OOB environment?! How are some resolves pathologically bad? Why does the speed of the robot, which should be completely independent of microstep size, play a role?
 
         inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(const Robot& immutable_robot, const Eigen::VectorXd& control_input, const double controller_interval, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const uint64_t call_number, ros::Publisher& display_pub) const
         {
@@ -3748,12 +3699,14 @@ namespace uncertainty_planning_tools
 //                        const double correction_step_motion_estimate = correction_step_norm * max_robot_motion_per_step;
                         const double correction_step_motion_estimate = EstimateMaxControlInputWorkspaceMotion(robot, raw_correction_step);
                         double allowed_resolve_distance = std::min(apply_step_max_motion, allowed_microstep_distance * 1.0); //was 0.25
+                        // This provides additional help debugging, but performance is stable enough without it, and it reduces the number of collision checks significantly
+#ifdef USE_CHECKED_RESOLVE_POINT_PENETRATION
                         const double pre_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                         uint32_t num_micro_ops = 0u;
                         while (num_micro_ops <= 2)
                         {
                             const double step_fraction = std::max((correction_step_motion_estimate / allowed_resolve_distance), 1.0);
-                            const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * fabs(correction_step_scaling);
+                            const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * std::abs(correction_step_scaling);
                             if (this->debug_level_ >= 25)
                             {
                                 const std::string msg8 = "[" + std::to_string(call_number) + "] Real scaled Cstep: " + PrettyPrint::PrettyPrint(real_correction_step);
@@ -3788,6 +3741,18 @@ namespace uncertainty_planning_tools
                             std::cout << "Press ENTER to continue..." << std::endl;
                             std::cin.get();
                         }
+#else
+                        const double step_fraction = std::max((correction_step_motion_estimate / allowed_resolve_distance), 1.0);
+                        const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * std::abs(correction_step_scaling);
+                        if (this->debug_level_ >= 25)
+                        {
+                            const std::string msg8 = "[" + std::to_string(call_number) + "] Real scaled Cstep: " + PrettyPrint::PrettyPrint(real_correction_step);
+                            std::cout << msg8 << std::endl;
+                        }
+                        // Apply correction step
+                        robot.ApplyControlInput(real_correction_step);
+                        const Configuration post_resolve_configuration = robot.GetPosition();
+#endif
                         active_configuration = post_resolve_configuration;
                         // Check to see if we're still in collision
                         const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, previous_configuration, active_configuration, robot_links_points, controller_interval);
@@ -3912,153 +3877,9 @@ namespace uncertainty_planning_tools
             return std::make_pair(robot.GetPosition(), std::make_pair(collided, false));
         }
 
-        inline Eigen::Vector3d FuzzVector(const Eigen::Vector3d& vec, RNG& rng) const
-        {
-#ifdef FUZZ_CORRECTION_VECTORS
-            std::uniform_real_distribution<double> fuzz_dist(-(this->GetResolution() * 0.25), (this->GetResolution() * 0.25));
-            const double x_fuzz = fuzz_dist(rng);
-            const double y_fuzz = fuzz_dist(rng);
-            const double z_fuzz = fuzz_dist(rng);
-            return Eigen::Vector3d(vec.x() + x_fuzz, vec.y() + y_fuzz, vec.z() + z_fuzz);
-#else
-            UNUSED(rng);
-            return vec;
-#endif
-        }
-
-        inline double OriginalEstimatePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
-        {
-            // We use the penetration distance as a scale
-            // We compute the true penetation distance:
-            // - We know the previous location of the point corresponded to a collision-free location
-            // - We know that the current location corresponds to a collision location
-            // - We know that the point has moved a short distance, and thus has not moved over meaningful intermediate cells
-            // So, we can assume that the collision/free boundary lies exactly halfway between the previous location's cell
-            // and the current location's cell. (WE NEED TO CHECK, MAY REQUIRE LINE SEARCH)
-            // Additionally, we project the current cell->current vector onto the
-            // previous cell->current cell vector to adjust the estimate
-            const std::vector<int64_t> previous_cell_indices = this->environment_sdf_.LocationToGridIndex(previous_point_location);
-            const Eigen::Vector3d previous_cell_location = EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GridIndexToLocation(previous_cell_indices[0], previous_cell_indices[1], previous_cell_indices[2]));
-            const std::vector<int64_t> current_cell_indices = this->environment_sdf_.LocationToGridIndex(current_point_location);
-            const Eigen::Vector3d current_cell_location = EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GridIndexToLocation(current_cell_indices[0], current_cell_indices[1], current_cell_indices[2]));
-            // Check if the previous and current cells are neighboring
-            //const int64_t x_cell_delta = std::abs(previous_cell_indices[0] - current_cell_indices[0]);
-            //const int64_t y_cell_delta = std::abs(previous_cell_indices[1] - current_cell_indices[1]);
-            //const int64_t z_cell_delta = std::abs(previous_cell_indices[2] - current_cell_indices[2]);
-            //assert(x_cell_delta <= 1);
-            //assert(y_cell_delta <= 1);
-            //assert(z_cell_delta <= 1);
-            // Compute projection
-            const Eigen::Vector3d previous_cell_current_cell = current_cell_location - previous_cell_location;
-            const double nominal_penetration_distance = previous_cell_current_cell.norm() * 0.5;
-            const Eigen::Vector3d current_cell_current = current_point_location - current_cell_location;
-            const Eigen::Vector3d current_cell_current_projected_onto_previous_cell_current_cell = (current_cell_current.dot(previous_cell_current_cell) / previous_cell_current_cell.dot(previous_cell_current_cell)) * previous_cell_current_cell;
-            // Get the norm of the projection, this is the amount we need to adjust by
-            const double adjustment_amount = current_cell_current_projected_onto_previous_cell_current_cell.norm();
-            // Figure out the sign of the adjustment (i.e. if the current location is farther in/out than the current cell
-            const double adjustment = (current_cell_current_projected_onto_previous_cell_current_cell.dot(previous_cell_current_cell) >= 0.0) ? adjustment_amount : -adjustment_amount;
-            // Compute the final penetration distance
-            const double computed_penetration_distance = nominal_penetration_distance + adjustment;
-            return computed_penetration_distance;
-        }
-
-        inline double EstimatePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
-        {
-            const std::vector<int64_t> current_cell_indices = this->environment_sdf_.LocationToGridIndex(current_point_location);
-            const double current_cell_penetration = this->environment_sdf_.Get(current_cell_indices[0], current_cell_indices[1], current_cell_indices[2]);
-            if (current_cell_penetration >= this->resolution_distance_threshold_)
-            {
-                return 0.0;
-            }
-            // We use the penetration distance as a scale
-            // We compute the true penetation distance:
-            // - We know the previous location of the point corresponded to a collision-free location
-            // - We know that the current location corresponds to a collision location
-            // - We know that the point has moved a short distance, and thus has not moved over meaningful intermediate cells
-            // So, we can assume that the collision/free boundary lies exactly halfway between the previous location's cell
-            // and the current location's cell. (WE NEED TO CHECK, MAY REQUIRE LINE SEARCH)
-            // Additionally, we project the current cell->current vector onto the
-            // previous cell->current cell vector to adjust the estimate
-            const std::vector<int64_t> previous_cell_indices = this->environment_sdf_.LocationToGridIndex(previous_point_location);
-            const Eigen::Vector3d previous_cell_location = EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GridIndexToLocation(previous_cell_indices[0], previous_cell_indices[1], previous_cell_indices[2]));
-            const Eigen::Vector3d current_cell_location = EigenHelpers::StdVectorDoubleToEigenVector3d(this->environment_sdf_.GridIndexToLocation(current_cell_indices[0], current_cell_indices[1], current_cell_indices[2]));
-            // Check if the previous and current cells are neighboring
-            //const int64_t x_cell_delta = std::abs(previous_cell_indices[0] - current_cell_indices[0]);
-            //const int64_t y_cell_delta = std::abs(previous_cell_indices[1] - current_cell_indices[1]);
-            //const int64_t z_cell_delta = std::abs(previous_cell_indices[2] - current_cell_indices[2]);
-            //assert(x_cell_delta <= 1);
-            //assert(y_cell_delta <= 1);
-            //assert(z_cell_delta <= 1);
-            // Compute projection
-            const Eigen::Vector3d previous_cell_current_cell = current_cell_location - previous_cell_location;
-            const double nominal_penetration_distance = current_cell_penetration;
-            const Eigen::Vector3d current_cell_current = current_point_location - current_cell_location;
-            const Eigen::Vector3d current_cell_current_projected_onto_previous_cell_current_cell = (current_cell_current.dot(previous_cell_current_cell) / previous_cell_current_cell.dot(previous_cell_current_cell)) * previous_cell_current_cell;
-            // Get the norm of the projection, this is the amount we need to adjust by
-            const double adjustment_amount = current_cell_current_projected_onto_previous_cell_current_cell.norm();
-            // Figure out the sign of the adjustment (i.e. if the current location is farther in/out than the current cell
-            const double adjustment = (current_cell_current_projected_onto_previous_cell_current_cell.dot(previous_cell_current_cell) >= 0.0) ? adjustment_amount : -adjustment_amount;
-            // Compute the final penetration distance
-            const double computed_penetration_distance = nominal_penetration_distance + adjustment;
-            return computed_penetration_distance;
-        }
-
-        inline double SearchPenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location) const
-        {
-            const Eigen::Vector3d surface_contact_point = RecursiveLineSearch(current_point_location, previous_point_location, resolution_distance_threshold_);
-            const double computed_penetration_distance = EigenHelpers::Distance(current_point_location, surface_contact_point);
-            return computed_penetration_distance;
-        }
-
-        inline double ComputePenetrationDistance(const Eigen::Vector3d& previous_point_location, const Eigen::Vector3d& current_point_location, const uint64_t call_number) const
-        {
-#ifdef TRUST_SDF_PENETRATION
-            UNUSED(previous_point_location);
-            const double current_penetration = this->environment_sdf_.EstimateDistance(current_point_location).first;
-            if (this->debug_level_ >= 25)
-            {
-                const std::string msg = "[" + std::to_string(call_number) + "] SDF penetration distance: " + std::to_string(current_penetration);
-                std::cout << msg << std::endl;
-            }
-            return current_penetration;
-#else
-            if (this->environment_sdf_.Get(previous_point_location) >= resolution_distance_threshold_)
-            {
-#ifdef SELECT_MAX_PENETRATION_DISTANCE
-                const double gradient_estimated_penetration_distance = EstimatePointPenetration(current_point_location);
-                const double estimated_penetration_distance = EstimatePenetrationDistance(previous_point_location, current_point_location);
-                const double searched_penetration_distance = SearchPenetrationDistance(previous_point_location, current_point_location);
-                if (this->debug_level_ >= 25)
-                {
-                    const std::string msg = "[" + std::to_string(call_number) + "] Gradient estimated penetration distance: " + std::to_string(gradient_estimated_penetration_distance) + " Estimated penetration distance: " + std::to_string(estimated_penetration_distance) + " Searched penetration distance: " + std::to_string(searched_penetration_distance);
-                    std::cout << msg << std::endl;
-                }
-                return std::max(gradient_estimated_penetration_distance, std::max(estimated_penetration_distance, searched_penetration_distance));
-#else
-                const double searched_penetration_distance = SearchPenetrationDistance(previous_point_location, current_point_location);
-                if (this->debug_level_ >= 25)
-                {
-                    const std::string msg = "[" + std::to_string(call_number) + "] Searched penetration distance: " + std::to_string(searched_penetration_distance);
-                    std::cout << msg << std::endl;
-                }
-                return searched_penetration_distance;
-#endif
-            }
-            else
-            {
-                const double gradient_estimated_penetration_distance = EstimatePointPenetration(current_point_location);
-                if (this->debug_level_ >= 25)
-                {
-                    const std::string msg = "[" + std::to_string(call_number) + "] Gradient estimated penetration distance: " + std::to_string(gradient_estimated_penetration_distance);
-                    std::cout << msg << std::endl;
-                }
-                return gradient_estimated_penetration_distance;
-            }
-#endif
-        }
-
         inline std::pair<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Matrix<double, Eigen::Dynamic, 1>> CollectPointCorrectionsAndJacobians(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>>& robot_links_points, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map, const uint64_t call_number, RNG& rng) const
         {
+            UNUSED(rng);
             Robot current_robot = robot;
             Robot previous_robot = robot;
             // We need our own copy with a set config to use for kinematics!
@@ -4098,23 +3919,7 @@ namespace uncertainty_planning_tools
                     const Eigen::Vector3d previous_point_location = previous_link_transform * link_relative_point;
                     const Eigen::Vector3d current_point_location = current_link_transform * link_relative_point;
                     // We only work with points in the SDF
-                    const std::pair<double, bool> previous_sdf_check = this->environment_sdf_.EstimateDistance(previous_point_location);
                     const std::pair<double, bool> current_sdf_check = this->environment_sdf_.EstimateDistance(current_point_location);
-                    if (previous_sdf_check.second == false)
-                    {
-                        const std::string msg = "[" + std::to_string(call_number) + "] (Previous) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
-                        arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
-                        assert(false);
-                    }
-                    else
-                    {
-                        if (previous_sdf_check.first < resolution_distance_threshold_)
-                        {
-                            const std::string msg = "[" + std::to_string(call_number) + "] Previous point " + std::to_string(point_idx) + " on link " + std::to_string(link_idx) + " in collision: " + PrettyPrint::PrettyPrint(current_point_location);
-                            arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
-                            //assert(false);
-                        }
-                    }
                     if (current_sdf_check.second == false)
                     {
                         const std::string msg = "[" + std::to_string(call_number) + "] (Current) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
@@ -4124,11 +3929,7 @@ namespace uncertainty_planning_tools
 #endif
                     }
                     // We only work with points in collision
-#ifdef TRUST_SDF_PENETRATION
-                    if (current_sdf_check.first < resolution_distance_threshold_ && current_sdf_check.second)
-#else
-                    if (current_sdf_check.first < resolution_distance_threshold_ && current_sdf_check.second && previous_sdf_check.second)
-#endif
+                    if (current_sdf_check.first < this->resolution_distance_threshold_ && current_sdf_check.second)
                     {
                         // We query the surface normal map for the gradient to move out of contact using the particle motion
                         const Eigen::Vector3d point_motion = current_point_location - previous_point_location;
@@ -4139,23 +3940,9 @@ namespace uncertainty_planning_tools
                         const Eigen::Vector3d& raw_gradient = surface_normal_query.first;
                         const Eigen::Vector3d normed_point_gradient = EigenHelpers::SafeNormal(raw_gradient);
                         // Compute the penetration weight
-
-                        const double sdf_penetration_distance = fabs(resolution_distance_threshold_ - current_sdf_check.first);
-#ifdef TRUST_SDF_PENETRATION
-                        const double penetration_weight = sdf_penetration_distance;
-#else
-                        const double computed_penetration_distance = ComputePenetrationDistance(previous_point_location, current_point_location, call_number);
-                        const double penetration_weight = computed_penetration_distance * 100.0;
-#endif
+                        const double sdf_penetration_distance = std::abs(this->resolution_distance_threshold_ - current_sdf_check.first);
                         // Compute the correction vector
-                        const Eigen::Vector3d correction_vector = normed_point_gradient * penetration_weight;
-#ifndef TRUST_SDF_PENETRATION
-                        if (this->debug_level_ >= 25)
-                        {
-                            const std::string msg = "[" + std::to_string(call_number) + "] Colliding point (link-relative): " + PrettyPrint::PrettyPrint(link_relative_point) + "\n[" + std::to_string(call_number) + "] Collision location: " + PrettyPrint::PrettyPrint(current_point_location) + "\n[" + std::to_string(call_number) + "] Computed penetration distance: " + std::to_string(computed_penetration_distance) + " SDF penetration distance: " + std::to_string(sdf_penetration_distance) + " Penetration weight: " + std::to_string(penetration_weight) + "\n[" + std::to_string(call_number) + "] Point gradient: " + PrettyPrint::PrettyPrint(correction_vector);
-                            std::cout << msg << std::endl;
-                        }
-#endif
+                        const Eigen::Vector3d correction_vector = normed_point_gradient * sdf_penetration_distance;
                         env_collision_correction.first = true;
                         env_collision_correction.second = correction_vector;
                     }
@@ -4186,15 +3973,10 @@ namespace uncertainty_planning_tools
                             //std::cout << "Env-collision correction: " << PrettyPrint::PrettyPrint(env_collision_correction.second) << std::endl;
                             point_correction = point_correction + env_collision_correction.second;
                         }
-                        // Add noise to the correction
-                        const Eigen::Vector3d fuzzy_correction = FuzzVector(point_correction, rng);
-//                        // Weight the correction based on the distance from the joint axis (note, the joint axis is at the origin of the link!)
-//                        const double dist_to_joint_axis = link_relative_point.norm();
-//                        point_correction = point_correction * dist_to_joint_axis;
                         // Append the new workspace correction vector to the matrix of correction vectors
                         Eigen::Matrix<double, Eigen::Dynamic, 1> extended_point_corrections;
                         extended_point_corrections.resize(point_corrections.rows() + 3, Eigen::NoChange);
-                        extended_point_corrections << point_corrections,fuzzy_correction;
+                        extended_point_corrections << point_corrections,point_correction;
                         point_corrections = extended_point_corrections;
                         //std::cout << "Point jacobian:\n" << point_jacobian << std::endl;
                         //std::cout << "Point correction: " << PrettyPrint::PrettyPrint(point_correction) << std::endl;
@@ -4256,10 +4038,6 @@ namespace uncertainty_planning_tools
         inline Eigen::VectorXd ComputeResolverCorrectionStepStackedJacobian(const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>& robot_jacobians, const Eigen::Matrix<double, Eigen::Dynamic, 1>& point_corrections) const
         {
             // Compute the correction step
-//                        // Naive Pinv version
-//                        // Invert the robot jacobians
-//            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians_pinv = EigenHelpers::Pinv(robot_jacobians, EigenHelpers::SuggestedRcond());
-//            const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = robot_jacobians_pinv * point_corrections;
             // We could use the naive Pinv(J) * pdot, but instead we solve the Ax = b (Jqdot = pdot) problem directly using one of the solvers in Eigen
             const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> raw_correction = robot_jacobians.colPivHouseholderQr().solve(point_corrections);
             // Extract the c-space correction

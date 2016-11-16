@@ -25,7 +25,7 @@ namespace simple_uncertainty_models
 
     public:
 
-        SimpleUncertainSensor(const double noise_lower_bound, const double noise_upper_bound) : initialized_(true), noise_distribution_(0.0, std::max((fabs(noise_lower_bound) * 0.5), (fabs(noise_upper_bound) * 0.5)), noise_lower_bound, noise_upper_bound) {}
+        SimpleUncertainSensor(const double noise_lower_bound, const double noise_upper_bound) : initialized_(true), noise_distribution_(0.0, std::max((std::abs(noise_lower_bound) * 0.5), (std::abs(noise_upper_bound) * 0.5)), noise_lower_bound, noise_upper_bound) {}
 
         SimpleUncertainSensor() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0) {}
 

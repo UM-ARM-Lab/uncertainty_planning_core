@@ -58,7 +58,6 @@ namespace se3_common_config
         options.num_policy_executions = 1u;
         options.policy_action_attempt_count = 100u;
         options.debug_level = 0;
-        options.enable_contact_manifold_target_adjustment = false;
         options.planner_log_file = "/tmp/se3_planner_log.txt";
         options.policy_log_file = "/tmp/se3_policy_log.txt";
         options.planned_policy_file = "/tmp/se3_planned_policy.policy";
