@@ -1,2 +1,2 @@
 # nomdp_planning
-Framework for NOMDP-based motion planning with uncertainty
+Framework for motion planning with uncertainty
