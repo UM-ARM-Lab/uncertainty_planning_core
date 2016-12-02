@@ -14,10 +14,6 @@
 
 namespace simplese3_robot_helpers
 {
-    typedef Eigen::Affine3d ConfigType;
-    typedef Eigen::Matrix<double, 6, 1> ConfigDeltaType;
-    typedef EigenHelpers::VectorAffine3d ConfigTypeVector;
-
     class EigenAffine3dSerializer
     {
     public:
@@ -60,7 +56,7 @@ namespace simplese3_robot_helpers
         }
 
         template<typename Generator>
-        ConfigType Sample(Generator& prng)
+        Eigen::Affine3d Sample(Generator& prng)
         {
             const double x = x_distribution_(prng);
             const double y = y_distribution_(prng);
@@ -73,109 +69,6 @@ namespace simplese3_robot_helpers
         static std::string TypeName()
         {
             return std::string("Proper6DOFBaseSampler");
-        }
-    };
-
-    class SimpleSE3Interpolator
-    {
-    public:
-
-        ConfigType operator()(const ConfigType& t1, const ConfigType& t2, const double ratio) const
-        {
-            return Interpolate(t1, t2, ratio);
-        }
-
-        static ConfigType Interpolate(const ConfigType& t1, const ConfigType& t2, const double ratio)
-        {
-            const ConfigType interpolated = EigenHelpers::Interpolate(t1, t2, ratio);
-            return interpolated;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Proper6DOFInterpolator");
-        }
-    };
-
-    class SimpleSE3Averager
-    {
-    public:
-
-        ConfigType operator()(const ConfigTypeVector& vec) const
-        {
-            return Average(vec);
-        }
-
-        static ConfigType Average(const ConfigTypeVector& vec)
-        {
-            if (vec.size() > 0)
-            {
-                return EigenHelpers::AverageEigenAffine3d(vec);
-            }
-            else
-            {
-                return Eigen::Affine3d::Identity();
-            }
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Proper6DOFAverager");
-        }
-    };
-
-    class SimpleSE3DimDistancer
-    {
-    public:
-
-        Eigen::VectorXd operator()(const ConfigType& t1, const ConfigType& t2) const
-        {
-            return Distance(t1, t2);
-        }
-
-        static Eigen::VectorXd Distance(const ConfigType& t1, const ConfigType& t2)
-        {
-            return RawDistance(t1, t2).cwiseAbs();
-        }
-
-        static Eigen::VectorXd RawDistance(const ConfigType& t1, const ConfigType& t2)
-        {
-            // Get twist from affine3d difference
-            const Eigen::Vector3d tt1 = t1.translation();
-            const Eigen::Quaterniond qt1(t1.rotation());
-            const Eigen::Vector3d tt2 = t2.translation();
-            const Eigen::Quaterniond qt2(t2.rotation());
-            Eigen::VectorXd dim_distances(4);
-            dim_distances(0) = tt2.x() - tt1.x();
-            dim_distances(1) = tt2.y() - tt1.y();
-            dim_distances(2) = tt2.z() - tt1.z();
-            dim_distances(3) = EigenHelpers::Distance(qt1, qt2);
-            return dim_distances;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Proper6DOFDimDistancer");
-        }
-    };
-
-    class SimpleSE3Distancer
-    {
-    public:
-
-        double operator()(const ConfigType& t1, const ConfigType& t2) const
-        {
-            return Distance(t1, t2);
-        }
-
-        static double Distance(const ConfigType& t1, const ConfigType& t2)
-        {
-            return (EigenHelpers::Distance(t1, t2, 0.5) * 2.0);
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("Proper6DOFDistancer");
         }
     };
 
@@ -384,7 +277,7 @@ namespace simplese3_robot_helpers
         template<typename PRNG>
         inline Eigen::Affine3d GetPosition(PRNG& rng) const
         {
-            const ConfigDeltaType twist = EigenHelpers::TwistBetweenTransforms(Eigen::Affine3d::Identity(), GetPosition());
+            const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(Eigen::Affine3d::Identity(), GetPosition());
             Eigen::Matrix<double, 6, 1> noisy_twist = Eigen::Matrix<double, 6, 1>::Zero();
             noisy_twist(0) = x_axis_sensor_.GetSensorValue(twist(0), rng);
             noisy_twist(1) = y_axis_sensor_.GetSensorValue(twist(1), rng);
@@ -399,7 +292,7 @@ namespace simplese3_robot_helpers
 
         inline double ComputeDistanceTo(const Eigen::Affine3d& target) const
         {
-            return SimpleSE3Distancer::Distance(GetPosition(), target);
+            return ComputeConfigurationDistance(GetPosition(), target);
         }
 
         template<typename PRNG>
@@ -408,7 +301,7 @@ namespace simplese3_robot_helpers
             // Get the current position
             const Eigen::Affine3d current = GetPosition(rng);
             // Get the twist from the current position to the target position
-            const ConfigDeltaType twist = EigenHelpers::TwistBetweenTransforms(current, target);
+            const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(current, target);
             // Compute feedback terms
             const double x_term = x_axis_controller_.ComputeFeedbackTerm(twist(0), controller_interval);
             const double y_term = y_axis_controller_.ComputeFeedbackTerm(twist(1), controller_interval);
@@ -515,6 +408,48 @@ namespace simplese3_robot_helpers
         inline double GetMaxMotionPerStep() const
         {
             return max_motion_per_unit_step_;
+        }
+
+        inline Eigen::Affine3d AverageConfigurations(const EigenHelpers::VectorAffine3d& configurations) const
+        {
+            if (configurations.size() > 0)
+            {
+                return EigenHelpers::AverageEigenAffine3d(configurations);
+            }
+            else
+            {
+                return Eigen::Affine3d::Identity();
+            }
+        }
+
+        inline Eigen::Affine3d InterpolateBetweenConfigurations(const Eigen::Affine3d& start, const Eigen::Affine3d& end, const double ratio) const
+        {
+            return EigenHelpers::Interpolate(start, end, ratio);
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const Eigen::Affine3d& config1, const Eigen::Affine3d& config2) const
+        {
+            // This should change to use a 6dof twist instead
+            const Eigen::Vector3d tc1 = config1.translation();
+            const Eigen::Quaterniond qc1(config1.rotation());
+            const Eigen::Vector3d tc2 = config2.translation();
+            const Eigen::Quaterniond qc2(config2.rotation());
+            Eigen::VectorXd dim_distances(4);
+            dim_distances(0) = tc2.x() - tc1.x();
+            dim_distances(1) = tc2.y() - tc1.y();
+            dim_distances(2) = tc2.z() - tc1.z();
+            dim_distances(3) = EigenHelpers::Distance(qc1, qc2);
+            return dim_distances;
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationDistance(const Eigen::Affine3d& config1, const Eigen::Affine3d& config2) const
+        {
+            return ComputePerDimensionConfigurationRawDistance(config1, config2).cwiseAbs();
+        }
+
+        inline double ComputeConfigurationDistance(const Eigen::Affine3d& config1, const Eigen::Affine3d& config2) const
+        {
+            return (EigenHelpers::Distance(config1, config2, 0.5) * 2.0);
         }
     };
 }

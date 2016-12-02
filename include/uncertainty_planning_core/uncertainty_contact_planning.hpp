@@ -98,7 +98,7 @@ namespace uncertainty_contact_planning
         }
     }
 
-    template<typename Robot, typename Sampler, typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename InterpolateFn, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
+    template<typename Robot, typename Sampler, typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
     class UncertaintyPlanningSpace
     {
     protected:
@@ -119,7 +119,7 @@ namespace uncertainty_contact_planning
             void ExportResults() const
             {
                 const std::string log_file_name("/tmp/spatial_clustering_performance.csv");
-                std::ofstream log_file(log_file_name, std::ios_base::out | std::ios_base::app);
+                std::ofstream log_file(log_file_name, std::ios_base::out);
                 if (!log_file.is_open())
                 {
                     std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << log_file_name << "\x1b[0m \n";
@@ -133,9 +133,8 @@ namespace uncertainty_contact_planning
         };
 
         // Typedef so we don't hate ourselves
-        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> UncertaintyPlanningState;
-        typedef execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> UncertaintyPlanningPolicy;
-        typedef execution_policy::PolicyGraphBuilder<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> ExecutionPolicyGraphBuilder;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningState;
+        typedef execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningPolicy;
         typedef simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> UncertaintyPlanningTreeState;
         typedef std::vector<UncertaintyPlanningTreeState> UncertaintyPlanningTree;
         typedef arc_dijkstras::Graph<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> ExecutionPolicyGraph;
@@ -1033,7 +1032,7 @@ namespace uncertainty_contact_planning
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
                 const Configuration result_config = particle_trajectory.back();
                 // Check if we've reached the goal
-                if (DistanceFn::Distance(result_config, goal) <= goal_distance_threshold_)
+                if (robot_.ComputeConfigurationDistance(result_config, goal) <= goal_distance_threshold_)
                 {
                     // We've reached the goal!
                     std::cout << "Policy simulation reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
@@ -1145,7 +1144,7 @@ namespace uncertainty_contact_planning
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
                 const Configuration result_config = particle_trajectory.back();
                 // Check if we've reached the goal
-                if (DistanceFn::Distance(result_config, goal) <= goal_distance_threshold_)
+                if (robot_.ComputeConfigurationDistance(result_config, goal) <= goal_distance_threshold_)
                 {
                     current_time = ros::Time::now().toSec();
                     // We've reached the goal!
@@ -1482,7 +1481,7 @@ namespace uncertainty_contact_planning
         inline double StateDistance(const UncertaintyPlanningState& state1, const UncertaintyPlanningState& state2) const
         {
             // Get the "space independent" expectation distance
-            const double expectation_distance = DistanceFn::Distance(state1.GetExpectation(), state2.GetExpectation()) / step_size_;
+            const double expectation_distance = robot_.ComputeConfigurationDistance(state1.GetExpectation(), state2.GetExpectation()) / step_size_;
             // Get the Pfeasibility(start -> state1)
             const double feasibility_weight = (1.0 - state1.GetMotionPfeasibility()) * feasibility_alpha_ + (1.0 - feasibility_alpha_);
             // Get the "space independent" variance of state1
@@ -1558,7 +1557,7 @@ namespace uncertainty_contact_planning
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
                 const Configuration& current_particle = particles[idx];
-                //std::cout << "Particle configuration " << PrettyPrint::PrettyPrint(current_particle) << " with distance " << DistanceFn::Distance(current_particle, current_config) << std::endl;
+                //std::cout << "Particle configuration " << PrettyPrint::PrettyPrint(current_particle) << " with distance " << robot_.ComputeConfigurationDistance(current_particle, current_config) << std::endl;
                 all_particles.push_back(std::make_pair(current_particle, false));
             }
             all_particles.push_back(std::make_pair(current_config, false));
@@ -1829,8 +1828,8 @@ namespace uncertainty_contact_planning
                         const Configuration& backward_result = result_configs[current + 1].first;
                         const Configuration& forward_target = target_positions[current + 0];
                         const Configuration& backward_target = target_positions[current + 1];
-                        const bool forward_feasible = (DistanceFn::Distance(forward_result, forward_target) <= goal_distance_threshold_) ? true : false;
-                        const bool backward_feasible = (DistanceFn::Distance(backward_result, backward_target) <= goal_distance_threshold_) ? true : false;
+                        const bool forward_feasible = (robot_.ComputeConfigurationDistance(forward_result, forward_target) <= goal_distance_threshold_) ? true : false;
+                        const bool backward_feasible = (robot_.ComputeConfigurationDistance(backward_result, backward_target) <= goal_distance_threshold_) ? true : false;
                         const double distance = (forward_feasible && backward_feasible) ? 0.0 : 1.0;
                         distance_matrix((ssize_t)idx, (ssize_t)jdx) = distance;
                         distance_matrix((ssize_t)jdx, (ssize_t)idx) = distance;
@@ -1946,7 +1945,7 @@ namespace uncertainty_contact_planning
             intermediate_clusters.reserve(initial_clusters.size());
             // Let's build the distance function
             // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
-            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return DistanceFn::Distance(particles[idx1].first, particles[idx2].first); };
+            std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return robot_.ComputeConfigurationDistance(particles[idx1].first, particles[idx2].first); };
             for (size_t cluster_idx = 0; cluster_idx < initial_clusters.size(); cluster_idx++)
             {
                 const std::vector<size_t>& current_cluster = initial_clusters[cluster_idx];
@@ -2074,7 +2073,7 @@ namespace uncertainty_contact_planning
             {
                 const Configuration& current_particle = simulation_result[ndx].first;
                 // Check if the particle got close enough
-                const double particle_distance = DistanceFn::Distance(current_particle, target_position);
+                const double particle_distance = robot_.ComputeConfigurationDistance(current_particle, target_position);
                 if (particle_distance <= goal_distance_threshold_)
                 {
                     reached_parent++;
@@ -2147,7 +2146,9 @@ namespace uncertainty_contact_planning
                     const double effective_edge_feasibility = (double)reached_count / (double)attempt_count;
                     transition_id_++;
                     const uint64_t new_state_reverse_transtion_id = transition_id_;
+                    //uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, Robot, ConfigAlloc> propagated_state(state_counter_, particle_locations, robot_, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_input, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u));
                     UncertaintyPlanningState propagated_state(state_counter_, particle_locations, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_input, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u));
+                    propagated_state.UpdateStatistics(robot_);
                     // Store the state
                     result_states[idx].first = propagated_state;
                     result_states[idx].second = -1;
@@ -2313,12 +2314,12 @@ namespace uncertainty_contact_planning
             {
                 // Compute a single target state
                 Configuration target_point = random.GetExpectation();
-                const double target_distance = DistanceFn::Distance(nearest.GetExpectation(), target_point);
+                const double target_distance = robot_.ComputeConfigurationDistance(nearest.GetExpectation(), target_point);
                 if (target_distance > step_size_)
                 {
                     const double step_fraction = step_size_ / target_distance;
                     arc_helpers::ConditionalPrint("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
-                    const Configuration interpolated_target_point = InterpolateFn::Interpolate(nearest.GetExpectation(), target_point, step_fraction);
+                    const Configuration interpolated_target_point = robot_.InterpolateBetweenConfigurations(nearest.GetExpectation(), target_point, step_fraction);
                     target_point = interpolated_target_point;
                 }
                 else
@@ -2338,7 +2339,7 @@ namespace uncertainty_contact_planning
                 int64_t parent_offset = -1;
                 // Compute a maximum number of steps to take
                 const Configuration target_point = random.GetExpectation();
-                const uint32_t total_steps = (uint32_t)ceil(DistanceFn::Distance(nearest.GetExpectation(), target_point) / step_size_);
+                const uint32_t total_steps = (uint32_t)ceil(robot_.ComputeConfigurationDistance(nearest.GetExpectation(), target_point) / step_size_);
                 UncertaintyPlanningState current = nearest;
                 uint32_t steps = 0;
                 bool completed = false;
@@ -2346,11 +2347,11 @@ namespace uncertainty_contact_planning
                 {
                     // Compute a single target state
                     Configuration current_target_point = target_point;
-                    const double target_distance = DistanceFn::Distance(current.GetExpectation(), current_target_point);
+                    const double target_distance = robot_.ComputeConfigurationDistance(current.GetExpectation(), current_target_point);
                     if (target_distance > step_size_)
                     {
                         const double step_fraction = step_size_ / target_distance;
-                        const Configuration interpolated_target_point = InterpolateFn::Interpolate(current.GetExpectation(), target_point, step_fraction);
+                        const Configuration interpolated_target_point = robot_.InterpolateBetweenConfigurations(current.GetExpectation(), target_point, step_fraction);
                         current_target_point = interpolated_target_point;
                         arc_helpers::ConditionalPrint("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
                     }
@@ -2410,7 +2411,7 @@ namespace uncertainty_contact_planning
             const std::vector<Configuration, ConfigAlloc>& particles = particle_check.first;
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
-                const double distance = DistanceFn::Distance(particles[idx], goal);
+                const double distance = robot_.ComputeConfigurationDistance(particles[idx], goal);
                 if (distance < goal_distance_threshold_)
                 {
                     within_distance++;
@@ -2430,7 +2431,7 @@ namespace uncertainty_contact_planning
             UncertaintyPlanningState& goal_state_candidate = nearest_neighbors_storage_.back().GetValueMutable();
             // NOTE - this assumes (safely) that the state passed to this function is the last state added to the tree, which we can safely mutate!
             // We only care about states with control input == goal position (states that are directly trying to go to the goal)
-            if (DistanceFn::Distance(goal_state_candidate.GetCommand(), goal_state.GetExpectation()) == 0.0)
+            if (robot_.ComputeConfigurationDistance(goal_state_candidate.GetCommand(), goal_state.GetExpectation()) == 0.0)
             {
                 goal_candidates_evaluated_++;
                 double goal_reached_probability = ComputeGoalReachedProbability(goal_state_candidate, goal_state.GetExpectation());

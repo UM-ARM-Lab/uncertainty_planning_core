@@ -68,125 +68,6 @@ namespace simplese2_robot_helpers
         }
     };
 
-    class SimpleSE2Interpolator
-    {
-    public:
-
-        Eigen::Matrix<double, 3, 1> operator()(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2, const double ratio) const
-        {
-            return Interpolate(t1, t2, ratio);
-        }
-
-        static Eigen::Matrix<double, 3, 1> Interpolate(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2, const double ratio)
-        {
-            Eigen::Matrix<double, 3, 1> interpolated = Eigen::Matrix<double, 3, 1>::Zero();
-            interpolated(0) = EigenHelpers::Interpolate(t1(0), t2(0), ratio);
-            interpolated(1) = EigenHelpers::Interpolate(t1(1), t2(1), ratio);
-            interpolated(2) = EigenHelpers::InterpolateContinuousRevolute(t1(2), t2(2), ratio);
-            return interpolated;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("SimpleSE2Interpolator");
-        }
-    };
-
-    class SimpleSE2Averager
-    {
-    public:
-
-        Eigen::Matrix<double, 3, 1> operator()(const std::vector<Eigen::Matrix<double, 3, 1>>& vec) const
-        {
-            return Average(vec);
-        }
-
-        static Eigen::Matrix<double, 3, 1> Average(const std::vector<Eigen::Matrix<double, 3, 1>>& vec)
-        {
-            if (vec.size() > 0)
-            {
-                // Separate translation and rotation values
-                std::vector<Eigen::VectorXd> translations(vec.size());
-                std::vector<double> zrs(vec.size());
-                for (size_t idx = 0; idx < vec.size(); idx++)
-                {
-                    const Eigen::Matrix<double, 3, 1>& state = vec[idx];
-                    Eigen::VectorXd trans_state(2);
-                    trans_state << state(0), state(1);
-                    translations[idx] = trans_state;
-                    zrs[idx] = state(2);
-                }
-                // Get the average values
-                const Eigen::VectorXd average_translation = EigenHelpers::AverageEigenVectorXd(translations);
-                const double average_zr = EigenHelpers::AverageContinuousRevolute(zrs);
-                Eigen::Matrix<double, 3, 1> average;
-                average << average_translation, average_zr;
-                return average;
-            }
-            else
-            {
-                return Eigen::Matrix<double, 3, 1>::Zero();
-            }
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("SimpleSE2Averager");
-        }
-    };
-
-    class SimpleSE2DimDistancer
-    {
-    public:
-
-        Eigen::VectorXd operator()(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2) const
-        {
-            return Distance(t1, t2);
-        }
-
-        static Eigen::VectorXd Distance(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2)
-        {
-            return RawDistance(t1, t2).cwiseAbs();
-        }
-
-        static Eigen::VectorXd RawDistance(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2)
-        {
-            Eigen::VectorXd dim_distances(3);
-            dim_distances(0) = t2(0) - t1(0);
-            dim_distances(1) = t2(1) - t1(1);
-            dim_distances(2) = EigenHelpers::ContinuousRevoluteSignedDistance(t1(2), t2(2));;
-            return dim_distances;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("SimpleSE2DimDistancer");
-        }
-    };
-
-    class SimpleSE2Distancer
-    {
-    public:
-
-        double operator()(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2) const
-        {
-            return Distance(t1, t2);
-        }
-
-        static double Distance(const Eigen::Matrix<double, 3, 1>& t1, const Eigen::Matrix<double, 3, 1>& t2)
-        {
-            const Eigen::VectorXd dim_distances = SimpleSE2DimDistancer::Distance(t1, t2);
-            const double trans_dist = sqrt((dim_distances(0) * dim_distances(0)) + (dim_distances(1) * dim_distances(1)));
-            const double rots_dist = std::abs(dim_distances(2));
-            return trans_dist + rots_dist;
-        }
-
-        static std::string TypeName()
-        {
-            return std::string("SimpleSE2Distancer");
-        }
-    };
-
     struct ROBOT_CONFIG
     {
         double kp;
@@ -387,7 +268,7 @@ namespace simplese2_robot_helpers
 
         inline double ComputeDistanceTo(const Eigen::Matrix<double, 3, 1>& target) const
         {
-            return SimpleSE2Distancer::Distance(GetPosition(), target);
+            return ComputeConfigurationDistance(GetPosition(), target);
         }
 
         template<typename PRNG>
@@ -396,7 +277,7 @@ namespace simplese2_robot_helpers
             // Get the current position
             const Eigen::Matrix<double, 3, 1> current = GetPosition(rng);
             // Get the current error
-            const Eigen::VectorXd current_error = SimpleSE2DimDistancer::RawDistance(current, target);
+            const Eigen::VectorXd current_error = ComputePerDimensionConfigurationRawDistance(current, target);
             // Compute feedback terms
             const double x_term = x_axis_controller_.ComputeFeedbackTerm(current_error(0), controller_interval);
             const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), controller_interval);
@@ -500,6 +381,66 @@ namespace simplese2_robot_helpers
         inline double GetMaxMotionPerStep() const
         {
             return max_motion_per_unit_step_;
+        }
+
+
+        inline Eigen::Matrix<double, 3, 1> AverageConfigurations(const std::vector<Eigen::Matrix<double, 3, 1>>& configurations) const
+        {
+            if (configurations.size() > 0)
+            {
+                // Separate translation and rotation values
+                std::vector<Eigen::VectorXd> translations(configurations.size());
+                std::vector<double> zrs(configurations.size());
+                for (size_t idx = 0; idx < configurations.size(); idx++)
+                {
+                    const Eigen::Matrix<double, 3, 1>& state = configurations[idx];
+                    Eigen::VectorXd trans_state(2);
+                    trans_state << state(0), state(1);
+                    translations[idx] = trans_state;
+                    zrs[idx] = state(2);
+                }
+                // Get the average values
+                const Eigen::VectorXd average_translation = EigenHelpers::AverageEigenVectorXd(translations);
+                const double average_zr = EigenHelpers::AverageContinuousRevolute(zrs);
+                Eigen::Matrix<double, 3, 1> average;
+                average << average_translation, average_zr;
+                return average;
+            }
+            else
+            {
+                return Eigen::Matrix<double, 3, 1>::Zero();
+            }
+        }
+
+        inline Eigen::Matrix<double, 3, 1> InterpolateBetweenConfigurations(const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& end, const double ratio) const
+        {
+            Eigen::Matrix<double, 3, 1> interpolated = Eigen::Matrix<double, 3, 1>::Zero();
+            interpolated(0) = EigenHelpers::Interpolate(start(0), end(0), ratio);
+            interpolated(1) = EigenHelpers::Interpolate(start(1), end(1), ratio);
+            interpolated(2) = EigenHelpers::InterpolateContinuousRevolute(start(2), end(2), ratio);
+            return interpolated;
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const Eigen::Matrix<double, 3, 1>& config1, const Eigen::Matrix<double, 3, 1>& config2) const
+        {
+            Eigen::VectorXd dim_distances(3);
+            dim_distances(0) = config2(0) - config1(0);
+            dim_distances(1) = config2(1) - config1(1);
+            dim_distances(2) = EigenHelpers::ContinuousRevoluteSignedDistance(config1(2), config2(2));;
+            return dim_distances;
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationDistance(const Eigen::Matrix<double, 3, 1>& config1, const Eigen::Matrix<double, 3, 1>& config2) const
+        {
+            return ComputePerDimensionConfigurationRawDistance(config1, config2).cwiseAbs();
+        }
+
+        inline double ComputeConfigurationDistance(const Eigen::Matrix<double, 3, 1>& config1, const Eigen::Matrix<double, 3, 1>& config2) const
+        {
+            const Eigen::VectorXd dim_distances = ComputePerDimensionConfigurationRawDistance(config1, config2);
+            const double trans_dist = sqrt((dim_distances(0) * dim_distances(0)) + (dim_distances(1) * dim_distances(1)));
+            const double rots_dist = std::abs(dim_distances(2));
+            return trans_dist + rots_dist;
         }
     };
 }

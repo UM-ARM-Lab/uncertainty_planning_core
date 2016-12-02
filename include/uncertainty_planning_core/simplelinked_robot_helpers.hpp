@@ -339,179 +339,6 @@ namespace simplelinked_robot_helpers
         }
     };
 
-    class SimpleLinkedInterpolator
-    {
-    public:
-
-        SimpleLinkedConfiguration operator()(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2, const double ratio) const
-        {
-            return Interpolate(q1, q2, ratio);
-        }
-
-        static SimpleLinkedConfiguration Interpolate(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2, const double ratio)
-        {
-            assert(q1.size() == q2.size());
-            // Make the interpolated config
-            SimpleLinkedConfiguration interpolated;
-            interpolated.reserve(q1.size());
-            for (size_t idx = 0; idx < q1.size(); idx++)
-            {
-                const SimpleJointModel& j1 = q1[idx];
-                const SimpleJointModel& j2 = q2[idx];
-                assert(j1.IsContinuous() == j2.IsContinuous());
-                if (j1.IsContinuous())
-                {
-                    const double interpolated_value = EigenHelpers::InterpolateContinuousRevolute(j1.GetValue(), j2.GetValue(), ratio);
-                    interpolated.push_back(j1.CopyWithNewValue(interpolated_value));
-                }
-                else
-                {
-                    const double interpolated_value = EigenHelpers::Interpolate(j1.GetValue(), j2.GetValue(), ratio);
-                    interpolated.push_back(j1.CopyWithNewValue(interpolated_value));
-                }
-            }
-            return interpolated;
-        }
-    };
-
-    class SimpleLinkedAverager
-    {
-    protected:
-
-        static SimpleLinkedConfiguration GetRepresentativeConfiguration(const std::vector<SimpleLinkedConfiguration>& vec)
-        {
-            assert(vec.size() > 0);
-            const SimpleLinkedConfiguration& representative_config = vec.front();
-            for (size_t idx = 0; idx < vec.size(); idx++)
-            {
-                const SimpleLinkedConfiguration& current_config = vec[idx];
-                assert(representative_config.size() == current_config.size());
-                for (size_t jdx = 0; jdx < representative_config.size(); jdx++)
-                {
-                    const SimpleJointModel& jr = representative_config[jdx];
-                    const SimpleJointModel& jc = current_config[jdx];
-                    assert(jr.IsContinuous() == jc.IsContinuous());
-                }
-            }
-            return representative_config;
-        }
-
-    public:
-
-        SimpleLinkedConfiguration operator()(const std::vector<SimpleLinkedConfiguration>& vec) const
-        {
-            return Average(vec);
-        }
-
-        static SimpleLinkedConfiguration Average(const std::vector<SimpleLinkedConfiguration>& vec)
-        {
-            if (vec.size() > 0)
-            {
-                const SimpleLinkedConfiguration representative_configuration = GetRepresentativeConfiguration(vec);
-                const size_t config_size = representative_configuration.size();
-                // Separate the joint values
-                std::vector<std::vector<double>> raw_values(config_size);
-                for (size_t idx = 0; idx < vec.size(); idx++)
-                {
-                    const SimpleLinkedConfiguration& q = vec[idx];
-                    for (size_t qdx = 0; qdx < config_size; qdx++)
-                    {
-                        const double jval = q[qdx].GetValue();
-                        raw_values[qdx].push_back(jval);
-                    }
-                }
-                // Average each joint
-                SimpleLinkedConfiguration average_config;
-                average_config.reserve(config_size);
-                for (size_t jdx = 0; jdx < config_size; jdx++)
-                {
-                    const std::vector<double>& values = raw_values[jdx];
-                    const SimpleJointModel& representative_joint = representative_configuration[jdx];
-                    if (representative_joint.IsContinuous())
-                    {
-                        const double average_value = EigenHelpers::AverageContinuousRevolute(values);
-                        average_config.push_back(representative_joint.CopyWithNewValue(average_value));
-                    }
-                    else
-                    {
-                        const double average_value = EigenHelpers::AverageStdVectorDouble(values);
-                        average_config.push_back(representative_joint.CopyWithNewValue(average_value));
-                    }
-                }
-                return average_config;
-            }
-            else
-            {
-                return SimpleLinkedConfiguration();
-            }
-        }
-
-        static inline std::string TypeName()
-        {
-            return std::string("SimpleLinkedAverager");
-        }
-    };
-
-    class SimpleLinkedDimDistancer
-    {
-    public:
-
-        Eigen::VectorXd operator()(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2) const
-        {
-            return Distance(q1, q2);
-        }
-
-        static Eigen::VectorXd Distance(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2)
-        {
-            return RawDistance(q1, q2).cwiseAbs();
-        }
-
-        static double RawJointDistance(const SimpleJointModel& j1, const SimpleJointModel& j2)
-        {
-            assert(j1.IsContinuous() == j2.IsContinuous());
-            return j1.SignedDistance(j1.GetValue(), j2.GetValue());
-        }
-
-        static Eigen::VectorXd RawDistance(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2)
-        {
-            assert(q1.size() == q2.size());
-            Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(q1.size()));
-            for (size_t idx = 0; idx < q1.size(); idx++)
-            {
-                const SimpleJointModel& j1 = q1[idx];
-                const SimpleJointModel& j2 = q2[idx];
-                distances((int64_t)idx) = RawJointDistance(j1, j2);
-            }
-            return distances;
-        }
-
-        static inline std::string TypeName()
-        {
-            return std::string("SimpleLinkedDimDistancer");
-        }
-    };
-
-    class SimpleLinkedDistancer
-    {
-    public:
-
-        double operator()(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2) const
-        {
-            return Distance(q1, q2);
-        }
-
-        static double Distance(const SimpleLinkedConfiguration& q1, const SimpleLinkedConfiguration& q2)
-        {
-            const Eigen::VectorXd dim_distances = SimpleLinkedDimDistancer::Distance(q1, q2);
-            return dim_distances.norm();
-        }
-
-        static inline std::string TypeName()
-        {
-            return std::string("SimpleLinkedDistancer");
-        }
-    };
-
     struct ROBOT_CONFIG
     {
         double kp;
@@ -1004,7 +831,7 @@ namespace simplelinked_robot_helpers
 
         inline double ComputeDistanceTo(const SimpleLinkedConfiguration& target) const
         {
-            return SimpleLinkedDistancer::Distance(GetPosition(), target);
+            return ComputeConfigurationDistance(GetPosition(), target);
         }
 
         template<typename PRNG>
@@ -1013,7 +840,7 @@ namespace simplelinked_robot_helpers
             // Get the current position
             const SimpleLinkedConfiguration current = GetPosition(rng);
             // Get the current error
-            const Eigen::VectorXd current_error = SimpleLinkedDimDistancer::RawDistance(current, target);
+            const Eigen::VectorXd current_error = ComputePerDimensionConfigurationRawDistance(current, target);
             // Make the control action
             Eigen::VectorXd control_action = Eigen::VectorXd::Zero(current_error.size());
             int64_t control_idx = 0;
@@ -1194,6 +1021,114 @@ namespace simplelinked_robot_helpers
         inline double GetMaxMotionPerStep() const
         {
             return max_motion_per_unit_step_;
+        }
+
+        inline SimpleLinkedConfiguration AverageConfigurations(const std::vector<SimpleLinkedConfiguration>& configurations) const
+        {
+            if (configurations.size() > 0)
+            {
+                // Safety checks
+                const SimpleLinkedConfiguration& representative_config = configurations.front();
+                for (size_t idx = 0; idx < configurations.size(); idx++)
+                {
+                    const SimpleLinkedConfiguration& current_config = configurations[idx];
+                    assert(representative_config.size() == current_config.size());
+                    for (size_t jdx = 0; jdx < representative_config.size(); jdx++)
+                    {
+                        const SimpleJointModel& jr = representative_config[jdx];
+                        const SimpleJointModel& jc = current_config[jdx];
+                        assert(jr.IsRevolute() == jc.IsRevolute());
+                        assert(jr.IsContinuous() == jc.IsContinuous());
+                    }
+                }
+                // Get number of DoF
+                const size_t config_size = representative_config.size();
+                // Separate the joint values
+                std::vector<std::vector<double>> raw_values(config_size);
+                for (size_t idx = 0; idx < configurations.size(); idx++)
+                {
+                    const SimpleLinkedConfiguration& q = configurations[idx];
+                    for (size_t qdx = 0; qdx < config_size; qdx++)
+                    {
+                        const double jval = q[qdx].GetValue();
+                        raw_values[qdx].push_back(jval);
+                    }
+                }
+                // Average each joint
+                SimpleLinkedConfiguration average_config;
+                average_config.reserve(config_size);
+                for (size_t jdx = 0; jdx < config_size; jdx++)
+                {
+                    const std::vector<double>& values = raw_values[jdx];
+                    const SimpleJointModel& representative_joint = representative_config[jdx];
+                    if (representative_joint.IsContinuous())
+                    {
+                        const double average_value = EigenHelpers::AverageContinuousRevolute(values);
+                        average_config.push_back(representative_joint.CopyWithNewValue(average_value));
+                    }
+                    else
+                    {
+                        const double average_value = EigenHelpers::AverageStdVectorDouble(values);
+                        average_config.push_back(representative_joint.CopyWithNewValue(average_value));
+                    }
+                }
+                return average_config;
+            }
+            else
+            {
+                return SimpleLinkedConfiguration();
+            }
+        }
+
+        inline SimpleLinkedConfiguration InterpolateBetweenConfigurations(const SimpleLinkedConfiguration& start, const SimpleLinkedConfiguration& end, const double ratio) const
+        {
+            assert(start.size() == end.size());
+            // Make the interpolated config
+            SimpleLinkedConfiguration interpolated;
+            interpolated.reserve(start.size());
+            for (size_t idx = 0; idx < start.size(); idx++)
+            {
+                const SimpleJointModel& j1 = start[idx];
+                const SimpleJointModel& j2 = end[idx];
+                assert(j1.IsRevolute() == j2.IsRevolute());
+                assert(j1.IsContinuous() == j2.IsContinuous());
+                if (j1.IsContinuous())
+                {
+                    const double interpolated_value = EigenHelpers::InterpolateContinuousRevolute(j1.GetValue(), j2.GetValue(), ratio);
+                    interpolated.push_back(j1.CopyWithNewValue(interpolated_value));
+                }
+                else
+                {
+                    const double interpolated_value = EigenHelpers::Interpolate(j1.GetValue(), j2.GetValue(), ratio);
+                    interpolated.push_back(j1.CopyWithNewValue(interpolated_value));
+                }
+            }
+            return interpolated;
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
+        {
+            assert(config1.size() == config2.size());
+            Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(config1.size()));
+            for (size_t idx = 0; idx < config1.size(); idx++)
+            {
+                const SimpleJointModel& j1 = config1[idx];
+                const SimpleJointModel& j2 = config2[idx];
+                assert(j1.IsRevolute() == j2.IsRevolute());
+                assert(j1.IsContinuous() == j2.IsContinuous());
+                distances((int64_t)idx) = j1.SignedDistance(j1.GetValue(), j2.GetValue());
+            }
+            return distances;
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
+        {
+            return ComputePerDimensionConfigurationRawDistance(config1, config2).cwiseAbs();
+        }
+
+        inline double ComputeConfigurationDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
+        {
+            return ComputePerDimensionConfigurationRawDistance(config1, config2).norm();
         }
     };
 }

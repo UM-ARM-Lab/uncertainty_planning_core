@@ -17,13 +17,13 @@
 
 namespace execution_policy
 {
-    template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>>
     class PolicyGraphBuilder
     {
     private:
 
         // Typedef so we don't hate ourselves
-        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> UncertaintyPlanningState;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningState;
         typedef simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> UncertaintyPlanningTreeState;
         typedef std::vector<UncertaintyPlanningTreeState> UncertaintyPlanningTree;
         typedef arc_dijkstras::GraphNode<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraphNode;
@@ -234,18 +234,18 @@ namespace execution_policy
         }
     };
 
-    template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>>
     class ExecutionPolicy
     {
     protected:
 
         // Typedef so we don't hate ourselves
-        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> UncertaintyPlanningState;
+        typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningState;
         typedef simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> UncertaintyPlanningTreeState;
         typedef std::vector<UncertaintyPlanningTreeState> UncertaintyPlanningTree;
         typedef arc_dijkstras::GraphNode<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraphNode;
         typedef arc_dijkstras::Graph<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>> PolicyGraph;
-        typedef PolicyGraphBuilder<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> ExecutionPolicyGraphBuilder;
+        typedef PolicyGraphBuilder<Configuration, ConfigSerializer, ConfigAlloc> ExecutionPolicyGraphBuilder;
 
         bool initialized_;
         // Raw data used to rebuild the policy graph
@@ -278,14 +278,14 @@ namespace execution_policy
             }
         }
 
-        static inline uint64_t Serialize(const ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& policy, std::vector<uint8_t>& buffer)
+        static inline uint64_t Serialize(const ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>& policy, std::vector<uint8_t>& buffer)
         {
             return policy.SerializeSelf(buffer);
         }
 
-        static inline std::pair<ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        static inline std::pair<ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc> temp_policy;
+            ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc> temp_policy;
             const uint64_t bytes_read = temp_policy.DeserializeSelf(buffer, current);
             return std::make_pair(temp_policy, bytes_read);
         }
@@ -593,7 +593,7 @@ namespace execution_policy
                 if (possible_match_check_clusters.size() == 1)
                 {
                     const Configuration possible_match_state_expectation = possible_match_state.GetExpectation();
-                    std::cout << "Possible result state matches with distance " << DistanceFn::Distance(current_config, possible_match_state_expectation) << " and expectation " << PrettyPrint::PrettyPrint(possible_match_state_expectation) << std::endl;
+                    std::cout << "Possible result state matches with expectation " << PrettyPrint::PrettyPrint(possible_match_state_expectation) << std::endl;
                     expected_result_state_matches.push_back(possible_match);
                 }
             }
@@ -613,8 +613,6 @@ namespace execution_policy
                 std::cout << "Result state matched none of the " << expected_possible_result_states.size() << " expected results, adding a new state" << std::endl;
                 // Compute the parameters of the new node
                 const uint64_t new_child_state_id = planner_tree_.size() + UINT64_C(1000000000);
-                std::vector<Configuration, ConfigAlloc> new_child_particles;
-                new_child_particles.push_back(current_config);
                 // These will get updated in the recursive call (that's why the attempt/reached counts are zero)
                 const uint32_t reached_count = 0u;
                 const double effective_edge_Pfeasibility = 0.0;
@@ -656,7 +654,7 @@ namespace execution_policy
                     split_id = child_state.GetSplitId();
                 }
                 // Put together the new state
-                const UncertaintyPlanningState new_child_state(new_child_state_id, new_child_particles, attempt_count, reached_count, effective_edge_Pfeasibility, reverse_attempt_count, reverse_reached_count, parent_motion_Pfeasibility, step_size, command, transition_id, reverse_transition_id, split_id);
+                const UncertaintyPlanningState new_child_state(new_child_state_id, current_config, attempt_count, reached_count, effective_edge_Pfeasibility, reverse_attempt_count, reverse_reached_count, parent_motion_Pfeasibility, step_size, command, transition_id, reverse_transition_id, split_id);
                 // We add a new child state to the graph
                 const UncertaintyPlanningTreeState new_child_tree_state(new_child_state, previous_state_index);
                 planner_tree_.push_back(new_child_tree_state);
@@ -1045,17 +1043,17 @@ namespace execution_policy
     };
 }
 
-template<typename Configuration, typename ConfigSerializer, typename AverageFn, typename DistanceFn, typename DimDistanceFn, typename ConfigAlloc=std::allocator<Configuration>>
-std::ostream& operator<<(std::ostream& strm, const execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, AverageFn, DimDistanceFn, ConfigAlloc>& policy)
+template<typename Robot, typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>>
+std::ostream& operator<<(std::ostream& strm, const execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>& policy)
 {
-    const std::vector<simple_rrt_planner::SimpleRRTPlannerState<uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>>>& raw_policy_tree = policy.GetRawPolicy();
+    const std::vector<simple_rrt_planner::SimpleRRTPlannerState<uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>>>& raw_policy_tree = policy.GetRawPolicy();
     strm << "Execution Policy - Policy: ";
     for (size_t idx = 0; idx < raw_policy_tree.size(); idx++)
     {
-        const simple_rrt_planner::SimpleRRTPlannerState<uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>>& policy_tree_state = raw_policy_tree[idx];
+        const simple_rrt_planner::SimpleRRTPlannerState<uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>>& policy_tree_state = raw_policy_tree[idx];
         const int64_t parent_index = policy_tree_state.GetParentIndex();
         const std::vector<int64_t>& child_indices = policy_tree_state.GetChildIndices();
-        const uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, AverageFn, DistanceFn, DimDistanceFn, ConfigAlloc>& policy_state = policy_tree_state.GetValueImmutable();
+        const uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>& policy_state = policy_tree_state.GetValueImmutable();
         strm << "\nState # " << idx << " with parent " << parent_index << " and children " << PrettyPrint::PrettyPrint(child_indices, true) << " - value: " << PrettyPrint::PrettyPrint(policy_state);
     }
     return strm;

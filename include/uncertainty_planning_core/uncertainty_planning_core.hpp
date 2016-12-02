@@ -136,7 +136,7 @@ namespace uncertainty_planning_core
         return options;
     }
 
-    typedef execution_policy::ExecutionPolicy<Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::EigenMatrixD31Serializer, simplese2_robot_helpers::SimpleSE2Averager, simplese2_robot_helpers::SimpleSE2Distancer, simplese2_robot_helpers::SimpleSE2DimDistancer, std::allocator<Eigen::Matrix<double, 3, 1>>> SE2Policy;
+    typedef execution_policy::ExecutionPolicy<Eigen::Matrix<double, 3, 1>, simplese2_robot_helpers::EigenMatrixD31Serializer, std::allocator<Eigen::Matrix<double, 3, 1>>> SE2Policy;
 
     bool SaveSE2Policy(const SE2Policy& policy, const std::string& filename);
 
@@ -150,7 +150,7 @@ namespace uncertainty_planning_core
 
     std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE2UncertaintyPolicy(const OPTIONS& options, const simplese2_robot_helpers::SimpleSE2Robot& robot, const simplese2_robot_helpers::SimpleSE2BaseSampler& sampler, SE2Policy policy, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, const std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&,  const Eigen::Matrix<double, 3, 1>&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
 
-    typedef execution_policy::ExecutionPolicy<Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, simplese3_robot_helpers::SimpleSE3Averager, simplese3_robot_helpers::SimpleSE3Distancer, simplese3_robot_helpers::SimpleSE3DimDistancer, Eigen::aligned_allocator<Eigen::Affine3d>> SE3Policy;
+    typedef execution_policy::ExecutionPolicy<Eigen::Affine3d, simplese3_robot_helpers::EigenAffine3dSerializer, Eigen::aligned_allocator<Eigen::Affine3d>> SE3Policy;
 
     bool SaveSE3Policy(const SE3Policy& policy, const std::string& filename);
 
@@ -164,7 +164,7 @@ namespace uncertainty_planning_core
 
     std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE3UncertaintyPolicy(const OPTIONS& options, const simplese3_robot_helpers::SimpleSE3Robot& robot, const simplese3_robot_helpers::SimpleSE3BaseSampler& sampler, SE3Policy policy, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, const std::function<EigenHelpers::VectorAffine3d(const Eigen::Affine3d&, const Eigen::Affine3d&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
 
-    typedef execution_policy::ExecutionPolicy<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, baxter_actuator_helpers::SimpleLinkedDistancer, baxter_actuator_helpers::SimpleLinkedDimDistancer> BaxterPolicy;
+    typedef execution_policy::ExecutionPolicy<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer> BaxterPolicy;
 
     bool SaveBaxterPolicy(const BaxterPolicy& policy, const std::string& filename);
 
@@ -178,7 +178,7 @@ namespace uncertainty_planning_core
 
     std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteBaxterUncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, const std::function<std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>>(const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
 
-    typedef execution_policy::ExecutionPolicy<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, simplelinked_robot_helpers::SimpleLinkedAverager, ur5_actuator_helpers::SimpleLinkedDistancer, ur5_actuator_helpers::SimpleLinkedDimDistancer> UR5Policy;
+    typedef execution_policy::ExecutionPolicy<simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer> UR5Policy;
 
     bool SaveUR5Policy(const UR5Policy& policy, const std::string& filename);
 
