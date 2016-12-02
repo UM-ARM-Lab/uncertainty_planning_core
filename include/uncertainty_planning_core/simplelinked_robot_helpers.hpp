@@ -376,25 +376,25 @@ namespace simplelinked_robot_helpers
     struct JointControllerGroup
     {
         simple_pid_controller::SimplePIDController controller;
-        simple_uncertainty_models::SimpleUncertainSensor sensor;
+        simple_uncertainty_models::TruncatedNormalUncertainSensor sensor;
         ActuatorModel actuator;
 
         JointControllerGroup(const ROBOT_CONFIG& config, const ActuatorModel& actuator_model) : actuator(actuator_model)
         {
             controller = simple_pid_controller::SimplePIDController(config.kp, config.ki, config.kd, config.integral_clamp);
-            sensor = simple_uncertainty_models::SimpleUncertainSensor(-config.max_sensor_noise, config.max_sensor_noise);
+            sensor = simple_uncertainty_models::TruncatedNormalUncertainSensor(-config.max_sensor_noise, config.max_sensor_noise);
         }
 
         JointControllerGroup(const ROBOT_CONFIG& config) : actuator(ActuatorModel())
         {
             controller = simple_pid_controller::SimplePIDController(config.kp, config.ki, config.kd, config.integral_clamp);
-            sensor = simple_uncertainty_models::SimpleUncertainSensor(-config.max_sensor_noise, config.max_sensor_noise);
+            sensor = simple_uncertainty_models::TruncatedNormalUncertainSensor(-config.max_sensor_noise, config.max_sensor_noise);
         }
 
         JointControllerGroup() : actuator(ActuatorModel())
         {
             controller = simple_pid_controller::SimplePIDController(0.0, 0.0, 0.0, 0.0);
-            sensor = simple_uncertainty_models::SimpleUncertainSensor(0.0, 0.0);
+            sensor = simple_uncertainty_models::TruncatedNormalUncertainSensor(0.0, 0.0);
         }
     };
 
@@ -438,6 +438,7 @@ namespace simplelinked_robot_helpers
         Eigen::MatrixXi self_collision_map_;
         std::vector<RobotLink> links_;
         std::vector<RobotJoint<ActuatorModel>> joints_;
+        std::vector<double> joint_distance_weights_;
 
         inline void UpdateTransforms()
         {
@@ -659,7 +660,7 @@ namespace simplelinked_robot_helpers
             return (max_motion * 8.0);
         }
 
-        inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
+        inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position, const std::vector<double>& joint_distance_weights)
         {
             base_transform_ = base_transform;
             // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
@@ -670,6 +671,8 @@ namespace simplelinked_robot_helpers
                 throw std::invalid_argument("Attempted to construct a SimpleLinkedRobot with an invalid robot model");
             }
             num_active_joints_ = GetNumActiveJoints();
+            assert(joint_distance_weights.size() == num_active_joints_);
+            joint_distance_weights_ = EigenHelpers::Abs(joint_distance_weights);
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             ResetPosition(initial_position);
@@ -677,7 +680,7 @@ namespace simplelinked_robot_helpers
             initialized_ = true;
         }
 
-        inline SimpleLinkedRobot(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position)
+        inline SimpleLinkedRobot(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position, const std::vector<double>& joint_distance_weights)
         {
             base_transform_ = Eigen::Affine3d::Identity();
             // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
@@ -688,6 +691,8 @@ namespace simplelinked_robot_helpers
                 throw std::invalid_argument("Attempted to construct a SimpleLinkedRobot with an invalid robot model");
             }
             num_active_joints_ = GetNumActiveJoints();
+            assert(joint_distance_weights.size() == num_active_joints_);
+            joint_distance_weights_ = EigenHelpers::Abs(joint_distance_weights);
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             ResetPosition(initial_position);
@@ -840,7 +845,7 @@ namespace simplelinked_robot_helpers
             // Get the current position
             const SimpleLinkedConfiguration current = GetPosition(rng);
             // Get the current error
-            const Eigen::VectorXd current_error = ComputePerDimensionConfigurationRawDistance(current, target);
+            const Eigen::VectorXd current_error = ComputeUnweightedPerDimensionConfigurationRawDistance(current, target);
             // Make the control action
             Eigen::VectorXd control_action = Eigen::VectorXd::Zero(current_error.size());
             int64_t control_idx = 0;
@@ -1106,7 +1111,7 @@ namespace simplelinked_robot_helpers
             return interpolated;
         }
 
-        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
+        inline Eigen::VectorXd ComputeUnweightedPerDimensionConfigurationRawDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
         {
             assert(config1.size() == config2.size());
             Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(config1.size()));
@@ -1117,6 +1122,24 @@ namespace simplelinked_robot_helpers
                 assert(j1.IsRevolute() == j2.IsRevolute());
                 assert(j1.IsContinuous() == j2.IsContinuous());
                 distances((int64_t)idx) = j1.SignedDistance(j1.GetValue(), j2.GetValue());
+            }
+            return distances;
+        }
+
+        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
+        {
+            assert(config1.size() == config2.size());
+            assert(config1.size() == num_active_joints_);
+            Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(config1.size()));
+            for (size_t idx = 0; idx < config1.size(); idx++)
+            {
+                const SimpleJointModel& j1 = config1[idx];
+                const SimpleJointModel& j2 = config2[idx];
+                assert(j1.IsRevolute() == j2.IsRevolute());
+                assert(j1.IsContinuous() == j2.IsContinuous());
+                const double raw_distance = j1.SignedDistance(j1.GetValue(), j2.GetValue());
+                const double joint_distance_weight = joint_distance_weights_[idx];
+                distances((int64_t)idx) = raw_distance * joint_distance_weight;
             }
             return distances;
         }

@@ -172,11 +172,13 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
     const std::vector<double> joint_uncertainty_params = baxter_linked_common_config::GetJointUncertaintyParams(options);
     assert(joint_uncertainty_params.size() == 7);
+    const std::vector<double> joint_distance_weights = baxter_linked_common_config::GetJointDistanceWeights();
+    assert(joint_distance_weights.size() == 7);
     const std::pair<baxter_linked_common_config::SLC, baxter_linked_common_config::SLC> start_and_goal = baxter_linked_common_config::GetStartAndGoal();
     const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
     const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = baxter_linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, options.environment_name);
+    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights, options.environment_name);
     // Load the policy
     try
     {

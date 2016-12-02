@@ -149,8 +149,16 @@ namespace ur5_linked_common_config
         return uncertainty_params;
     }
 
-    typedef ur5_actuator_helpers::UR5JointActuatorModel UR5JointActuatorModel;
-    //typedef simple_uncertainty_models::SimpleUncertainVelocityActuator UR5JointActuatorModel;
+    inline std::vector<double> GetJointDistanceWeights()
+    {
+        const std::vector<double> max_velocities = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+        std::vector<double> distance_weights(max_velocities.size(), 0.0);
+        for (size_t idx = 0; idx < max_velocities.size(); idx++)
+        {
+            distance_weights[idx] = 1.0 / max_velocities[idx];
+        }
+        return distance_weights;
+    }
 
     inline void MakeCylinderPoints(const double radius, const double length, const double resolution, const Eigen::Vector3d& axis, const std::shared_ptr<EigenHelpers::VectorVector3d>& points)
     {
@@ -222,7 +230,9 @@ namespace ur5_linked_common_config
         }
     }
 
-    inline simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params)
+    typedef uncertainty_planning_core::UR5JointActuatorModel UR5JointActuatorModel;
+
+    inline simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::vector<double>& joint_distance_weights)
     {
         const double shoulder_pan_joint_noise = joint_uncertainty_params[0];
         const double shoulder_lift_joint_noise = joint_uncertainty_params[1];
@@ -240,9 +250,9 @@ namespace ur5_linked_common_config
         simplelinked_robot_helpers::RobotLink wrist_3_link(GetLinkPoints("wrist_3_link"), "wrist_3_link");
         simplelinked_robot_helpers::RobotLink ee_link(GetLinkPoints("ee_link"), "ee_link");
         // Collect the links
-        std::vector<simplelinked_robot_helpers::RobotLink> links = {base_link, shoulder_link, upper_arm_link, forearm_link, wrist_1_link, wrist_2_link, wrist_3_link, ee_link};
+        const std::vector<simplelinked_robot_helpers::RobotLink> links = {base_link, shoulder_link, upper_arm_link, forearm_link, wrist_1_link, wrist_2_link, wrist_3_link, ee_link};
         // Set allowed self-collisions (i.e. collisions that actually can't happen, so if they occur, they are numerical issues)
-        std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7)};
+        const std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7)};
         // Make the reference configuration
         const SLC reference_configuration = GetReferenceConfiguration();
         // Make the joints
@@ -329,8 +339,8 @@ namespace ur5_linked_common_config
         // We don't need an uncertainty model for a fixed joint
         ee_fixed_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(joint_config);
         // Collect the joints
-        std::vector<simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel>>joints = {shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint, ee_fixed_joint};
-        const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration);
+        const std::vector<simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel>> joints = {shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint, ee_fixed_joint};
+        const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration, joint_distance_weights);
         return robot;
     }
 

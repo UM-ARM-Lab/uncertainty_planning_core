@@ -167,10 +167,16 @@ namespace baxter_linked_common_config
         return uncertainty_params;
     }
 
-
-
-    //typedef baxter_joint_actuator_model::BaxterJointActuatorModel BaxterJointActuatorModel;
-    typedef simple_uncertainty_models::SimpleUncertainVelocityActuator BaxterJointActuatorModel;
+    inline std::vector<double> GetJointDistanceWeights()
+    {
+        const std::vector<double> max_velocities = {0.27, 0.27, 0.27, 0.27, 0.3, 0.3, 0.5};
+        std::vector<double> distance_weights(max_velocities.size(), 0.0);
+        for (size_t idx = 0; idx < max_velocities.size(); idx++)
+        {
+            distance_weights[idx] = 1.0 / max_velocities[idx];
+        }
+        return distance_weights;
+    }
 
     inline void GetEndEffectorPoints(simplelinked_robot_helpers::RobotLink& end_effector_link, const std::string& environment_id)
     {
@@ -235,7 +241,9 @@ namespace baxter_linked_common_config
         }
     }
 
-    inline simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::string& environment_id)
+    typedef uncertainty_planning_core::BaxterJointActuatorModel BaxterJointActuatorModel;
+
+    inline simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::vector<double>& joint_distance_weights, const std::string& environment_id)
     {
         const double s0_noise = joint_uncertainty_params[0];
         const double s1_noise = joint_uncertainty_params[1];
@@ -350,8 +358,8 @@ namespace baxter_linked_common_config
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.15));
         // Get the end of the wrist/EE shape
         GetEndEffectorPoints(right_wrist, environment_id);
-        std::vector<simplelinked_robot_helpers::RobotLink> links = {torso, right_arm_mount, right_upper_shoulder, right_lower_shoulder, right_upper_elbow, right_lower_elbow, right_upper_forearm, right_lower_forearm, right_wrist};
-        std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7), std::pair<size_t, size_t>(7, 8)};
+        const std::vector<simplelinked_robot_helpers::RobotLink> links = {torso, right_arm_mount, right_upper_shoulder, right_lower_shoulder, right_upper_elbow, right_lower_elbow, right_upper_forearm, right_lower_forearm, right_wrist};
+        const std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7), std::pair<size_t, size_t>(7, 8)};
         // right_s0
         simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_arm_mount_joint;
         right_arm_mount_joint.name = "right_arm_mount_joint";
@@ -446,8 +454,8 @@ namespace baxter_linked_common_config
         simplelinked_robot_helpers::ROBOT_CONFIG w2_config = joint_config;
         w2_config.velocity_limit = 0.5 * 0.75;
         right_w2.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w2_config, right_w2_joint_model);
-        std::vector<simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel>>joints = {right_arm_mount_joint, right_s0, right_s1, right_e0, right_e1, right_w0, right_w1, right_w2};
-        const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration);
+        const std::vector<simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel>> joints = {right_arm_mount_joint, right_s0, right_s1, right_e0, right_e1, right_w0, right_w1, right_w2};
+        const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration, joint_distance_weights);
         return robot;
     }
 

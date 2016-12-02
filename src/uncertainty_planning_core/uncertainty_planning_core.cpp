@@ -57,22 +57,22 @@ SE3Policy uncertainty_planning_core::LoadSE3Policy(const std::string& filename)
 
 bool uncertainty_planning_core::SaveBaxterPolicy(const BaxterPolicy& policy, const std::string& filename)
 {
-    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::SavePolicy(policy, filename);
+    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::SavePolicy(policy, filename);
 }
 
 BaxterPolicy uncertainty_planning_core::LoadBaxterPolicy(const std::string& filename)
 {
-    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::LoadPolicy(filename);
+    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::LoadPolicy(filename);
 }
 
 bool uncertainty_planning_core::SaveUR5Policy(const UR5Policy& policy, const std::string& filename)
 {
-    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::SavePolicy(policy, filename);
+    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::SavePolicy(policy, filename);
 }
 
 UR5Policy uncertainty_planning_core::LoadUR5Policy(const std::string& filename)
 {
-    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::LoadPolicy(filename);
+    return uncertainty_contact_planning::UncertaintyPlanningSpace<simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel>, simplelinked_robot_helpers::SimpleLinkedBaseSampler, simplelinked_robot_helpers::SimpleLinkedConfiguration, simplelinked_robot_helpers::SimpleLinkedConfigurationSerializer, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>, std::mt19937_64>::LoadPolicy(filename);
 }
 
 std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> uncertainty_planning_core::DemonstrateSE2Simulator(const OPTIONS& options, const simplese2_robot_helpers::SimpleSE2Robot& robot, const simplese2_robot_helpers::SimpleSE2BaseSampler& sampler, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher)
@@ -172,9 +172,9 @@ std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vec
     return planning_space.ExecuteExectionPolicy(policy, start, goal, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_debug_publisher, false, 0.001);
 }
 
-std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>> uncertainty_planning_core::DemonstrateBaxterSimulator(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
+std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>> uncertainty_planning_core::DemonstrateBaxterSimulator(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -184,9 +184,9 @@ std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocato
     return uncertainty_planning_tools::ExtractTrajectoryFromTrace(trace);
 }
 
-std::pair<BaxterPolicy, std::map<std::string, double>> uncertainty_planning_core::PlanBaxterUncertainty(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
+std::pair<BaxterPolicy, std::map<std::string, double>> uncertainty_planning_core::PlanBaxterUncertainty(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -196,9 +196,9 @@ std::pair<BaxterPolicy, std::map<std::string, double>> uncertainty_planning_core
     return planning_space.Plan(start, goal, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, display_debug_publisher);
 }
 
-std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::SimulateBaxterUncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
+std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::SimulateBaxterUncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -208,9 +208,9 @@ std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::
     return planning_space.SimulateExectionPolicy(policy, start, goal, options.num_policy_simulations, options.max_exec_actions, display_debug_publisher, false, 0.001);
 }
 
-std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::ExecuteBaxterUncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, const std::function<std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>>(const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher)
+std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::ExecuteBaxterUncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, const std::function<std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>>(const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<baxter_actuator_helpers::BaxterJointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -220,9 +220,9 @@ std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::
     return planning_space.ExecuteExectionPolicy(policy, start, goal, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_debug_publisher, false, 0.001);
 }
 
-std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>> uncertainty_planning_core::DemonstrateUR5Simulator(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
+std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>> uncertainty_planning_core::DemonstrateUR5Simulator(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -232,9 +232,9 @@ std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocato
     return uncertainty_planning_tools::ExtractTrajectoryFromTrace(trace);
 }
 
-std::pair<UR5Policy, std::map<std::string, double>> uncertainty_planning_core::PlanUR5Uncertainty(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
+std::pair<UR5Policy, std::map<std::string, double>> uncertainty_planning_core::PlanUR5Uncertainty(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -244,9 +244,9 @@ std::pair<UR5Policy, std::map<std::string, double>> uncertainty_planning_core::P
     return planning_space.Plan(start, goal, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, display_debug_publisher);
 }
 
-std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::SimulateUR5UncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, UR5Policy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
+std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::SimulateUR5UncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, UR5Policy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;
@@ -256,9 +256,9 @@ std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vec
     return planning_space.SimulateExectionPolicy(policy, start, goal, options.num_policy_simulations, options.max_exec_actions, display_debug_publisher, true, 0.001);
 }
 
-std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::ExecuteUR5UncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, UR5Policy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, const std::function<std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>>(const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher)
+std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> uncertainty_planning_core::ExecuteUR5UncertaintyPolicy(const OPTIONS& options, const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simplelinked_robot_helpers::SimpleLinkedBaseSampler& sampler, UR5Policy policy, const simplelinked_robot_helpers::SimpleLinkedConfiguration& start, const simplelinked_robot_helpers::SimpleLinkedConfiguration& goal, const std::function<std::vector<simplelinked_robot_helpers::SimpleLinkedConfiguration, std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration>>(const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const simplelinked_robot_helpers::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher)
 {
-    typedef simplelinked_robot_helpers::SimpleLinkedRobot<ur5_actuator_helpers::UR5JointActuatorModel> Robot;
+    typedef simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> Robot;
     typedef simplelinked_robot_helpers::SimpleLinkedConfiguration Configuration;
     typedef std::allocator<simplelinked_robot_helpers::SimpleLinkedConfiguration> ConfigAlloc;
     typedef std::mt19937_64 PRNG;

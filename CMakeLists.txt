@@ -97,8 +97,6 @@ set(UNCERTAINTY_PLANNING_CORE_SOURCES
     include/${PROJECT_NAME}/simplese2_robot_helpers.hpp
     include/${PROJECT_NAME}/simplese3_robot_helpers.hpp
     include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp
-    include/${PROJECT_NAME}/baxter_actuator_helpers.hpp
-    include/${PROJECT_NAME}/ur5_actuator_helpers.hpp
     include/${PROJECT_NAME}/uncertainty_planning_core.hpp
     src/${PROJECT_NAME}/uncertainty_planning_core.cpp)
 
