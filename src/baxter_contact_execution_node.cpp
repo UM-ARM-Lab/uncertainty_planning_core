@@ -19,12 +19,11 @@
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/simplese2_robot_helpers.hpp>
-#include <uncertainty_planning_core/baxter_linked_common_config.hpp>
+#include <uncertainty_planning_core/baxter_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <uncertainty_planning_core/SimpleLinkedRobotMove.h>
-#include <uncertainty_planning_core/SetBaxterActuationError.h>
+#include <uncertainty_planning_core/SetLinkedActuationError.h>
 
 using namespace uncertainty_contact_planning;
 
@@ -148,17 +147,13 @@ inline std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linke
     return configs;
 }
 
-void set_uncertainty(const double s0_error, const double s1_error, const double e0_error, const double e1_error, const double w0_error, const double w1_error, const double w2_error, ros::ServiceClient& set_uncertainty_service)
+void set_uncertainty(const std::vector<double>& joint_uncertainties, ros::ServiceClient& set_uncertainty_service)
 {
-    uncertainty_planning_core::SetBaxterActuationErrorRequest req;
-    req.s0_actuator_error = s0_error;
-    req.s1_actuator_error = s1_error;
-    req.e0_actuator_error = e0_error;
-    req.e1_actuator_error = e1_error;
-    req.w0_actuator_error = w0_error;
-    req.w1_actuator_error = w1_error;
-    req.w2_actuator_error = w2_error;
-    uncertainty_planning_core::SetBaxterActuationErrorResponse res;
+    assert(joint_uncertainties.size() == 7);
+    uncertainty_planning_core::SetLinkedActuationErrorRequest req;
+    req.actuator_name = {"right_s0", "right_s1", "right_e0", "right_e1", "right_w0", "right_w1", "right_w2"};
+    req.actuator_error = joint_uncertainties;
+    uncertainty_planning_core::SetLinkedActuationErrorResponse res;
     if (set_uncertainty_service.call(req, res) == false)
     {
         std::cout << "Failed to set actuator error" << std::endl;
@@ -175,10 +170,10 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
     const std::vector<double> joint_distance_weights = baxter_linked_common_config::GetJointDistanceWeights();
     assert(joint_distance_weights.size() == 7);
     const std::pair<baxter_linked_common_config::SLC, baxter_linked_common_config::SLC> start_and_goal = baxter_linked_common_config::GetStartAndGoal();
-    const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
-    const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
+    const simple_samplers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
+    const simple_robot_models::LINKED_ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = baxter_linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights, options.environment_name);
+    const simple_robot_models::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights, options.environment_name);
     // Load the policy
     try
     {
@@ -197,7 +192,7 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher, ros::Servic
         if (options.num_policy_executions > 0)
         {
             std::cout << "Setting actuation uncertainty..." << std::endl;
-            set_uncertainty(joint_uncertainty_params[0], joint_uncertainty_params[1], joint_uncertainty_params[2], joint_uncertainty_params[3], joint_uncertainty_params[4], joint_uncertainty_params[5], joint_uncertainty_params[6], set_uncertainty_service);
+            set_uncertainty(joint_uncertainty_params, set_uncertainty_service);
         }
         const std::vector<std::string> joint_names = robot.GetActiveJointNames();
         std::function<std::vector<baxter_linked_common_config::SLC, std::allocator<baxter_linked_common_config::SLC>>(const baxter_linked_common_config::SLC&, const baxter_linked_common_config::SLC&, const double, const double, const bool)> robot_execution_fn = [&] (const baxter_linked_common_config::SLC& target_configuration, const baxter_linked_common_config::SLC& expected_result_configuration, const double duration, const double execution_shortcut_distance, const bool reset) { return move_robot(joint_names, target_configuration, expected_result_configuration, duration, execution_shortcut_distance, reset, robot_control_service); };
@@ -244,7 +239,7 @@ int main(int argc, char** argv)
     ROS_INFO("Starting Baxter Contact Execution Node...");
     ros::Publisher display_debug_publisher = nh.advertise<visualization_msgs::MarkerArray>("uncertainty_planning_debug_display_markers", 1, true);
     ros::ServiceClient robot_control_service = nh.serviceClient<uncertainty_planning_core::SimpleLinkedRobotMove>("simple_linked_robot_move");
-    ros::ServiceClient set_uncertainty_service = nh.serviceClient<uncertainty_planning_core::SetBaxterActuationError>("baxter_robot/set_actuation_uncertainty");
+    ros::ServiceClient set_uncertainty_service = nh.serviceClient<uncertainty_planning_core::SetLinkedActuationError>("baxter_robot/set_actuation_uncertainty");
     //std::cout << set_uncertainty_service.getService() << std::endl;
     //set_uncertainty_service.waitForExistence();
     peg_in_hole_env_linked(display_debug_publisher, robot_control_service, set_uncertainty_service);

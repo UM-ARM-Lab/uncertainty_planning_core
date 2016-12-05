@@ -19,7 +19,6 @@
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/simplese2_robot_helpers.hpp>
 #include <uncertainty_planning_core/se2_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -107,9 +106,9 @@ void peg_in_hole_env_se2(ros::Publisher& display_debug_publisher, ros::ServiceCl
     const uncertainty_planning_core::OPTIONS options = se2_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
     const std::pair<Eigen::Matrix<double, 3, 1>, Eigen::Matrix<double, 3, 1>> start_and_goal = se2_common_config::GetStartAndGoal();
-    const simplese2_robot_helpers::SimpleSE2BaseSampler sampler = se2_common_config::GetSampler();
-    const simplese2_robot_helpers::ROBOT_CONFIG robot_config = se2_common_config::GetDefaultRobotConfig(options);
-    const simplese2_robot_helpers::SimpleSE2Robot robot = se2_common_config::GetRobot(robot_config);
+    const simple_samplers::SimpleSE2BaseSampler sampler = se2_common_config::GetSampler();
+    const simple_robot_models::SE2_ROBOT_CONFIG robot_config = se2_common_config::GetDefaultRobotConfig(options);
+    const simple_robot_models::SimpleSE2Robot robot = se2_common_config::GetRobot(robot_config);
     // Load the policy
     try
     {

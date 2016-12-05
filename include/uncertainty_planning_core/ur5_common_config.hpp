@@ -19,7 +19,8 @@
 #include "uncertainty_planning_core/simple_pid_controller.hpp"
 #include "uncertainty_planning_core/simple_uncertainty_models.hpp"
 #include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
-#include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_robot_models.hpp"
+#include "uncertainty_planning_core/simple_samplers.hpp"
 #include "uncertainty_planning_core/uncertainty_planning_core.hpp"
 
 #ifndef UR5_LINKED_COMMON_CONFIG_HPP
@@ -37,8 +38,8 @@
 
 namespace ur5_linked_common_config
 {
-    typedef simplelinked_robot_helpers::SimpleJointModel SJM;
-    typedef simplelinked_robot_helpers::SimpleLinkedConfiguration SLC;
+    typedef simple_robot_models::SimpleJointModel SJM;
+    typedef simple_robot_models::SimpleLinkedConfiguration SLC;
 
     inline uncertainty_planning_core::OPTIONS GetDefaultOptions()
     {
@@ -90,7 +91,7 @@ namespace ur5_linked_common_config
         return options;
     }
 
-    inline simplelinked_robot_helpers::ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
+    inline simple_robot_models::LINKED_ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
     {
         const double env_resolution = options.environment_resolution;
         const double kp = 0.1;
@@ -100,7 +101,7 @@ namespace ur5_linked_common_config
         const double velocity_limit = env_resolution * 2.0;
         const double max_sensor_noise = options.sensor_error;
         const double max_actuator_noise = options.actuator_error;
-        const simplelinked_robot_helpers::ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise);
+        const simple_robot_models::LINKED_ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise);
         return robot_config;
     }
 
@@ -232,7 +233,7 @@ namespace ur5_linked_common_config
 
     typedef uncertainty_planning_core::UR5JointActuatorModel UR5JointActuatorModel;
 
-    inline simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::vector<double>& joint_distance_weights)
+    inline simple_robot_models::SimpleLinkedRobot<UR5JointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simple_robot_models::LINKED_ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::vector<double>& joint_distance_weights)
     {
         const double shoulder_pan_joint_noise = joint_uncertainty_params[0];
         const double shoulder_lift_joint_noise = joint_uncertainty_params[1];
@@ -241,95 +242,95 @@ namespace ur5_linked_common_config
         const double wrist_2_joint_noise = joint_uncertainty_params[4];
         const double wrist_3_joint_noise = joint_uncertainty_params[5];
         // Make the robot model
-        simplelinked_robot_helpers::RobotLink base_link(GetLinkPoints("base_link"), "base_link");
-        simplelinked_robot_helpers::RobotLink shoulder_link(GetLinkPoints("shoulder_link"), "shoulder_link");
-        simplelinked_robot_helpers::RobotLink upper_arm_link(GetLinkPoints("upper_arm_link"), "upper_arm_link");
-        simplelinked_robot_helpers::RobotLink forearm_link(GetLinkPoints("forearm_link"), "forearm_link");
-        simplelinked_robot_helpers::RobotLink wrist_1_link(GetLinkPoints("wrist_1_link"), "wrist_1_link");
-        simplelinked_robot_helpers::RobotLink wrist_2_link(GetLinkPoints("wrist_2_link"), "wrist_2_link");
-        simplelinked_robot_helpers::RobotLink wrist_3_link(GetLinkPoints("wrist_3_link"), "wrist_3_link");
-        simplelinked_robot_helpers::RobotLink ee_link(GetLinkPoints("ee_link"), "ee_link");
+        simple_robot_models::RobotLink base_link(GetLinkPoints("base_link"), "base_link");
+        simple_robot_models::RobotLink shoulder_link(GetLinkPoints("shoulder_link"), "shoulder_link");
+        simple_robot_models::RobotLink upper_arm_link(GetLinkPoints("upper_arm_link"), "upper_arm_link");
+        simple_robot_models::RobotLink forearm_link(GetLinkPoints("forearm_link"), "forearm_link");
+        simple_robot_models::RobotLink wrist_1_link(GetLinkPoints("wrist_1_link"), "wrist_1_link");
+        simple_robot_models::RobotLink wrist_2_link(GetLinkPoints("wrist_2_link"), "wrist_2_link");
+        simple_robot_models::RobotLink wrist_3_link(GetLinkPoints("wrist_3_link"), "wrist_3_link");
+        simple_robot_models::RobotLink ee_link(GetLinkPoints("ee_link"), "ee_link");
         // Collect the links
-        const std::vector<simplelinked_robot_helpers::RobotLink> links = {base_link, shoulder_link, upper_arm_link, forearm_link, wrist_1_link, wrist_2_link, wrist_3_link, ee_link};
+        const std::vector<simple_robot_models::RobotLink> links = {base_link, shoulder_link, upper_arm_link, forearm_link, wrist_1_link, wrist_2_link, wrist_3_link, ee_link};
         // Set allowed self-collisions (i.e. collisions that actually can't happen, so if they occur, they are numerical issues)
         const std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7)};
         // Make the reference configuration
         const SLC reference_configuration = GetReferenceConfiguration();
         // Make the joints
         // Shoulder pan
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> shoulder_pan_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> shoulder_pan_joint;
         shoulder_pan_joint.name = "shoulder_pan_joint";
         shoulder_pan_joint.parent_link_index = 0;
         shoulder_pan_joint.child_link_index = 1;
         shoulder_pan_joint.joint_axis = Eigen::Vector3d::UnitZ();
         shoulder_pan_joint.joint_transform = Eigen::Translation3d(0.0, 0.0, 0.089159) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
         shoulder_pan_joint.joint_model = reference_configuration[0];
-        simplelinked_robot_helpers::ROBOT_CONFIG shoulder_pan_joint_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG shoulder_pan_joint_config = joint_config;
         shoulder_pan_joint_config.velocity_limit = 3.15;
         const UR5JointActuatorModel shoulder_pan_joint_model(std::abs(shoulder_pan_joint_noise), shoulder_pan_joint_config.velocity_limit);
-        shoulder_pan_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(shoulder_pan_joint_config, shoulder_pan_joint_model);
+        shoulder_pan_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(shoulder_pan_joint_config, shoulder_pan_joint_model);
         // Shoulder lift
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> shoulder_lift_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> shoulder_lift_joint;
         shoulder_lift_joint.name = "shoulder_lift_joint";
         shoulder_lift_joint.parent_link_index = 1;
         shoulder_lift_joint.child_link_index = 2;
         shoulder_lift_joint.joint_axis = Eigen::Vector3d::UnitY();
         shoulder_lift_joint.joint_transform = Eigen::Translation3d(0.0, 0.13585, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(0.0, M_PI_2, 0.0);
         shoulder_lift_joint.joint_model = reference_configuration[1];
-        simplelinked_robot_helpers::ROBOT_CONFIG shoulder_lift_joint_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG shoulder_lift_joint_config = joint_config;
         shoulder_lift_joint_config.velocity_limit = 3.15;
         const UR5JointActuatorModel shoulder_lift_joint_model(std::abs(shoulder_lift_joint_noise), shoulder_lift_joint_config.velocity_limit);
-        shoulder_lift_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(shoulder_lift_joint_config, shoulder_lift_joint_model);
+        shoulder_lift_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(shoulder_lift_joint_config, shoulder_lift_joint_model);
         // Elbow
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> elbow_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> elbow_joint;
         elbow_joint.name = "elbow_joint";
         elbow_joint.parent_link_index = 2;
         elbow_joint.child_link_index = 3;
         elbow_joint.joint_axis = Eigen::Vector3d::UnitY();
         elbow_joint.joint_transform = Eigen::Translation3d(0.0, -0.1197, 0.42500) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
         elbow_joint.joint_model = reference_configuration[2];
-        simplelinked_robot_helpers::ROBOT_CONFIG elbow_joint_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG elbow_joint_config = joint_config;
         elbow_joint_config.velocity_limit = 3.15;
         const UR5JointActuatorModel elbow_joint_model(std::abs(elbow_joint_noise), elbow_joint_config.velocity_limit);
-        elbow_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(elbow_joint_config, elbow_joint_model);
+        elbow_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(elbow_joint_config, elbow_joint_model);
         // Wrist 1
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> wrist_1_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> wrist_1_joint;
         wrist_1_joint.name = "wrist_1_joint";
         wrist_1_joint.parent_link_index = 3;
         wrist_1_joint.child_link_index = 4;
         wrist_1_joint.joint_axis = Eigen::Vector3d::UnitY();
         wrist_1_joint.joint_transform = Eigen::Translation3d(0.0, 0.0, 0.39225) * EigenHelpers::QuaternionFromUrdfRPY(0.0, M_PI_2, 0.0);
         wrist_1_joint.joint_model = reference_configuration[3];
-        simplelinked_robot_helpers::ROBOT_CONFIG wrist_1_joint_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG wrist_1_joint_config = joint_config;
         wrist_1_joint_config.velocity_limit = 3.2;
         const UR5JointActuatorModel wrist_1_joint_model(std::abs(wrist_1_joint_noise), wrist_1_joint_config.velocity_limit);
-        wrist_1_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(wrist_1_joint_config, wrist_1_joint_model);
+        wrist_1_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(wrist_1_joint_config, wrist_1_joint_model);
         // Wrist 2
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> wrist_2_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> wrist_2_joint;
         wrist_2_joint.name = "wrist_2_joint";
         wrist_2_joint.parent_link_index = 4;
         wrist_2_joint.child_link_index = 5;
         wrist_2_joint.joint_axis = Eigen::Vector3d::UnitZ();
         wrist_2_joint.joint_transform = Eigen::Translation3d(0.0, 0.093, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
         wrist_2_joint.joint_model = reference_configuration[4];
-        simplelinked_robot_helpers::ROBOT_CONFIG wrist_2_joint_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG wrist_2_joint_config = joint_config;
         wrist_2_joint_config.velocity_limit = 3.2;
         const UR5JointActuatorModel wrist_2_joint_model(std::abs(wrist_2_joint_noise), wrist_2_joint_config.velocity_limit);
-        wrist_2_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(wrist_2_joint_config, wrist_2_joint_model);
+        wrist_2_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(wrist_2_joint_config, wrist_2_joint_model);
         // Wrist 3
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> wrist_3_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> wrist_3_joint;
         wrist_3_joint.name = "wrist_3_joint";
         wrist_3_joint.parent_link_index = 5;
         wrist_3_joint.child_link_index = 6;
         wrist_3_joint.joint_axis = Eigen::Vector3d::UnitY();
         wrist_3_joint.joint_transform = Eigen::Translation3d(0.0, 0.0, 0.09465) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
         wrist_3_joint.joint_model = reference_configuration[5];
-        simplelinked_robot_helpers::ROBOT_CONFIG wrist_3_joint_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG wrist_3_joint_config = joint_config;
         wrist_3_joint_config.velocity_limit = 3.2;
         const UR5JointActuatorModel wrist_3_joint_model(std::abs(wrist_3_joint_noise), wrist_3_joint_config.velocity_limit);
-        wrist_3_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(wrist_3_joint_config, wrist_3_joint_model);
+        wrist_3_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(wrist_3_joint_config, wrist_3_joint_model);
         // Fixed wrist->EE joint
-        simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel> ee_fixed_joint;
+        simple_robot_models::RobotJoint<UR5JointActuatorModel> ee_fixed_joint;
         ee_fixed_joint.name = "ee_fixed_joint";
         ee_fixed_joint.parent_link_index = 6;
         ee_fixed_joint.child_link_index = 7;
@@ -337,18 +338,18 @@ namespace ur5_linked_common_config
         ee_fixed_joint.joint_transform = Eigen::Translation3d(0.0, 0.0823, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, M_PI_2);
         ee_fixed_joint.joint_model = SJM(std::make_pair(0.0, 0.0), 0.0, SJM::FIXED);
         // We don't need an uncertainty model for a fixed joint
-        ee_fixed_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<UR5JointActuatorModel>(joint_config);
+        ee_fixed_joint.joint_controller = simple_robot_models::JointControllerGroup<UR5JointActuatorModel>(joint_config);
         // Collect the joints
-        const std::vector<simplelinked_robot_helpers::RobotJoint<UR5JointActuatorModel>> joints = {shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint, ee_fixed_joint};
-        const simplelinked_robot_helpers::SimpleLinkedRobot<UR5JointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration, joint_distance_weights);
+        const std::vector<simple_robot_models::RobotJoint<UR5JointActuatorModel>> joints = {shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint, ee_fixed_joint};
+        const simple_robot_models::SimpleLinkedRobot<UR5JointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration, joint_distance_weights);
         return robot;
     }
 
-    inline simplelinked_robot_helpers::SimpleLinkedBaseSampler GetSampler()
+    inline simple_samplers::SimpleLinkedBaseSampler GetSampler()
     {
         // Make the sampler
         const SLC reference_configuration = GetReferenceConfiguration();
-        const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler(reference_configuration);
+        const simple_samplers::SimpleLinkedBaseSampler sampler(reference_configuration);
         return sampler;
     }
 }

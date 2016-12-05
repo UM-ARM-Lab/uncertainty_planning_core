@@ -19,8 +19,7 @@
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/simplese2_robot_helpers.hpp>
-#include <uncertainty_planning_core/baxter_linked_common_config.hpp>
+#include <uncertainty_planning_core/baxter_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -35,10 +34,10 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher)
     const std::vector<double> joint_distance_weights = baxter_linked_common_config::GetJointDistanceWeights();
     assert(joint_distance_weights.size() == 7);
     const std::pair<baxter_linked_common_config::SLC, baxter_linked_common_config::SLC> start_and_goal = baxter_linked_common_config::GetStartAndGoal();
-    const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
-    const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
+    const simple_samplers::SimpleLinkedBaseSampler sampler = baxter_linked_common_config::GetSampler();
+    const simple_robot_models::LINKED_ROBOT_CONFIG robot_config = baxter_linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = baxter_linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights, options.environment_name);
+    const simple_robot_models::SimpleLinkedRobot<baxter_linked_common_config::BaxterJointActuatorModel> robot = baxter_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights, options.environment_name);
     auto planner_result = uncertainty_planning_core::PlanBaxterUncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;

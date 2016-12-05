@@ -19,7 +19,6 @@
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/simplese3_robot_helpers.hpp>
 #include <uncertainty_planning_core/se3_common_config.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -31,9 +30,9 @@ void peg_in_hole_env_se3(ros::Publisher& display_debug_publisher)
     const uncertainty_planning_core::OPTIONS options = se3_common_config::GetOptions();
     std::cout << PrettyPrint::PrettyPrint(options) << std::endl;
     const std::pair<Eigen::Affine3d, Eigen::Affine3d> start_and_goal = se3_common_config::GetStartAndGoal();
-    const simplese3_robot_helpers::SimpleSE3BaseSampler sampler = se3_common_config::GetSampler();
-    const simplese3_robot_helpers::ROBOT_CONFIG robot_config = se3_common_config::GetDefaultRobotConfig(options);
-    const simplese3_robot_helpers::SimpleSE3Robot robot = se3_common_config::GetRobot(robot_config);
+    const simple_samplers::SimpleSE3BaseSampler sampler = se3_common_config::GetSampler();
+    const simple_robot_models::SE3_ROBOT_CONFIG robot_config = se3_common_config::GetDefaultRobotConfig(options);
+    const simple_robot_models::SimpleSE3Robot robot = se3_common_config::GetRobot(robot_config);
     auto planner_result = uncertainty_planning_core::PlanSE3Uncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;

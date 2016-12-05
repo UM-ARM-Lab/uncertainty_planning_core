@@ -42,10 +42,10 @@ find_package(OpenMP)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(DIRECTORY msg FILES ObstacleConfig.msg)
+#add_message_files(DIRECTORY msg FILES MS.msg)
 
 ## Generate services in the 'srv' folder
-add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotMove.srv SetSimple6dofActuationError.srv SetBaxterActuationError.srv)
+add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotMove.srv SetSimple6dofActuationError.srv SetLinkedActuationError.srv)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -94,9 +94,8 @@ set(UNCERTAINTY_PLANNING_CORE_SOURCES
     include/${PROJECT_NAME}/simple_particle_contact_simulator.hpp
     include/${PROJECT_NAME}/uncertainty_contact_planning.hpp
     include/${PROJECT_NAME}/execution_policy.hpp
-    include/${PROJECT_NAME}/simplese2_robot_helpers.hpp
-    include/${PROJECT_NAME}/simplese3_robot_helpers.hpp
-    include/${PROJECT_NAME}/simplelinked_robot_helpers.hpp
+    include/${PROJECT_NAME}/simple_robot_models.hpp
+    include/${PROJECT_NAME}/simple_samplers.hpp
     include/${PROJECT_NAME}/uncertainty_planning_core.hpp
     src/${PROJECT_NAME}/uncertainty_planning_core.cpp)
 
@@ -114,8 +113,8 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} rt)
 
 add_executable(simulator_demonstration_node include/${PROJECT_NAME}/se3_common_config.hpp
                                             include/${PROJECT_NAME}/se2_common_config.hpp
-                                            include/${PROJECT_NAME}/baxter_linked_common_config.hpp
-                                            include/${PROJECT_NAME}/ur5_linked_common_config.hpp
+                                            include/${PROJECT_NAME}/baxter_common_config.hpp
+                                            include/${PROJECT_NAME}/ur5_common_config.hpp
                                             src/simulator_demonstration_node.cpp)
 add_dependencies(simulator_demonstration_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(simulator_demonstration_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
@@ -148,22 +147,22 @@ target_link_libraries(se2_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_N
 # Baxter Frontends
 ###################################################################################################################
 
-add_executable(baxter_contact_planning_node include/${PROJECT_NAME}/baxter_linked_common_config.hpp src/baxter_contact_planning_node.cpp)
+add_executable(baxter_contact_planning_node include/${PROJECT_NAME}/baxter_common_config.hpp src/baxter_contact_planning_node.cpp)
 add_dependencies(baxter_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(baxter_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
 
-add_executable(baxter_contact_execution_node include/${PROJECT_NAME}/baxter_linked_common_config.hpp src/baxter_contact_execution_node.cpp)
+add_executable(baxter_contact_execution_node include/${PROJECT_NAME}/baxter_common_config.hpp src/baxter_contact_execution_node.cpp)
 add_dependencies(baxter_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 target_link_libraries(baxter_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
 
-####################################################################################################################
-## Universal Robots Frontends
-####################################################################################################################
+###################################################################################################################
+# Universal Robots Frontends
+###################################################################################################################
 
-#add_executable(ur5_contact_planning_node include/${PROJECT_NAME}/ur5_linked_common_config.hpp src/ur5_contact_planning_node.cpp)
-#add_dependencies(ur5_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-#target_link_libraries(ur5_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
+add_executable(ur5_contact_planning_node include/${PROJECT_NAME}/ur5_common_config.hpp src/ur5_contact_planning_node.cpp)
+add_dependencies(ur5_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(ur5_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
 
-#add_executable(ur5_contact_execution_node include/${PROJECT_NAME}/ur5_linked_common_config.hpp src/ur5_contact_execution_node.cpp)
-#add_dependencies(ur5_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-#target_link_libraries(ur5_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
+add_executable(ur5_contact_execution_node include/${PROJECT_NAME}/ur5_common_config.hpp src/ur5_contact_execution_node.cpp)
+add_dependencies(ur5_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+target_link_libraries(ur5_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)

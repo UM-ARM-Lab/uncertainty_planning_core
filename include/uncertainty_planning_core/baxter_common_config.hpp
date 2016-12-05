@@ -19,7 +19,8 @@
 #include "uncertainty_planning_core/simple_pid_controller.hpp"
 #include "uncertainty_planning_core/simple_uncertainty_models.hpp"
 #include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
-#include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_robot_models.hpp"
+#include "uncertainty_planning_core/simple_samplers.hpp"
 #include "uncertainty_planning_core/uncertainty_planning_core.hpp"
 
 #ifndef BAXTER_LINKED_COMMON_CONFIG_HPP
@@ -31,8 +32,8 @@
 
 namespace baxter_linked_common_config
 {
-    typedef simplelinked_robot_helpers::SimpleJointModel SJM;
-    typedef simplelinked_robot_helpers::SimpleLinkedConfiguration SLC;
+    typedef simple_robot_models::SimpleJointModel SJM;
+    typedef simple_robot_models::SimpleLinkedConfiguration SLC;
 
     inline uncertainty_planning_core::OPTIONS GetDefaultOptions()
     {
@@ -81,7 +82,7 @@ namespace baxter_linked_common_config
         return uncertainty_planning_core::GetOptions(GetDefaultOptions());
     }
 
-    inline simplelinked_robot_helpers::ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
+    inline simple_robot_models::LINKED_ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
     {
         const double env_resolution = options.environment_resolution;
         const double kp = 1.0;
@@ -91,7 +92,7 @@ namespace baxter_linked_common_config
         const double velocity_limit = env_resolution * 2.0;
         const double max_sensor_noise = options.sensor_error;
         const double max_actuator_noise = options.actuator_error;
-        const simplelinked_robot_helpers::ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise);
+        const simple_robot_models::LINKED_ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise);
         return robot_config;
     }
 
@@ -178,7 +179,7 @@ namespace baxter_linked_common_config
         return distance_weights;
     }
 
-    inline void GetEndEffectorPoints(simplelinked_robot_helpers::RobotLink& end_effector_link, const std::string& environment_id)
+    inline void GetEndEffectorPoints(simple_robot_models::RobotLink& end_effector_link, const std::string& environment_id)
     {
         if (environment_id == "baxter_wrist_key_env")
         {
@@ -243,7 +244,7 @@ namespace baxter_linked_common_config
 
     typedef uncertainty_planning_core::BaxterJointActuatorModel BaxterJointActuatorModel;
 
-    inline simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simplelinked_robot_helpers::ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::vector<double>& joint_distance_weights, const std::string& environment_id)
+    inline simple_robot_models::SimpleLinkedRobot<BaxterJointActuatorModel> GetRobot(const Eigen::Affine3d& base_transform, const simple_robot_models::LINKED_ROBOT_CONFIG& joint_config, const std::vector<double>& joint_uncertainty_params, const std::vector<double>& joint_distance_weights, const std::string& environment_id)
     {
         const double s0_noise = joint_uncertainty_params[0];
         const double s1_noise = joint_uncertainty_params[1];
@@ -255,7 +256,7 @@ namespace baxter_linked_common_config
         // Make the reference configuration
         const SLC reference_configuration = GetReferenceConfiguration();
         // Make the robot model
-        simplelinked_robot_helpers::RobotLink torso;
+        simple_robot_models::RobotLink torso;
         torso.link_name = "torso";
         torso.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         torso.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.0));
@@ -275,12 +276,12 @@ namespace baxter_linked_common_config
         torso.link_points->push_back(Eigen::Vector3d(0.0, -0.225, 0.075));
         torso.link_points->push_back(Eigen::Vector3d(0.0, -0.225, 0.1));
         torso.link_points->push_back(Eigen::Vector3d(0.025, -0.225, 0.1));
-        simplelinked_robot_helpers::RobotLink right_arm_mount;
+        simple_robot_models::RobotLink right_arm_mount;
         right_arm_mount.link_name = "right_arm_mount";
         right_arm_mount.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_arm_mount.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.0));
         right_arm_mount.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.0));
-        simplelinked_robot_helpers::RobotLink right_upper_shoulder;
+        simple_robot_models::RobotLink right_upper_shoulder;
         right_upper_shoulder.link_name = "right_upper_shoulder";
         right_upper_shoulder.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_upper_shoulder.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.025));
@@ -296,14 +297,14 @@ namespace baxter_linked_common_config
         right_upper_shoulder.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.275));
         right_upper_shoulder.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.275));
         right_upper_shoulder.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.275));
-        simplelinked_robot_helpers::RobotLink right_lower_shoulder;
+        simple_robot_models::RobotLink right_lower_shoulder;
         right_lower_shoulder.link_name = "right_lower_shoulder";
         right_lower_shoulder.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_lower_shoulder.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.0));
         right_lower_shoulder.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.0));
         right_lower_shoulder.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.0));
         right_lower_shoulder.link_points->push_back(Eigen::Vector3d(0.1, 0.0, 0.0));
-        simplelinked_robot_helpers::RobotLink right_upper_elbow;
+        simple_robot_models::RobotLink right_upper_elbow;
         right_upper_elbow.link_name = "right_upper_elbow";
         right_upper_elbow.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_upper_elbow.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.025));
@@ -318,14 +319,14 @@ namespace baxter_linked_common_config
         right_upper_elbow.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.25));
         right_upper_elbow.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.25));
         right_upper_elbow.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.25));
-        simplelinked_robot_helpers::RobotLink right_lower_elbow;
+        simple_robot_models::RobotLink right_lower_elbow;
         right_lower_elbow.link_name = "right_lower_elbow";
         right_lower_elbow.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_lower_elbow.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.0));
         right_lower_elbow.link_points->push_back(Eigen::Vector3d(0.05, 0.0, 0.0));
         right_lower_elbow.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.0));
         right_lower_elbow.link_points->push_back(Eigen::Vector3d(0.1, 0.0, 0.0));
-        simplelinked_robot_helpers::RobotLink right_upper_forearm;
+        simple_robot_models::RobotLink right_upper_forearm;
         right_upper_forearm.link_name = "right_upper_forearm";
         right_upper_forearm.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_upper_forearm.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.025));
@@ -339,7 +340,7 @@ namespace baxter_linked_common_config
         right_upper_forearm.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.225));
         right_upper_forearm.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.25));
         right_upper_forearm.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.275));
-        simplelinked_robot_helpers::RobotLink right_lower_forearm;
+        simple_robot_models::RobotLink right_lower_forearm;
         right_lower_forearm.link_name = "right_lower_forearm";
         right_lower_forearm.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_lower_forearm.link_points->push_back(Eigen::Vector3d(0.025, 0.0, 0.0));
@@ -347,7 +348,7 @@ namespace baxter_linked_common_config
         right_lower_forearm.link_points->push_back(Eigen::Vector3d(0.075, 0.0, 0.0));
         right_lower_forearm.link_points->push_back(Eigen::Vector3d(0.1, 0.0, 0.0));
         right_lower_forearm.link_points->push_back(Eigen::Vector3d(0.125, 0.0, 0.0));
-        simplelinked_robot_helpers::RobotLink right_wrist;
+        simple_robot_models::RobotLink right_wrist;
         right_wrist.link_name = "right_wrist";
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.025));
@@ -358,10 +359,10 @@ namespace baxter_linked_common_config
         right_wrist.link_points->push_back(Eigen::Vector3d(0.0, 0.0, 0.15));
         // Get the end of the wrist/EE shape
         GetEndEffectorPoints(right_wrist, environment_id);
-        const std::vector<simplelinked_robot_helpers::RobotLink> links = {torso, right_arm_mount, right_upper_shoulder, right_lower_shoulder, right_upper_elbow, right_lower_elbow, right_upper_forearm, right_lower_forearm, right_wrist};
+        const std::vector<simple_robot_models::RobotLink> links = {torso, right_arm_mount, right_upper_shoulder, right_lower_shoulder, right_upper_elbow, right_lower_elbow, right_upper_forearm, right_lower_forearm, right_wrist};
         const std::vector<std::pair<size_t, size_t>> allowed_self_collisions = {std::pair<size_t, size_t>(0, 1), std::pair<size_t, size_t>(1, 2), std::pair<size_t, size_t>(2, 3), std::pair<size_t, size_t>(3, 4), std::pair<size_t, size_t>(4, 5), std::pair<size_t, size_t>(5, 6), std::pair<size_t, size_t>(6, 7), std::pair<size_t, size_t>(7, 8)};
         // right_s0
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_arm_mount_joint;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_arm_mount_joint;
         right_arm_mount_joint.name = "right_arm_mount_joint";
         right_arm_mount_joint.parent_link_index = 0;
         right_arm_mount_joint.child_link_index = 1;
@@ -369,9 +370,9 @@ namespace baxter_linked_common_config
         right_arm_mount_joint.joint_transform = Eigen::Translation3d(0.024645, -0.219645, 0.118588) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, -0.7854);
         right_arm_mount_joint.joint_model = SJM(std::make_pair(0.0, 0.0), 0.0, SJM::FIXED);
         // We don't need an uncertainty model for a fixed joint
-        right_arm_mount_joint.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(joint_config);
+        right_arm_mount_joint.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(joint_config);
         // right_s0
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_s0;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_s0;
         right_s0.name = "right_s0";
         right_s0.parent_link_index = 1;
         right_s0.child_link_index = 2;
@@ -379,11 +380,11 @@ namespace baxter_linked_common_config
         right_s0.joint_transform = Eigen::Translation3d(0.055695, 0.0, 0.011038) * EigenHelpers::QuaternionFromUrdfRPY(0.0, 0.0, 0.0);
         right_s0.joint_model = reference_configuration[0];
         const BaxterJointActuatorModel right_s0_joint_model(std::abs(s0_noise), 0.5);
-        simplelinked_robot_helpers::ROBOT_CONFIG s0_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG s0_config = joint_config;
         s0_config.velocity_limit = 0.27 * 0.75;
-        right_s0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s0_config, right_s0_joint_model);
+        right_s0.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(s0_config, right_s0_joint_model);
         // Base pitch
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_s1;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_s1;
         right_s1.name = "right_s1";
         right_s1.parent_link_index = 2;
         right_s1.child_link_index = 3;
@@ -391,11 +392,11 @@ namespace baxter_linked_common_config
         right_s1.joint_transform = Eigen::Translation3d(0.069, 0.0, 0.27035) * EigenHelpers::QuaternionFromUrdfRPY(-1.57079632679, 0.0, 0.0);
         right_s1.joint_model = reference_configuration[1];
         const BaxterJointActuatorModel right_s1_joint_model(std::abs(s1_noise), 0.5);
-        simplelinked_robot_helpers::ROBOT_CONFIG s1_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG s1_config = joint_config;
         s1_config.velocity_limit = 0.27 * 0.75;
-        right_s1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(s1_config, right_s1_joint_model);
+        right_s1.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(s1_config, right_s1_joint_model);
         // Elbow pitch
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_e0;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_e0;
         right_e0.name = "right_e0";
         right_e0.parent_link_index = 3;
         right_e0.child_link_index = 4;
@@ -403,11 +404,11 @@ namespace baxter_linked_common_config
         right_e0.joint_transform = Eigen::Translation3d(0.102, 0.0, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
         right_e0.joint_model = reference_configuration[2];
         const BaxterJointActuatorModel right_e0_joint_model(std::abs(e0_noise), 0.5);
-        simplelinked_robot_helpers::ROBOT_CONFIG e0_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG e0_config = joint_config;
         e0_config.velocity_limit = 0.27 * 0.75;
-        right_e0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e0_config, right_e0_joint_model);
+        right_e0.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(e0_config, right_e0_joint_model);
         // Elbow roll
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_e1;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_e1;
         right_e1.name = "right_e1";
         right_e1.parent_link_index = 4;
         right_e1.child_link_index = 5;
@@ -415,11 +416,11 @@ namespace baxter_linked_common_config
         right_e1.joint_transform = Eigen::Translation3d(0.069, 0.0, 0.26242) * EigenHelpers::QuaternionFromUrdfRPY(-1.57079632679, -1.57079632679, 0.0);
         right_e1.joint_model = reference_configuration[3];
         const BaxterJointActuatorModel right_e1_joint_model(std::abs(e1_noise), 0.5);
-        simplelinked_robot_helpers::ROBOT_CONFIG e1_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG e1_config = joint_config;
         e1_config.velocity_limit = 0.27 * 0.75;
-        right_e1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(e1_config, right_e1_joint_model);
+        right_e1.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(e1_config, right_e1_joint_model);
         // Wrist pitch
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w0;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_w0;
         right_w0.name = "right_w0";
         right_w0.parent_link_index = 5;
         right_w0.child_link_index = 6;
@@ -427,11 +428,11 @@ namespace baxter_linked_common_config
         right_w0.joint_transform = Eigen::Translation3d(0.10359, 0.0, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
         right_w0.joint_model = reference_configuration[4];
         const BaxterJointActuatorModel right_w0_joint_model(std::abs(w0_noise), 1.0);
-        simplelinked_robot_helpers::ROBOT_CONFIG w0_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG w0_config = joint_config;
         w0_config.velocity_limit = 0.3 * 0.75;
-        right_w0.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w0_config, right_w0_joint_model);
+        right_w0.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(w0_config, right_w0_joint_model);
         // Wrist roll
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w1;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_w1;
         right_w1.name = "right_w1";
         right_w1.parent_link_index = 6;
         right_w1.child_link_index = 7;
@@ -439,11 +440,11 @@ namespace baxter_linked_common_config
         right_w1.joint_transform = Eigen::Translation3d(0.01, 0.0, 0.2707) * EigenHelpers::QuaternionFromUrdfRPY(-1.57079632679, -1.57079632679, 0.0);
         right_w1.joint_model = reference_configuration[5];
         const BaxterJointActuatorModel right_w1_joint_model(std::abs(w1_noise), 1.0);
-        simplelinked_robot_helpers::ROBOT_CONFIG w1_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG w1_config = joint_config;
         w1_config.velocity_limit = 0.3 * 0.75;
-        right_w1.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w1_config, right_w1_joint_model);
+        right_w1.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(w1_config, right_w1_joint_model);
         // Wrist roll
-        simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel> right_w2;
+        simple_robot_models::RobotJoint<BaxterJointActuatorModel> right_w2;
         right_w2.name = "right_w2";
         right_w2.parent_link_index = 7;
         right_w2.child_link_index = 8;
@@ -451,19 +452,19 @@ namespace baxter_linked_common_config
         right_w2.joint_transform = Eigen::Translation3d(0.115975, 0.0, 0.0) * EigenHelpers::QuaternionFromUrdfRPY(1.57079632679, 0.0, 1.57079632679);
         right_w2.joint_model = reference_configuration[6];
         const BaxterJointActuatorModel right_w2_joint_model(std::abs(w2_noise), 1.0);
-        simplelinked_robot_helpers::ROBOT_CONFIG w2_config = joint_config;
+        simple_robot_models::LINKED_ROBOT_CONFIG w2_config = joint_config;
         w2_config.velocity_limit = 0.5 * 0.75;
-        right_w2.joint_controller = simplelinked_robot_helpers::JointControllerGroup<BaxterJointActuatorModel>(w2_config, right_w2_joint_model);
-        const std::vector<simplelinked_robot_helpers::RobotJoint<BaxterJointActuatorModel>> joints = {right_arm_mount_joint, right_s0, right_s1, right_e0, right_e1, right_w0, right_w1, right_w2};
-        const simplelinked_robot_helpers::SimpleLinkedRobot<BaxterJointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration, joint_distance_weights);
+        right_w2.joint_controller = simple_robot_models::JointControllerGroup<BaxterJointActuatorModel>(w2_config, right_w2_joint_model);
+        const std::vector<simple_robot_models::RobotJoint<BaxterJointActuatorModel>> joints = {right_arm_mount_joint, right_s0, right_s1, right_e0, right_e1, right_w0, right_w1, right_w2};
+        const simple_robot_models::SimpleLinkedRobot<BaxterJointActuatorModel> robot(base_transform, links, joints, allowed_self_collisions, reference_configuration, joint_distance_weights);
         return robot;
     }
 
-    inline simplelinked_robot_helpers::SimpleLinkedBaseSampler GetSampler()
+    inline simple_samplers::SimpleLinkedBaseSampler GetSampler()
     {
         // Make the sampler
         const SLC reference_configuration = GetReferenceConfiguration();
-        const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler(reference_configuration);
+        const simple_samplers::SimpleLinkedBaseSampler sampler(reference_configuration);
         return sampler;
     }
 }

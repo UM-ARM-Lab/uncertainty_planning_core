@@ -19,7 +19,8 @@
 #include "uncertainty_planning_core/simple_pid_controller.hpp"
 #include "uncertainty_planning_core/simple_uncertainty_models.hpp"
 #include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
-#include "uncertainty_planning_core/simplese3_robot_helpers.hpp"
+#include "uncertainty_planning_core/simple_robot_models.hpp"
+#include "uncertainty_planning_core/simple_samplers.hpp"
 #include "uncertainty_planning_core/uncertainty_planning_core.hpp"
 
 #ifndef SE3_COMMON_CONFIG_HPP
@@ -70,7 +71,7 @@ namespace se3_common_config
         return uncertainty_planning_core::GetOptions(GetDefaultOptions());
     }
 
-    inline simplese3_robot_helpers::ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
+    inline simple_robot_models::SE3_ROBOT_CONFIG GetDefaultRobotConfig(const uncertainty_planning_core::OPTIONS& options)
     {
         const double kp = 1.0; //0.1
         const double ki = 0.0;
@@ -82,7 +83,7 @@ namespace se3_common_config
         const double max_angular_sensor_noise = max_sensor_noise * 0.25;
         const double max_actuator_noise = options.actuator_error;
         const double max_angular_actuator_noise = max_actuator_noise * 0.25;
-        const simplese3_robot_helpers::ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise, kp, ki, kd, i_clamp, angular_velocity_limit, max_angular_sensor_noise, max_angular_actuator_noise);
+        const simple_robot_models::SE3_ROBOT_CONFIG robot_config(kp, ki, kd, i_clamp, velocity_limit, max_sensor_noise, max_actuator_noise, kp, ki, kd, i_clamp, angular_velocity_limit, max_angular_sensor_noise, max_angular_actuator_noise);
         return robot_config;
     }
 
@@ -113,15 +114,15 @@ namespace se3_common_config
         return robot_points;
     }
 
-    inline simplese3_robot_helpers::SimpleSE3Robot GetRobot(const simplese3_robot_helpers::ROBOT_CONFIG& robot_config)
+    inline simple_robot_models::SimpleSE3Robot GetRobot(const simple_robot_models::SE3_ROBOT_CONFIG& robot_config)
     {
         // Make the actual robot
         const Eigen::Affine3d initial_config = Eigen::Affine3d::Identity();
-        simplese3_robot_helpers::SimpleSE3Robot robot(GetRobotPoints(), initial_config, robot_config);
+        simple_robot_models::SimpleSE3Robot robot(GetRobotPoints(), initial_config, robot_config);
         return robot;
     }
 
-    inline simplese3_robot_helpers::SimpleSE3BaseSampler GetSampler()
+    inline simple_samplers::SimpleSE3BaseSampler GetSampler()
     {
         const double env_resolution = 0.125;
         const double env_min_x = 0.0 + (env_resolution);
@@ -131,7 +132,7 @@ namespace se3_common_config
         const double env_min_z = 0.0 + (env_resolution);
         const double env_max_z = 10.0 - (env_resolution);
         // Make the sampler
-        const simplese3_robot_helpers::SimpleSE3BaseSampler sampler(std::pair<double, double>(env_min_x, env_max_x), std::pair<double, double>(env_min_y, env_max_y), std::pair<double, double>(env_min_z, env_max_z));
+        const simple_samplers::SimpleSE3BaseSampler sampler(std::pair<double, double>(env_min_x, env_max_x), std::pair<double, double>(env_min_y, env_max_y), std::pair<double, double>(env_min_z, env_max_z));
         return sampler;
     }
 }

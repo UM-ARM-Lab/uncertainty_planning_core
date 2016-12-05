@@ -19,8 +19,7 @@
 #include "uncertainty_planning_core/simple_pid_controller.hpp"
 #include "uncertainty_planning_core/simple_uncertainty_models.hpp"
 #include "uncertainty_planning_core/uncertainty_contact_planning.hpp"
-#include "uncertainty_planning_core/simplelinked_robot_helpers.hpp"
-#include "ur5_linked_common_config.hpp"
+#include "uncertainty_planning_core/ur5_common_config.hpp"
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -35,10 +34,10 @@ void peg_in_hole_env_linked(ros::Publisher& display_debug_publisher)
     const std::vector<double> joint_distance_weights = ur5_linked_common_config::GetJointDistanceWeights();
     assert(joint_distance_weights.size() == 6);
     const std::pair<ur5_linked_common_config::SLC, ur5_linked_common_config::SLC> start_and_goal = ur5_linked_common_config::GetStartAndGoal();
-    const simplelinked_robot_helpers::SimpleLinkedBaseSampler sampler = ur5_linked_common_config::GetSampler();
-    const simplelinked_robot_helpers::ROBOT_CONFIG robot_config = ur5_linked_common_config::GetDefaultRobotConfig(options);
+    const simple_samplers::SimpleLinkedBaseSampler sampler = ur5_linked_common_config::GetSampler();
+    const simple_robot_models::LINKED_ROBOT_CONFIG robot_config = ur5_linked_common_config::GetDefaultRobotConfig(options);
     const Eigen::Affine3d base_transform = ur5_linked_common_config::GetBaseTransform();
-    const simplelinked_robot_helpers::SimpleLinkedRobot<ur5_linked_common_config::UR5JointActuatorModel> robot = ur5_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights);
+    const simple_robot_models::SimpleLinkedRobot<ur5_linked_common_config::UR5JointActuatorModel> robot = ur5_linked_common_config::GetRobot(base_transform, robot_config, joint_uncertainty_params, joint_distance_weights);
     auto planner_result = uncertainty_planning_core::PlanUR5Uncertainty(options, robot, sampler, start_and_goal.first, start_and_goal.second, display_debug_publisher);
     const auto& policy = planner_result.first;
     const std::map<std::string, double> planner_stats = planner_result.second;
