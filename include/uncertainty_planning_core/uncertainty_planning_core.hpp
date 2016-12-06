@@ -22,7 +22,7 @@
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_planner_state.hpp>
-#include <uncertainty_planning_core/simple_particle_contact_simulator.hpp>
+#include <uncertainty_planning_core/simple_simulator_interface.hpp>
 #include <uncertainty_planning_core/execution_policy.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -34,14 +34,16 @@
 #ifndef UNCERTAINTY_PLANNING_CORE_HPP
 #define UNCERTAINTY_PLANNING_CORE_HPP
 
+#ifndef PRNG_TYPE
+    #define PRNG_TYPE std::mt19937_64
+#endif
+
 namespace uncertainty_planning_core
 {
-    struct OPTIONS
+    struct PLANNING_AND_EXECUTION_OPTIONS
     {
         uncertainty_contact_planning::SPATIAL_FEATURE_CLUSTERING_TYPE clustering_type;
         uint64_t prng_seed;
-        double environment_resolution;
-        std::string environment_name;
         // Time limits
         double planner_time_limit;
         // Standard planner control params
@@ -56,10 +58,6 @@ namespace uncertainty_planning_core
         double distance_clustering_threshold;
         double feasibility_alpha;
         double variance_alpha;
-        // Uncertainty
-        double actuator_error;
-        double sensor_error;
-        double simulation_controller_frequency;
         // Reverse/repeat params
         uint32_t edge_attempt_count;
         // Particle/execution limits
@@ -84,9 +82,9 @@ namespace uncertainty_planning_core
         std::string executed_policy_file;
     };
 
-    inline OPTIONS GetOptions(const OPTIONS& initial_options)
+    inline PLANNING_AND_EXECUTION_OPTIONS GetOptions(const PLANNING_AND_EXECUTION_OPTIONS& initial_options)
     {
-        OPTIONS options = initial_options;
+        PLANNING_AND_EXECUTION_OPTIONS options = initial_options;
         // Get options via ROS params
         ros::NodeHandle nhp("~");
         const int32_t prng_seed_init = (int32_t)nhp.param(std::string("prng_seed_init"), -1);
@@ -99,8 +97,6 @@ namespace uncertainty_planning_core
         {
             options.prng_seed = (uint64_t)std::chrono::high_resolution_clock::now().time_since_epoch().count();
         }
-        options.environment_resolution = nhp.param(std::string("environment_resolution"), options.environment_resolution);
-        options.environment_name = nhp.param(std::string("environment_name"), options.environment_name);
         options.planner_time_limit = nhp.param(std::string("planner_time_limit"), options.planner_time_limit);
         options.goal_bias = nhp.param(std::string("goal_bias"), options.goal_bias);
         options.step_size = nhp.param(std::string("step_size"), options.step_size);
@@ -111,9 +107,6 @@ namespace uncertainty_planning_core
         options.feasibility_alpha = nhp.param(std::string("feasibility_alpha"), options.feasibility_alpha);
         options.variance_alpha = nhp.param(std::string("variance_alpha"), options.variance_alpha);
         options.num_particles = (uint32_t)nhp.param(std::string("num_particles"), (int)options.num_particles);
-        options.actuator_error = nhp.param(std::string("actuator_error"), options.actuator_error);
-        options.sensor_error = nhp.param(std::string("sensor_error"), options.sensor_error);
-        options.simulation_controller_frequency = nhp.param(std::string("simulation_controller_frequency"), options.simulation_controller_frequency);
         options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
         options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
         options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
@@ -133,73 +126,94 @@ namespace uncertainty_planning_core
         return options;
     }
 
-    typedef execution_policy::ExecutionPolicy<Eigen::Matrix<double, 3, 1>, simple_robot_models::EigenMatrixD31Serializer, std::allocator<Eigen::Matrix<double, 3, 1>>> SE2Policy;
+    // Typedefs to make things easier to read
+    typedef PRNG_TYPE PRNG;
+
+    typedef Eigen::Matrix<double, 3, 1> SE2Config;
+    typedef std::allocator<Eigen::Matrix<double, 3, 1>> SE2ConfigAlloc;
+    typedef simple_robot_models::EigenMatrixD31Serializer SE2ConfigSerializer;
+    typedef execution_policy::ExecutionPolicy<SE2Config, SE2ConfigSerializer, SE2ConfigAlloc> SE2Policy;
     typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator SE2ActuatorModel;
+    typedef simple_robot_models::SimpleSE2Robot SE2Robot;
+    typedef simple_simulator_interface::SimulatorInterface<SE2Robot, SE2Config, PRNG, SE2ConfigAlloc> SE2Simulator;
+    typedef std::shared_ptr<SE2Simulator> SE2SimulatorPtr;
+    typedef simple_samplers::SimpleBaseSampler<SE2Config, PRNG> SE2Sampler;
+    typedef std::shared_ptr<SE2Sampler> SE2SamplerPtr;
+    typedef uncertainty_contact_planning::UncertaintyPlanningSpace<SE2Robot, SE2Config, SE2ConfigSerializer, SE2ConfigAlloc, PRNG> SE2PlanningSpace;
+
+    typedef Eigen::Affine3d SE3Config;
+    typedef Eigen::aligned_allocator<Eigen::Affine3d> SE3ConfigAlloc;
+    typedef simple_robot_models::EigenAffine3dSerializer SE3ConfigSerializer;
+    typedef execution_policy::ExecutionPolicy<SE3Config, SE3ConfigSerializer, SE3ConfigAlloc> SE3Policy;
+    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator SE3ActuatorModel;
+    typedef simple_robot_models::SimpleSE3Robot SE3Robot;
+    typedef simple_simulator_interface::SimulatorInterface<SE3Robot, SE3Config, PRNG, SE3ConfigAlloc> SE3Simulator;
+    typedef std::shared_ptr<SE3Simulator> SE3SimulatorPtr;
+    typedef simple_samplers::SimpleBaseSampler<SE3Config, PRNG> SE3Sampler;
+    typedef std::shared_ptr<SE3Sampler> SE3SamplerPtr;
+    typedef uncertainty_contact_planning::UncertaintyPlanningSpace<SE3Robot, SE3Config, SE3ConfigSerializer, SE3ConfigAlloc, PRNG> SE3PlanningSpace;
+
+    typedef simple_robot_models::SimpleLinkedConfiguration LinkedConfig;
+    typedef std::allocator<LinkedConfig> LinkedConfigAlloc;
+    typedef simple_robot_models::SimpleLinkedConfigurationSerializer LinkedConfigSerializer;
+    typedef execution_policy::ExecutionPolicy<LinkedConfig, LinkedConfigSerializer, LinkedConfigAlloc> LinkedPolicy;
+    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator LinkedActuatorModel;
+    typedef simple_robot_models::SimpleLinkedRobot<LinkedActuatorModel> LinkedRobot;
+    typedef simple_simulator_interface::SimulatorInterface<LinkedRobot, LinkedConfig, PRNG, LinkedConfigAlloc> LinkedSimulator;
+    typedef std::shared_ptr<LinkedSimulator> LinkedSimulatorPtr;
+    typedef simple_samplers::SimpleBaseSampler<LinkedConfig, PRNG> LinkedSampler;
+    typedef std::shared_ptr<LinkedSampler> LinkedSamplerPtr;
+    typedef uncertainty_contact_planning::UncertaintyPlanningSpace<LinkedRobot, LinkedConfig, LinkedConfigSerializer, LinkedConfigAlloc, PRNG> LinkedPlanningSpace;
+
+    // Policy saving and loading
 
     bool SaveSE2Policy(const SE2Policy& policy, const std::string& filename);
 
     SE2Policy LoadSE2Policy(const std::string& filename);
 
-    std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>> DemonstrateSE2Simulator(const OPTIONS& options, const simple_robot_models::SimpleSE2Robot& robot, const simple_samplers::SimpleSE2BaseSampler& sampler, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher);
-
-    std::pair<SE2Policy, std::map<std::string, double>> PlanSE2Uncertainty(const OPTIONS& options, const simple_robot_models::SimpleSE2Robot& robot, const simple_samplers::SimpleSE2BaseSampler& sampler, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher);
-
-    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE2UncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleSE2Robot& robot, const simple_samplers::SimpleSE2BaseSampler& sampler, SE2Policy policy, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, ros::Publisher& display_debug_publisher);
-
-    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE2UncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleSE2Robot& robot, const simple_samplers::SimpleSE2BaseSampler& sampler, SE2Policy policy, const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& goal, const std::function<std::vector<Eigen::Matrix<double, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1>>>(const Eigen::Matrix<double, 3, 1>&,  const Eigen::Matrix<double, 3, 1>&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
-
-    typedef execution_policy::ExecutionPolicy<Eigen::Affine3d, simple_robot_models::EigenAffine3dSerializer, Eigen::aligned_allocator<Eigen::Affine3d>> SE3Policy;
-    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator SE3ActuatorModel;
-
     bool SaveSE3Policy(const SE3Policy& policy, const std::string& filename);
 
     SE3Policy LoadSE3Policy(const std::string& filename);
 
-    EigenHelpers::VectorAffine3d DemonstrateSE3Simulator(const OPTIONS& options, const simple_robot_models::SimpleSE3Robot& robot, const simple_samplers::SimpleSE3BaseSampler& sampler, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, ros::Publisher& display_debug_publisher);
+    bool SaveLinkedPolicy(const LinkedPolicy& policy, const std::string& filename);
 
-    std::pair<SE3Policy, std::map<std::string, double>> PlanSE3Uncertainty(const OPTIONS& options, const simple_robot_models::SimpleSE3Robot& robot, const simple_samplers::SimpleSE3BaseSampler& sampler, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, ros::Publisher& display_debug_publisher);
+    LinkedPolicy LoadLinkedPolicy(const std::string& filename);
 
-    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE3UncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleSE3Robot& robot, const simple_samplers::SimpleSE3BaseSampler& sampler, SE3Policy policy, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, ros::Publisher& display_debug_publisher);
+    // SE2 Interface
 
-    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE3UncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleSE3Robot& robot, const simple_samplers::SimpleSE3BaseSampler& sampler, SE3Policy policy, const Eigen::Affine3d& start, const Eigen::Affine3d& goal, const std::function<EigenHelpers::VectorAffine3d(const Eigen::Affine3d&, const Eigen::Affine3d&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
+    std::vector<SE2Config, SE2ConfigAlloc> DemonstrateSE2Simulator(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Config& start, const SE2Config& goal, ros::Publisher& display_debug_publisher);
 
-    typedef execution_policy::ExecutionPolicy<simple_robot_models::SimpleLinkedConfiguration, simple_robot_models::SimpleLinkedConfigurationSerializer> BaxterPolicy;
-    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator BaxterJointActuatorModel;
+    std::pair<SE2Policy, std::map<std::string, double>> PlanSE2Uncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Config& start, const SE2Config& goal, ros::Publisher& display_debug_publisher);
 
-    bool SaveBaxterPolicy(const BaxterPolicy& policy, const std::string& filename);
+    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE2UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Policy& policy, const SE2Config& start, const SE2Config& goal, ros::Publisher& display_debug_publisher);
 
-    BaxterPolicy LoadBaxterPolicy(const std::string& filename);
+    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE2UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Policy& policy, const SE2Config& start, const SE2Config& goal, const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,  const SE2Config&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
 
-    std::vector<simple_robot_models::SimpleLinkedConfiguration, std::allocator<simple_robot_models::SimpleLinkedConfiguration>> DemonstrateBaxterSimulator(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+    // SE3 Interface
 
-    std::pair<BaxterPolicy, std::map<std::string, double>> PlanBaxterUncertainty(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+    std::vector<SE3Config, SE3ConfigAlloc> DemonstrateSE3Simulator(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Config& start, const SE3Config& goal, ros::Publisher& display_debug_publisher);
 
-    std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateBaxterUncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+    std::pair<SE3Policy, std::map<std::string, double>> PlanSE3Uncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Config& start, const SE3Config& goal, ros::Publisher& display_debug_publisher);
 
-    std::pair<BaxterPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteBaxterUncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<BaxterJointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, BaxterPolicy policy, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, const std::function<std::vector<simple_robot_models::SimpleLinkedConfiguration, std::allocator<simple_robot_models::SimpleLinkedConfiguration>>(const simple_robot_models::SimpleLinkedConfiguration&, const simple_robot_models::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
+    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE3UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Policy& policy, const SE3Config& start, const SE3Config& goal, ros::Publisher& display_debug_publisher);
 
-    typedef execution_policy::ExecutionPolicy<simple_robot_models::SimpleLinkedConfiguration, simple_robot_models::SimpleLinkedConfigurationSerializer> UR5Policy;
-    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator UR5JointActuatorModel;
+    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE3UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Policy& policy, const SE3Config& start, const SE3Config& goal, const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,  const SE3Config&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
 
-    bool SaveUR5Policy(const UR5Policy& policy, const std::string& filename);
+    // Linked Interface
 
-    UR5Policy LoadUR5Policy(const std::string& filename);
+    std::vector<LinkedConfig, LinkedConfigAlloc> DemonstrateLinkedSimulator(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedConfig& start, const LinkedConfig& goal, ros::Publisher& display_debug_publisher);
 
-    std::vector<simple_robot_models::SimpleLinkedConfiguration, std::allocator<simple_robot_models::SimpleLinkedConfiguration>> DemonstrateUR5Simulator(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+    std::pair<LinkedPolicy, std::map<std::string, double>> PlanLinkedUncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedConfig& start, const LinkedConfig& goal, ros::Publisher& display_debug_publisher);
 
-    std::pair<UR5Policy, std::map<std::string, double>> PlanUR5Uncertainty(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+    std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateLinkedUncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedPolicy& policy, const LinkedConfig& start, const LinkedConfig& goal, ros::Publisher& display_debug_publisher);
 
-    std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateUR5UncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, UR5Policy policy, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, ros::Publisher& display_debug_publisher);
+    std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteLinkedUncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedPolicy& policy, const LinkedConfig& start, const LinkedConfig& goal, const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,  const LinkedConfig&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
 
-    std::pair<UR5Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteUR5UncertaintyPolicy(const OPTIONS& options, const simple_robot_models::SimpleLinkedRobot<UR5JointActuatorModel>& robot, const simple_samplers::SimpleLinkedBaseSampler& sampler, UR5Policy policy, const simple_robot_models::SimpleLinkedConfiguration& start, const simple_robot_models::SimpleLinkedConfiguration& goal, const std::function<std::vector<simple_robot_models::SimpleLinkedConfiguration, std::allocator<simple_robot_models::SimpleLinkedConfiguration>>(const simple_robot_models::SimpleLinkedConfiguration&, const simple_robot_models::SimpleLinkedConfiguration&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
-
-    std::ostream& operator<<(std::ostream& strm, const OPTIONS& options)
+    inline std::ostream& operator<<(std::ostream& strm, const PLANNING_AND_EXECUTION_OPTIONS& options)
     {
         strm << "OPTIONS:";
         strm << "\nclustering_type: " << uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type);
         strm << "\nprng_seed: " << options.prng_seed;
-        strm << "\nenvironment_resolution: " << options.environment_resolution;
-        strm << "\nenvironment_name: " << options.environment_name;
         strm << "\nplanner_time_limit: " << options.planner_time_limit;
         strm << "\ngoal_bias: " << options.goal_bias;
         strm << "\nstep_size: " << options.step_size;
@@ -211,9 +225,6 @@ namespace uncertainty_planning_core
         strm << "\ndistance_clustering_threshold: " << options.distance_clustering_threshold;
         strm << "\nfeasibility_alpha: " << options.feasibility_alpha;
         strm << "\nvariance_alpha: " << options.variance_alpha;
-        strm << "\nactuator_error: " << options.actuator_error;
-        strm << "\nsensor_error: " << options.sensor_error;
-        strm << "\nsimulation_controller_frequency: " << options.simulation_controller_frequency;
         strm << "\nedge_attempt_count: " << options.edge_attempt_count;
         strm << "\npolicy_action_attempt_count: " << options.policy_action_attempt_count;
         strm << "\nnum_particles: " << options.num_particles;

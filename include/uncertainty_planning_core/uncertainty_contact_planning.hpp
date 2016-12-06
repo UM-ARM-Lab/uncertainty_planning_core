@@ -21,8 +21,9 @@
 #include <sdf_tools/sdf.hpp>
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
+#include <uncertainty_planning_core/simple_samplers.hpp>
 #include <uncertainty_planning_core/uncertainty_planner_state.hpp>
-#include <uncertainty_planning_core/simple_particle_contact_simulator.hpp>
+#include <uncertainty_planning_core/simple_simulator_interface.hpp>
 #include <uncertainty_planning_core/execution_policy.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -98,7 +99,7 @@ namespace uncertainty_contact_planning
         }
     }
 
-    template<typename Robot, typename Sampler, typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
+    template<typename Robot, typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>, typename PRNG=std::mt19937_64>
     class UncertaintyPlanningSpace
     {
     protected:
@@ -153,8 +154,8 @@ namespace uncertainty_contact_planning
         double connect_after_first_solution_;
         int32_t debug_level_;
         Robot robot_;
-        Sampler sampler_;
-        std::shared_ptr<uncertainty_planning_tools::SimulatorInterface<Robot, Configuration, PRNG, ConfigAlloc>> simulator_ptr_;
+        std::shared_ptr<simple_samplers::SimpleBaseSampler<Configuration, PRNG>> sampler_ptr_;
+        std::shared_ptr<simple_simulator_interface::SimulatorInterface<Robot, Configuration, PRNG, ConfigAlloc>> simulator_ptr_;
         mutable PRNG rng_;
         mutable std::vector<PRNG> rngs_;
         mutable uint64_t state_counter_;
@@ -334,7 +335,7 @@ namespace uncertainty_contact_planning
         /*
          * Constructor
          */
-        inline UncertaintyPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const int32_t debug_level, const size_t num_particles, const double step_size, const double simulation_step_duration, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const double connect_after_first_solution, const Robot& robot, const Sampler& sampler, const std::shared_ptr<uncertainty_planning_tools::SimulatorInterface<Robot, Configuration, PRNG, ConfigAlloc>>& simulator_ptr, const uint64_t prng_seed) : robot_(robot), sampler_(sampler), simulator_ptr_(simulator_ptr)
+        inline UncertaintyPlanningSpace(const SPATIAL_FEATURE_CLUSTERING_TYPE& spatial_feature_clustering_type, const bool simulate_with_individual_jacobians, const int32_t debug_level, const size_t num_particles, const double step_size, const double simulation_step_duration, const double goal_distance_threshold, const double goal_probability_threshold, const double signature_matching_threshold, const double distance_clustering_threshold, const double feasibility_alpha, const double variance_alpha, const double connect_after_first_solution, const Robot& robot, const std::shared_ptr<simple_samplers::SimpleBaseSampler<Configuration, PRNG>>& sampler_ptr, const std::shared_ptr<simple_simulator_interface::SimulatorInterface<Robot, Configuration, PRNG, ConfigAlloc>>& simulator_ptr, const uint64_t prng_seed) : robot_(robot), sampler_ptr_(sampler_ptr), simulator_ptr_(simulator_ptr)
         {
             debug_level_ = debug_level;
             // Prepare the default RNG
@@ -405,7 +406,7 @@ namespace uncertainty_contact_planning
         /*
          * Test example to show the behavior of the lightweight simulator
          */
-        inline uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> DemonstrateSimulator(const Configuration& start, const Configuration& goal, ros::Publisher& display_pub) const
+        inline simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> DemonstrateSimulator(const Configuration& start, const Configuration& goal, ros::Publisher& display_pub) const
         {
             // Draw the simulation environment
             display_pub.publish(simulator_ptr_->ExportAllForDisplay());
@@ -433,7 +434,7 @@ namespace uncertainty_contact_planning
             // Wait for input
             std::cout << "Press ENTER to solve..." << std::endl;
             std::cin.get();
-            uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+            simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             simulator_ptr_->ForwardSimulateRobot(robot_, start, goal, rng_, step_duration_, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, trace, true, display_pub);
             // Wait for input
             std::cout << "Press ENTER to draw..." << std::endl;
@@ -465,7 +466,7 @@ namespace uncertainty_contact_planning
                 Configuration previous_config = start;
                 for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
                 {
-                    const uncertainty_planning_tools::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
+                    const simple_simulator_interface::ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
                     const Eigen::VectorXd& control_input_step = step_trace.control_input_step;
                     // Draw the control input for the entire trace segment
                     const Eigen::VectorXd& control_input = step_trace.control_input;
@@ -478,7 +479,7 @@ namespace uncertainty_contact_planning
                     for (size_t resolver_step_idx = 0; resolver_step_idx < step_trace.contact_resolver_steps.size(); resolver_step_idx++)
                     {
                         // Get the current trace segment
-                        const uncertainty_planning_tools::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
+                        const simple_simulator_interface::ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps[resolver_step_idx];
                         for (size_t contact_resolution_step_idx = 0; contact_resolution_step_idx < contact_resolution_trace.contact_resolution_steps.size(); contact_resolution_step_idx++)
                         {
                             const Configuration& current_config = contact_resolution_trace.contact_resolution_steps[contact_resolution_step_idx];
@@ -504,7 +505,7 @@ namespace uncertainty_contact_planning
             }
             else
             {
-                const std::vector<Configuration, ConfigAlloc> trajectory = uncertainty_planning_tools::ExtractTrajectoryFromTrace(trace);
+                const std::vector<Configuration, ConfigAlloc> trajectory = simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
                 const double time_interval = 1.0 / 25.0;
                 const uint32_t rand_suffix = std::uniform_int_distribution<uint32_t>(1, 1000000)(rng_);
                 const std::string ns = "simulator_test_" + std::to_string(rand_suffix);
@@ -1163,9 +1164,9 @@ namespace uncertainty_contact_planning
 
         inline std::vector<Configuration, ConfigAlloc> SimulatePolicyStep(const Configuration& current_config, const Configuration& action, PRNG& rng, ros::Publisher& display_pub) const
         {
-            uncertainty_planning_tools::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+            simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
             simulator_ptr_->ForwardSimulateRobot(robot_, current_config, action, rng, step_duration_, (goal_distance_threshold_ * 0.5), simulate_with_individual_jacobians_, true, trace, true, display_pub);
-            std::vector<Configuration, ConfigAlloc> execution_trajectory = uncertainty_planning_tools::ExtractTrajectoryFromTrace(trace);
+            std::vector<Configuration, ConfigAlloc> execution_trajectory = simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
             if (execution_trajectory.empty())
             {
                 std::cerr << "Exec trajectory is empty, this should not happen!" << std::endl;
@@ -1539,7 +1540,7 @@ namespace uncertainty_contact_planning
          */
         inline UncertaintyPlanningState SampleRandomTargetState()
         {
-            const Configuration random_point = sampler_.Sample(rng_);
+            const Configuration random_point = sampler_ptr_->Sample(rng_);
             arc_helpers::ConditionalPrint("Sampled config: " + PrettyPrint::PrettyPrint(random_point), 3, debug_level_);
             const UncertaintyPlanningState random_state(random_point);
             return random_state;

@@ -13,7 +13,18 @@
 
 namespace simple_samplers
 {
-    class SimpleSE2BaseSampler
+    template <typename Configuration, typename Generator>
+    class SimpleBaseSampler
+    {
+    public:
+
+        SimpleBaseSampler() {}
+
+        virtual Configuration Sample(Generator& prng) = 0;
+    };
+
+    template <typename Generator>
+    class SimpleSE2BaseSampler : public SimpleBaseSampler<Eigen::Matrix<double, 3, 1>, Generator>
     {
     protected:
 
@@ -23,7 +34,7 @@ namespace simple_samplers
 
     public:
 
-        SimpleSE2BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits)
+        SimpleSE2BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits) : SimpleBaseSampler<Eigen::Matrix<double, 3, 1>, Generator>()
         {
             assert(x_limits.first <= x_limits.second);
             assert(y_limits.first <= y_limits.second);
@@ -32,8 +43,7 @@ namespace simple_samplers
             zr_distribution_ = std::uniform_real_distribution<double>(-M_PI, M_PI);
         }
 
-        template<typename Generator>
-        Eigen::Matrix<double, 3, 1> Sample(Generator& prng)
+        virtual Eigen::Matrix<double, 3, 1> Sample(Generator& prng)
         {
             const double x = x_distribution_(prng);
             const double y = y_distribution_(prng);
@@ -44,7 +54,8 @@ namespace simple_samplers
         }
     };
 
-    class SimpleSE3BaseSampler
+    template <typename Generator>
+    class SimpleSE3BaseSampler : public SimpleBaseSampler<Eigen::Affine3d, Generator>
     {
     protected:
 
@@ -55,7 +66,7 @@ namespace simple_samplers
 
     public:
 
-        SimpleSE3BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits)
+        SimpleSE3BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits) : SimpleBaseSampler<Eigen::Affine3d, Generator>()
         {
             assert(x_limits.first <= x_limits.second);
             assert(y_limits.first <= y_limits.second);
@@ -65,8 +76,7 @@ namespace simple_samplers
             z_distribution_ = std::uniform_real_distribution<double>(z_limits.first, z_limits.second);
         }
 
-        template<typename Generator>
-        Eigen::Affine3d Sample(Generator& prng)
+        virtual Eigen::Affine3d Sample(Generator& prng)
         {
             const double x = x_distribution_(prng);
             const double y = y_distribution_(prng);
@@ -77,7 +87,8 @@ namespace simple_samplers
         }
     };
 
-    class SimpleLinkedBaseSampler
+    template <typename Generator>
+    class SimpleLinkedBaseSampler : public SimpleBaseSampler<simple_robot_models::SimpleLinkedConfiguration, Generator>
     {
     protected:
 
@@ -86,7 +97,7 @@ namespace simple_samplers
 
     public:
 
-        SimpleLinkedBaseSampler(const simple_robot_models::SimpleLinkedConfiguration& representative_configuration)
+        SimpleLinkedBaseSampler(const simple_robot_models::SimpleLinkedConfiguration& representative_configuration) : SimpleBaseSampler<simple_robot_models::SimpleLinkedConfiguration, Generator>()
         {
             representative_configuration_ = representative_configuration;
             for (size_t idx = 0; idx < representative_configuration_.size(); idx++)
@@ -97,8 +108,7 @@ namespace simple_samplers
             }
         }
 
-        template<typename Generator>
-        simple_robot_models::SimpleLinkedConfiguration Sample(Generator& prng)
+        virtual simple_robot_models::SimpleLinkedConfiguration Sample(Generator& prng)
         {
             simple_robot_models::SimpleLinkedConfiguration sampled;
             sampled.reserve(representative_configuration_.size());

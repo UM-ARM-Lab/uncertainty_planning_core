@@ -4,7 +4,7 @@ project(uncertainty_planning_core)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities message_generation)
+find_package(catkin REQUIRED COMPONENTS roscpp visualization_msgs sdf_tools arc_utilities)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -45,7 +45,7 @@ find_package(OpenMP)
 #add_message_files(DIRECTORY msg FILES MS.msg)
 
 ## Generate services in the 'srv' folder
-add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotMove.srv SetSimple6dofActuationError.srv SetLinkedActuationError.srv)
+#add_service_files(DIRECTORY srv FILES SR.srv)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -55,7 +55,7 @@ add_service_files(DIRECTORY srv FILES Simple6dofRobotMove.srv SimpleLinkedRobotM
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs control_msgs)
+#generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs control_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -66,7 +66,7 @@ generate_messages(DEPENDENCIES geometry_msgs visualization_msgs std_msgs control
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp rospy geometry_msgs visualization_msgs std_msgs sdf_tools control_msgs arc_utilities message_runtime DEPENDS system_lib rt Eigen OpenMP)
+catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp visualization_msgs sdf_tools arc_utilities DEPENDS system_lib rt Eigen OpenMP)
 
 ###########
 ## Build ##
@@ -88,14 +88,14 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINK
 #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 
 set(UNCERTAINTY_PLANNING_CORE_SOURCES
-    include/${PROJECT_NAME}/uncertainty_planner_state.hpp
     include/${PROJECT_NAME}/simple_pid_controller.hpp
     include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-    include/${PROJECT_NAME}/simple_particle_contact_simulator.hpp
-    include/${PROJECT_NAME}/uncertainty_contact_planning.hpp
-    include/${PROJECT_NAME}/execution_policy.hpp
     include/${PROJECT_NAME}/simple_robot_models.hpp
     include/${PROJECT_NAME}/simple_samplers.hpp
+    include/${PROJECT_NAME}/simple_simulator_interface.hpp
+    include/${PROJECT_NAME}/uncertainty_planner_state.hpp
+    include/${PROJECT_NAME}/uncertainty_contact_planning.hpp
+    include/${PROJECT_NAME}/execution_policy.hpp
     include/${PROJECT_NAME}/uncertainty_planning_core.hpp
     src/${PROJECT_NAME}/uncertainty_planning_core.cpp)
 
@@ -104,65 +104,6 @@ set(UNCERTAINTY_PLANNING_CORE_SOURCES
 ###################################################################################################################
 
 add_library(${PROJECT_NAME} ${UNCERTAINTY_PLANNING_CORE_SOURCES})
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
+add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} rt)
 
-###################################################################################################################
-# Simulator Demonstration Frontend
-###################################################################################################################
-
-add_executable(simulator_demonstration_node include/${PROJECT_NAME}/se3_common_config.hpp
-                                            include/${PROJECT_NAME}/se2_common_config.hpp
-                                            include/${PROJECT_NAME}/baxter_common_config.hpp
-                                            include/${PROJECT_NAME}/ur5_common_config.hpp
-                                            src/simulator_demonstration_node.cpp)
-add_dependencies(simulator_demonstration_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(simulator_demonstration_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-###################################################################################################################
-# SE(3) Frontends
-###################################################################################################################
-
-add_executable(se3_contact_planning_node include/${PROJECT_NAME}/se3_common_config.hpp src/se3_contact_planning_node.cpp)
-add_dependencies(se3_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-add_executable(se3_contact_execution_node include/${PROJECT_NAME}/se3_common_config.hpp src/se3_contact_execution_node.cpp)
-add_dependencies(se3_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se3_contact_execution_node ${PROJECT_NAME} ${catkin_LIBRARIES} rt)
-
-###################################################################################################################
-# SE(2) Frontends
-###################################################################################################################
-
-add_executable(se2_contact_planning_node include/${PROJECT_NAME}/se2_common_config.hpp src/se2_contact_planning_node.cpp)
-add_dependencies(se2_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se2_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-add_executable(se2_contact_execution_node include/${PROJECT_NAME}/se2_common_config.hpp src/se2_contact_execution_node.cpp)
-add_dependencies(se2_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(se2_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-###################################################################################################################
-# Baxter Frontends
-###################################################################################################################
-
-add_executable(baxter_contact_planning_node include/${PROJECT_NAME}/baxter_common_config.hpp src/baxter_contact_planning_node.cpp)
-add_dependencies(baxter_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(baxter_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-add_executable(baxter_contact_execution_node include/${PROJECT_NAME}/baxter_common_config.hpp src/baxter_contact_execution_node.cpp)
-add_dependencies(baxter_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(baxter_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-###################################################################################################################
-# Universal Robots Frontends
-###################################################################################################################
-
-add_executable(ur5_contact_planning_node include/${PROJECT_NAME}/ur5_common_config.hpp src/ur5_contact_planning_node.cpp)
-add_dependencies(ur5_contact_planning_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(ur5_contact_planning_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
-
-add_executable(ur5_contact_execution_node include/${PROJECT_NAME}/ur5_common_config.hpp src/ur5_contact_execution_node.cpp)
-add_dependencies(ur5_contact_execution_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
-target_link_libraries(ur5_contact_execution_node ${catkin_LIBRARIES} ${PROJECT_NAME} rt)
