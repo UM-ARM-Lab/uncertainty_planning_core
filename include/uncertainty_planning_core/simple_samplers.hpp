@@ -97,6 +97,8 @@ namespace simple_samplers
 
     public:
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         SimpleLinkedBaseSampler(const simple_robot_models::SimpleLinkedConfiguration& representative_configuration) : SimpleBaseSampler<simple_robot_models::SimpleLinkedConfiguration, Generator>()
         {
             representative_configuration_ = representative_configuration;

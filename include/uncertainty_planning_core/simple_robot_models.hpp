@@ -120,6 +120,8 @@ namespace simple_robot_models
 
     public:
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         inline double ComputeMaxMotionPerStep() const
         {
             double max_motion = 0.0;
@@ -518,6 +520,8 @@ namespace simple_robot_models
         }
 
     public:
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         inline double ComputeMaxMotionPerStep() const
         {
@@ -1296,6 +1300,8 @@ namespace simple_robot_models
         }
 
     public:
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         static inline bool SanityCheckRobotModel(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints)
         {

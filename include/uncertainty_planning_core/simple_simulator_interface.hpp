@@ -285,6 +285,8 @@ namespace simple_simulator_interface
 
     public:
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         SimulatorInterface(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const SurfaceNormalGrid& surface_normals_grid, const int32_t debug_level)
         {
             environment_ = environment;
@@ -383,7 +385,8 @@ namespace simple_simulator_interface
             configuration_marker.scale.x = this->GetResolution();
             configuration_marker.scale.y = this->GetResolution();
             configuration_marker.scale.z = this->GetResolution();
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot
@@ -439,7 +442,8 @@ namespace simple_simulator_interface
             configuration_marker.scale.x = this->GetResolution() * 0.5;
             configuration_marker.scale.y = this->GetResolution() * 0.5;
             configuration_marker.scale.z = this->GetResolution() * 0.5;
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot

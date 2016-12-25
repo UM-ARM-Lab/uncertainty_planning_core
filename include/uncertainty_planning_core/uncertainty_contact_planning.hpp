@@ -210,6 +210,8 @@ namespace uncertainty_contact_planning
 
     public:
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         /*
          * Serialization/deserialization helpers
          */
@@ -558,14 +560,14 @@ namespace uncertainty_contact_planning
             UncertaintyPlanningState goal_state(goal);
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
-            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = std::bind(&UncertaintyPlanningSpace::GetNearestNeighbor, this, std::placeholders::_1, std::placeholders::_2);
-            std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = std::bind(&UncertaintyPlanningSpace::GoalReached, this, std::placeholders::_1, goal_state, edge_attempt_count, allow_contacts);
-            std::function<void(UncertaintyPlanningTreeState&)> goal_reached_callback = std::bind(&UncertaintyPlanningSpace::GoalReachedCallback, this, std::placeholders::_1, edge_attempt_count, start_time);
-            std::function<UncertaintyPlanningState(void)> state_sampling_fn = std::bind(&UncertaintyPlanningSpace::SampleRandomTargetState, this);
+            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state); };
+            std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReached(goal_candidate, goal_state, edge_attempt_count, allow_contacts); };
+            std::function<void(UncertaintyPlanningTreeState&)> goal_reached_callback = [&] (UncertaintyPlanningTreeState& new_goal_state) { return GoalReachedCallback(new_goal_state, edge_attempt_count, start_time); };
+            std::function<UncertaintyPlanningState(void)> state_sampling_fn = [&] (void) { return SampleRandomTargetState(); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<UncertaintyPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); arc_helpers::ConditionalPrint("Sampled state", 2, debug_level_); return state; } else { arc_helpers::ConditionalPrint("Sampled goal state", 2, debug_level_); return goal_state; } };
-            std::function<std::vector<std::pair<UncertaintyPlanningState, int64_t>>(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> forward_propagation_fn = std::bind(&UncertaintyPlanningSpace::PropagateForwardsAndDraw, this, std::placeholders::_1, std::placeholders::_2, edge_attempt_count, allow_contacts, include_reverse_actions, display_pub);
-            std::function<bool(void)> termination_check_fn = std::bind(&UncertaintyPlanningSpace::PlannerTerminationCheck, this, start_time, time_limit);
+            std::function<std::vector<std::pair<UncertaintyPlanningState, int64_t>>(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> forward_propagation_fn = [&] (const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target) { return PropagateForwardsAndDraw(nearest, target, edge_attempt_count, allow_contacts, include_reverse_actions, display_pub); };
+            std::function<bool(void)> termination_check_fn = [&] (void) { return PlannerTerminationCheck(start_time, time_limit); };
             // Call the planner
             total_goal_reached_probability_ = 0.0;
             time_to_first_solution_ = 0.0;
@@ -1267,7 +1269,8 @@ namespace uncertainty_contact_planning
                     edge_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
                     edge_marker.scale.y = simulator_ptr_->GetResolution() * 1.5;
                     edge_marker.scale.z = simulator_ptr_->GetResolution() * 1.5;
-                    edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+                    const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
+                    edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
                     if (current_index < previous_index)
                     {
                         edge_marker.color = forward_color;
@@ -1323,7 +1326,8 @@ namespace uncertainty_contact_planning
                 edge_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
                 edge_marker.scale.y = simulator_ptr_->GetResolution() * 1.5;
                 edge_marker.scale.z = simulator_ptr_->GetResolution() * 1.5;
-                edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+                const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
+                edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
                 edge_marker.color = color;
                 edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(previous_point));
                 edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current_config_point));
@@ -1354,7 +1358,8 @@ namespace uncertainty_contact_planning
             configuration_marker.scale.x = simulator_ptr_->GetResolution();
             configuration_marker.scale.y = simulator_ptr_->GetResolution();
             configuration_marker.scale.z = simulator_ptr_->GetResolution();
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
@@ -1438,7 +1443,8 @@ namespace uncertainty_contact_planning
             configuration_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
             configuration_marker.scale.y = simulator_ptr_->GetResolution() * 0.5;
             configuration_marker.scale.z = simulator_ptr_->GetResolution() * 0.5;
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(Eigen::Affine3d::Identity());
+            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
