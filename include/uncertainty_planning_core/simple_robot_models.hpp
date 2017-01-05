@@ -92,8 +92,9 @@ namespace simple_robot_models
     {
     protected:
 
-        bool initialized_;
-        double max_motion_per_unit_step_;
+        Eigen::Affine3d pose_;
+        Eigen::Matrix<double, 3, 1> config_;
+        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
         simple_pid_controller::SimplePIDController y_axis_controller_;
         simple_pid_controller::SimplePIDController zr_axis_controller_;
@@ -103,9 +104,8 @@ namespace simple_robot_models
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator x_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator y_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator zr_axis_actuator_;
-        Eigen::Affine3d pose_;
-        Eigen::Matrix<double, 3, 1> config_;
-        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
+        double max_motion_per_unit_step_;
+        bool initialized_;
 
         inline void SetConfig(const Eigen::Matrix<double, 3, 1>& new_config)
         {
@@ -490,8 +490,8 @@ namespace simple_robot_models
     {
     protected:
 
-        bool initialized_;
-        double max_motion_per_unit_step_;
+        Eigen::Affine3d config_;
+        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
         simple_pid_controller::SimplePIDController y_axis_controller_;
         simple_pid_controller::SimplePIDController z_axis_controller_;
@@ -510,8 +510,8 @@ namespace simple_robot_models
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator xr_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator yr_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator zr_axis_actuator_;
-        Eigen::Affine3d config_;
-        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
+        double max_motion_per_unit_step_;
+        bool initialized_;
 
         inline void SetConfig(const Eigen::Affine3d& new_config)
         {
@@ -1167,6 +1167,8 @@ namespace simple_robot_models
         std::shared_ptr<EigenHelpers::VectorVector3d> link_points;
         std::string link_name;
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         RobotLink() : link_points(new EigenHelpers::VectorVector3d()) {}
 
         RobotLink(const std::shared_ptr<EigenHelpers::VectorVector3d>& points, const std::string& name) : link_points(points), link_name(name) {}
@@ -1180,13 +1182,15 @@ namespace simple_robot_models
     template<typename ActuatorModel>
     struct RobotJoint
     {
-        int64_t parent_link_index;
-        int64_t child_link_index;
         Eigen::Affine3d joint_transform;
         Eigen::Vector3d joint_axis;
+        int64_t parent_link_index;
+        int64_t child_link_index;
         SimpleJointModel joint_model;
-        std::string name;
         JointControllerGroup<ActuatorModel> joint_controller;
+        std::string name;
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     };
 
     template<typename ActuatorModel>
@@ -1194,14 +1198,14 @@ namespace simple_robot_models
     {
     protected:
 
-        bool initialized_;
-        size_t num_active_joints_;
-        double max_motion_per_unit_step_;
         Eigen::Affine3d base_transform_;
         Eigen::MatrixXi self_collision_map_;
         std::vector<RobotLink> links_;
         std::vector<RobotJoint<ActuatorModel>> joints_;
         std::vector<double> joint_distance_weights_;
+        double max_motion_per_unit_step_;
+        size_t num_active_joints_;
+        bool initialized_;
 
         inline void UpdateTransforms()
         {

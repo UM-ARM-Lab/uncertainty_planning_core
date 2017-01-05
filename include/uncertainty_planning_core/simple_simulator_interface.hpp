@@ -94,8 +94,8 @@ namespace simple_simulator_interface
             StoredSurfaceNormal() : normal(Eigen::Vector3d(0.0, 0.0, 0.0)), entry_direction(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
         };
 
-        bool initialized_;
         VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>> surface_normal_grid_;
+        bool initialized_;
 
         static Eigen::Vector3d GetBestSurfaceNormal(const std::vector<StoredSurfaceNormal>& stored_surface_normals, const Eigen::Vector3d& direction)
         {
@@ -121,6 +121,8 @@ namespace simple_simulator_interface
         }
 
     public:
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         SurfaceNormalGrid(const Eigen::Affine3d& origin_transform, const double resolution, const double x_size, const double y_size, const double z_size)
         {

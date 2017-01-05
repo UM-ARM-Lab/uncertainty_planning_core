@@ -20,13 +20,11 @@ namespace uncertainty_planning_tools
     {
     protected:
 
-        bool initialized_;
-        bool has_particles_;
-        bool use_for_nearest_neighbors_;
-        uint32_t attempt_count_;
-        uint32_t reached_count_;
-        uint32_t reverse_attempt_count_;
-        uint32_t reverse_reached_count_;
+        Configuration expectation_;
+        Configuration command_;
+        Eigen::VectorXd variances_;
+        Eigen::VectorXd space_independent_variances_;
+        std::vector<Configuration, ConfigAlloc> particles_;
         double step_size_;
         double parent_motion_Pfeasibility_;
         double raw_edge_Pfeasibility_;
@@ -35,16 +33,18 @@ namespace uncertainty_planning_tools
         double motion_Pfeasibility_;
         double variance_;
         double space_independent_variance_;
+        double goal_Pfeasibility_;
         uint64_t state_id_;
         uint64_t transition_id_;
         uint64_t reverse_transition_id_;
         uint64_t split_id_;
-        double goal_Pfeasibility_;
-        Configuration expectation_;
-        Configuration command_;
-        Eigen::VectorXd variances_;
-        Eigen::VectorXd space_independent_variances_;
-        std::vector<Configuration, ConfigAlloc> particles_;
+        uint32_t attempt_count_;
+        uint32_t reached_count_;
+        uint32_t reverse_attempt_count_;
+        uint32_t reverse_reached_count_;
+        bool initialized_;
+        bool has_particles_;
+        bool use_for_nearest_neighbors_;
 
     public:
 
@@ -349,7 +349,11 @@ namespace uncertainty_planning_tools
             return std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>>(expectation_, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>(std::pair<double, Eigen::VectorXd>(variance_, variances_), std::pair<double, Eigen::VectorXd>(space_independent_variance_, space_independent_variances_)));
         }
 
-        inline UncertaintyPlannerState() : initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), goal_Pfeasibility_(0.0) {}
+        inline UncertaintyPlannerState() : goal_Pfeasibility_(0.0), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false)
+        {
+            arc_helpers::RequireAlignment(expectation_, 16u);
+            arc_helpers::RequireAlignment(command_, 16u);
+        }
 
         inline bool IsInitialized() const
         {
