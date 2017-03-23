@@ -14,6 +14,42 @@
 
 namespace simple_pid_controller
 {
+    class PIDParams
+    {
+    protected:
+
+        double kp_;
+        double ki_;
+        double kd_;
+        double i_clamp_;
+
+    public:
+
+        PIDParams(const double kp, const double ki, const double kd, const double i_clamp) : kp_(kp), ki_(ki), kd_(kd), i_clamp_(i_clamp) {}
+
+        PIDParams() : kp_(0.0), ki_(0.0), kd_(0.0), i_clamp_(0.0) {}
+
+        inline double Kp() const
+        {
+            return kp_;
+        }
+
+        inline double Ki() const
+        {
+            return ki_;
+        }
+
+        inline double Kd() const
+        {
+            return kd_;
+        }
+
+        inline double Iclamp() const
+        {
+            return i_clamp_;
+        }
+    };
+
     class SimplePIDController
     {
     protected:
@@ -33,6 +69,11 @@ namespace simple_pid_controller
             Initialize(kp, ki, kd, integral_clamp);
         }
 
+        SimplePIDController(const PIDParams& params)
+        {
+            Initialize(params.Kp(), params.Ki(), params.Kd(), params.Iclamp());
+        }
+
         SimplePIDController()
         {
             kp_ = 0.0;
@@ -47,6 +88,11 @@ namespace simple_pid_controller
         inline bool IsInitialized() const
         {
             return initialized_;
+        }
+
+        inline PIDParams GetParams() const
+        {
+            return PIDParams(kp_, ki_, kd_, integral_clamp_);
         }
 
         inline void Zero()

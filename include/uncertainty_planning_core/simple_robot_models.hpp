@@ -94,7 +94,7 @@ namespace simple_robot_models
 
         Eigen::Affine3d pose_;
         Eigen::Matrix<double, 3, 1> config_;
-        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
+        std::shared_ptr<EigenHelpers::VectorVector4d> link_points_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
         simple_pid_controller::SimplePIDController y_axis_controller_;
         simple_pid_controller::SimplePIDController zr_axis_controller_;
@@ -104,7 +104,6 @@ namespace simple_robot_models
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator x_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator y_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator zr_axis_actuator_;
-        double max_motion_per_unit_step_;
         bool initialized_;
 
         inline void SetConfig(const Eigen::Matrix<double, 3, 1>& new_config)
@@ -122,50 +121,7 @@ namespace simple_robot_models
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        inline double ComputeMaxMotionPerStep() const
-        {
-            double max_motion = 0.0;
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = GetRawLinksPoints();
-            // Generate motion primitives
-            std::vector<Eigen::VectorXd> motion_primitives;
-            motion_primitives.reserve(6);
-            for (ssize_t joint_idx = 0; joint_idx < 3; joint_idx++)
-            {
-                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(3);
-                raw_motion_plus(joint_idx) = 0.125;
-                motion_primitives.push_back(raw_motion_plus);
-                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(3);
-                raw_motion_neg(joint_idx) = -0.125;
-                motion_primitives.push_back(raw_motion_neg);
-            }
-            // Go through the robot model & compute how much it moves
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-            {
-                // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
-                // Now, go through the points of the link
-                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                {
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = ComputeLinkPointJacobian(link_name, link_relative_point);
-                    // Compute max point motion
-                    for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
-                    {
-                        const Eigen::VectorXd& current_motion = motion_primitives[motion_idx];
-                        const double point_motion = (point_jacobian * current_motion).row(0).norm();
-                        if (point_motion > max_motion)
-                        {
-                            max_motion = point_motion;
-                        }
-                    }
-                }
-            }
-            return (max_motion * 8.0);
-        }
-
-        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector3d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const SE2_ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const SE2_ROBOT_CONFIG& robot_config) : link_points_(robot_points)
         {
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -177,13 +133,12 @@ namespace simple_robot_models
             y_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
             zr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
             ResetPosition(initial_position);
-            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
-        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
         {
-            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>>{std::make_pair("robot", link_points_)};
+            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>{std::make_pair("robot", link_points_)};
         }
 
         inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
@@ -201,9 +156,40 @@ namespace simple_robot_models
         inline void ResetPosition(const Eigen::Matrix<double, 3, 1>& position)
         {
             SetConfig(position);
+            ResetControllers();
+        }
+
+        inline void ResetControllers()
+        {
             x_axis_controller_.Zero();
             y_axis_controller_.Zero();
             zr_axis_controller_.Zero();
+        }
+
+        inline std::vector<simple_pid_controller::PIDParams> GetControllersParameters() const
+        {
+            return std::vector<simple_pid_controller::PIDParams>{x_axis_controller_.GetParams(), y_axis_controller_.GetParams(), zr_axis_controller_.GetParams()};
+        }
+
+
+        inline const simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator& GetActuatorModel(const size_t joint_idx) const
+        {
+            if (joint_idx == 0)
+            {
+                return x_axis_actuator_;
+            }
+            else if (joint_idx == 1)
+            {
+                return y_axis_actuator_;
+            }
+            else if (joint_idx == 2)
+            {
+                return zr_axis_actuator_;
+            }
+            else
+            {
+                assert(false);
+            }
         }
 
         inline Eigen::Affine3d GetLinkTransform(const std::string& link_name) const
@@ -239,11 +225,42 @@ namespace simple_robot_models
             return ComputeConfigurationDistance(GetPosition(), target);
         }
 
+        static inline Eigen::VectorXd GetDeltaBetween(const Eigen::Matrix<double, 3, 1>& start, const Eigen::Matrix<double, 3, 1>& target)
+        {
+            return ComputePerDimensionConfigurationRawDistance(start, target);
+        }
+
+        inline Eigen::VectorXd GetDeltaTo(const Eigen::Matrix<double, 3, 1>& target) const
+        {
+            return ComputePerDimensionConfigurationRawDistance(GetPosition(), target);
+        }
+
         template<typename PRNG>
         inline Eigen::VectorXd GenerateControlAction(const Eigen::Matrix<double, 3, 1>& target, const double controller_interval, PRNG& rng)
         {
             // Get the current position
             const Eigen::Matrix<double, 3, 1> current = GetPosition(rng);
+            // Get the current error
+            const Eigen::VectorXd current_error = ComputePerDimensionConfigurationRawDistance(current, target);
+            // Compute feedback terms
+            const double x_term = x_axis_controller_.ComputeFeedbackTerm(current_error(0), controller_interval);
+            const double y_term = y_axis_controller_.ComputeFeedbackTerm(current_error(1), controller_interval);
+            const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(current_error(2), controller_interval);
+            // Make the control action
+            const double x_axis_control = x_axis_actuator_.GetControlValue(x_term);
+            const double y_axis_control = y_axis_actuator_.GetControlValue(y_term);
+            const double zr_axis_control = zr_axis_actuator_.GetControlValue(zr_term);
+            Eigen::VectorXd control_action(3);
+            control_action(0) = x_axis_control;
+            control_action(1) = y_axis_control;
+            control_action(2) = zr_axis_control;
+            return control_action;
+        }
+
+        inline Eigen::VectorXd GenerateControlAction(const Eigen::Matrix<double, 3, 1>& target, const double controller_interval)
+        {
+            // Get the current position
+            const Eigen::Matrix<double, 3, 1> current = GetPosition();
             // Get the current error
             const Eigen::VectorXd current_error = ComputePerDimensionConfigurationRawDistance(current, target);
             // Compute feedback terms
@@ -289,7 +306,31 @@ namespace simple_robot_models
             SetConfig(new_config);
         }
 
-        inline Eigen::Matrix<double, 3, Eigen::Dynamic> ComputeLinkPointJacobian(const std::string& link_name, const Eigen::Vector3d& link_relative_point) const
+        inline Eigen::VectorXd GetMaxVelocities() const
+        {
+            Eigen::VectorXd max_velocities = Eigen::VectorXd::Zero(3);
+            max_velocities(0) = x_axis_actuator_.GetMaxVelocity();
+            max_velocities(1) = y_axis_actuator_.GetMaxVelocity();
+            max_velocities(2) = zr_axis_actuator_.GetMaxVelocity();
+            return max_velocities;
+        }
+
+        inline Eigen::VectorXd GetMaxVelocityNoise(const Eigen::VectorXd& velocities) const
+        {
+            assert(velocities.size() == 3);
+            Eigen::VectorXd max_velocity_noise = Eigen::VectorXd::Zero(3);
+            max_velocity_noise(0) = x_axis_actuator_.GetMaxVelocityNoise(velocities(0));
+            max_velocity_noise(1) = y_axis_actuator_.GetMaxVelocityNoise(velocities(1));
+            max_velocity_noise(2) = zr_axis_actuator_.GetMaxVelocityNoise(velocities(2));
+            return max_velocity_noise;
+        }
+
+        inline Eigen::VectorXd GetMaxVelocityNoise() const
+        {
+            return GetMaxVelocityNoise(GetMaxVelocities());
+        }
+
+        inline Eigen::Matrix<double, 3, Eigen::Dynamic> ComputeLinkPointJacobian(const std::string& link_name, const Eigen::Vector4d& link_relative_point) const
         {
             if (link_name == "robot")
             {
@@ -297,7 +338,7 @@ namespace simple_robot_models
                 // Transform the point into world frame
                 const Eigen::Affine3d current_transform = GetLinkTransform("robot");
                 const Eigen::Vector3d current_position(current_config(0), current_config(1), 0.0);
-                const Eigen::Vector3d world_point = current_transform * link_relative_point;
+                const Eigen::Vector3d world_point = (current_transform * link_relative_point).block<3, 1>(0, 0);
                 // Make the jacobian
                 Eigen::Matrix<double, 3, 3> jacobian = Eigen::Matrix<double, 3, 3>::Zero();
                 // Prismatic joints
@@ -327,30 +368,6 @@ namespace simple_robot_models
             const Eigen::Affine3d body_transform = z_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_z_angle, Eigen::Vector3d::UnitZ())));
             return body_transform;
         }
-
-        inline Eigen::VectorXd ProcessCorrectionAction(const Eigen::VectorXd& raw_correction_action) const
-        {
-            assert(raw_correction_action.size() == 3);
-            // We treat translation and rotation separately
-            const Eigen::VectorXd raw_translation_correction = raw_correction_action.head<2>();
-            const double raw_rotation_correction = raw_correction_action(2);
-            // Scale down the translation
-            const double translation_action_norm = raw_translation_correction.norm();
-            const Eigen::VectorXd real_translation_correction = (translation_action_norm > 0.005) ? (raw_translation_correction / translation_action_norm) * 0.005 : raw_translation_correction;
-            // Scale down the rotation
-            const double rotation_action_norm = std::abs(raw_rotation_correction);
-            const double real_rotation_correction = (rotation_action_norm > 0.05) ? (raw_rotation_correction / rotation_action_norm) * 0.05 : raw_rotation_correction;
-            // Put them back together
-            Eigen::VectorXd real_correction(3);
-            real_correction << real_translation_correction, real_rotation_correction;
-            return real_correction;
-        }
-
-        inline double GetMaxMotionPerStep() const
-        {
-            return max_motion_per_unit_step_;
-        }
-
 
         inline Eigen::Matrix<double, 3, 1> AverageConfigurations(const std::vector<Eigen::Matrix<double, 3, 1>>& configurations) const
         {
@@ -389,7 +406,7 @@ namespace simple_robot_models
             return interpolated;
         }
 
-        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const Eigen::Matrix<double, 3, 1>& config1, const Eigen::Matrix<double, 3, 1>& config2) const
+        static inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const Eigen::Matrix<double, 3, 1>& config1, const Eigen::Matrix<double, 3, 1>& config2)
         {
             Eigen::VectorXd dim_distances(3);
             dim_distances(0) = config2(0) - config1(0);
@@ -491,7 +508,7 @@ namespace simple_robot_models
     protected:
 
         Eigen::Affine3d config_;
-        std::shared_ptr<EigenHelpers::VectorVector3d> link_points_;
+        std::shared_ptr<EigenHelpers::VectorVector4d> link_points_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
         simple_pid_controller::SimplePIDController y_axis_controller_;
         simple_pid_controller::SimplePIDController z_axis_controller_;
@@ -510,7 +527,6 @@ namespace simple_robot_models
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator xr_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator yr_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator zr_axis_actuator_;
-        double max_motion_per_unit_step_;
         bool initialized_;
 
         inline void SetConfig(const Eigen::Affine3d& new_config)
@@ -523,50 +539,7 @@ namespace simple_robot_models
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        inline double ComputeMaxMotionPerStep() const
-        {
-            double max_motion = 0.0;
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = GetRawLinksPoints();
-            // Generate motion primitives
-            std::vector<Eigen::VectorXd> motion_primitives;
-            motion_primitives.reserve(12);
-            for (ssize_t joint_idx = 0; joint_idx < 6; joint_idx++)
-            {
-                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero(6);
-                raw_motion_plus(joint_idx) = 0.125;
-                motion_primitives.push_back(raw_motion_plus);
-                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero(6);
-                raw_motion_neg(joint_idx) = -0.125;
-                motion_primitives.push_back(raw_motion_neg);
-            }
-            // Go through the robot model & compute how much it moves
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-            {
-                // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
-                // Now, go through the points of the link
-                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                {
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = ComputeLinkPointJacobian(link_name, link_relative_point);
-                    // Compute max point motion
-                    for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
-                    {
-                        const Eigen::VectorXd& current_motion = motion_primitives[motion_idx];
-                        const double point_motion = (point_jacobian * current_motion).row(0).norm();
-                        if (point_motion > max_motion)
-                        {
-                            max_motion = point_motion;
-                        }
-                    }
-                }
-            }
-            return (max_motion * 8.0);
-        }
-
-        inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector3d>& robot_points, const Eigen::Affine3d& initial_position, const SE3_ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Affine3d& initial_position, const SE3_ROBOT_CONFIG& robot_config) : link_points_(robot_points)
         {
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -587,13 +560,12 @@ namespace simple_robot_models
             yr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
             zr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
             ResetPosition(initial_position);
-            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
-        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
         {
-            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>>{std::make_pair("robot", link_points_)};
+            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>{std::make_pair("robot", link_points_)};
         }
 
         inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
@@ -611,12 +583,54 @@ namespace simple_robot_models
         inline void ResetPosition(const Eigen::Affine3d& position)
         {
             SetConfig(position);
+            ResetControllers();
+        }
+
+        inline void ResetControllers()
+        {
             x_axis_controller_.Zero();
             y_axis_controller_.Zero();
             z_axis_controller_.Zero();
             xr_axis_controller_.Zero();
             yr_axis_controller_.Zero();
             zr_axis_controller_.Zero();
+        }
+
+        inline std::vector<simple_pid_controller::PIDParams> GetControllersParameters() const
+        {
+            return std::vector<simple_pid_controller::PIDParams>{x_axis_controller_.GetParams(), y_axis_controller_.GetParams(), z_axis_controller_.GetParams(), xr_axis_controller_.GetParams(), yr_axis_controller_.GetParams(), zr_axis_controller_.GetParams()};
+        }
+
+        inline const simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator& GetActuatorModel(const size_t joint_idx) const
+        {
+            if (joint_idx == 0)
+            {
+                return x_axis_actuator_;
+            }
+            else if (joint_idx == 1)
+            {
+                return y_axis_actuator_;
+            }
+            else if (joint_idx == 2)
+            {
+                return z_axis_actuator_;
+            }
+            else if (joint_idx == 3)
+            {
+                return xr_axis_actuator_;
+            }
+            else if (joint_idx == 4)
+            {
+                return yr_axis_actuator_;
+            }
+            else if (joint_idx == 5)
+            {
+                return zr_axis_actuator_;
+            }
+            else
+            {
+                assert(false);
+            }
         }
 
         inline Eigen::Affine3d GetLinkTransform(const std::string& link_name) const
@@ -657,11 +671,51 @@ namespace simple_robot_models
             return ComputeConfigurationDistance(GetPosition(), target);
         }
 
+        static inline Eigen::VectorXd GetDeltaBetween(const Eigen::Affine3d& start, const Eigen::Affine3d& target)
+        {
+            return EigenHelpers::TwistBetweenTransforms(start, target);
+        }
+
+        inline Eigen::VectorXd GetDeltaTo(const Eigen::Affine3d& target) const
+        {
+            return EigenHelpers::TwistBetweenTransforms(GetPosition(), target);
+        }
+
         template<typename PRNG>
         inline Eigen::VectorXd GenerateControlAction(const Eigen::Affine3d& target, const double controller_interval, PRNG& rng)
         {
             // Get the current position
             const Eigen::Affine3d current = GetPosition(rng);
+            // Get the twist from the current position to the target position
+            const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(current, target);
+            // Compute feedback terms
+            const double x_term = x_axis_controller_.ComputeFeedbackTerm(twist(0), controller_interval);
+            const double y_term = y_axis_controller_.ComputeFeedbackTerm(twist(1), controller_interval);
+            const double z_term = z_axis_controller_.ComputeFeedbackTerm(twist(2), controller_interval);
+            const double xr_term = xr_axis_controller_.ComputeFeedbackTerm(twist(3), controller_interval);
+            const double yr_term = yr_axis_controller_.ComputeFeedbackTerm(twist(4), controller_interval);
+            const double zr_term = zr_axis_controller_.ComputeFeedbackTerm(twist(5), controller_interval);
+            // Make the control action
+            const double x_axis_control = x_axis_actuator_.GetControlValue(x_term);
+            const double y_axis_control = y_axis_actuator_.GetControlValue(y_term);
+            const double z_axis_control = z_axis_actuator_.GetControlValue(z_term);
+            const double xr_axis_control = xr_axis_actuator_.GetControlValue(xr_term);
+            const double yr_axis_control = yr_axis_actuator_.GetControlValue(yr_term);
+            const double zr_axis_control = zr_axis_actuator_.GetControlValue(zr_term);
+            Eigen::VectorXd control_action(6);
+            control_action(0) = x_axis_control;
+            control_action(1) = y_axis_control;
+            control_action(2) = z_axis_control;
+            control_action(3) = xr_axis_control;
+            control_action(4) = yr_axis_control;
+            control_action(5) = zr_axis_control;
+            return control_action;
+        }
+
+        inline Eigen::VectorXd GenerateControlAction(const Eigen::Affine3d& target, const double controller_interval)
+        {
+            // Get the current position
+            const Eigen::Affine3d current = GetPosition();
             // Get the twist from the current position to the target position
             const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(current, target);
             // Compute feedback terms
@@ -725,12 +779,42 @@ namespace simple_robot_models
             SetConfig(new_config);
         }
 
-        inline Eigen::Matrix<double, 3, Eigen::Dynamic> ComputeLinkPointJacobian(const std::string& link_name, const Eigen::Vector3d& link_relative_point) const
+        inline Eigen::VectorXd GetMaxVelocities() const
+        {
+            Eigen::VectorXd max_velocities = Eigen::VectorXd::Zero(6);
+            max_velocities(0) = x_axis_actuator_.GetMaxVelocity();
+            max_velocities(1) = y_axis_actuator_.GetMaxVelocity();
+            max_velocities(2) = z_axis_actuator_.GetMaxVelocity();
+            max_velocities(3) = xr_axis_actuator_.GetMaxVelocity();
+            max_velocities(4) = yr_axis_actuator_.GetMaxVelocity();
+            max_velocities(5) = zr_axis_actuator_.GetMaxVelocity();
+            return max_velocities;
+        }
+
+        inline Eigen::VectorXd GetMaxVelocityNoise(const Eigen::VectorXd& velocities) const
+        {
+            assert(velocities.size() == 6);
+            Eigen::VectorXd max_velocity_noise = Eigen::VectorXd::Zero(6);
+            max_velocity_noise(0) = x_axis_actuator_.GetMaxVelocityNoise(velocities(0));
+            max_velocity_noise(1) = y_axis_actuator_.GetMaxVelocityNoise(velocities(1));
+            max_velocity_noise(2) = z_axis_actuator_.GetMaxVelocityNoise(velocities(2));
+            max_velocity_noise(3) = xr_axis_actuator_.GetMaxVelocityNoise(velocities(3));
+            max_velocity_noise(4) = yr_axis_actuator_.GetMaxVelocityNoise(velocities(4));
+            max_velocity_noise(5) = zr_axis_actuator_.GetMaxVelocityNoise(velocities(5));
+            return max_velocity_noise;
+        }
+
+        inline Eigen::VectorXd GetMaxVelocityNoise() const
+        {
+            return GetMaxVelocityNoise(GetMaxVelocities());
+        }
+
+        inline Eigen::Matrix<double, 3, Eigen::Dynamic> ComputeLinkPointJacobian(const std::string& link_name, const Eigen::Vector4d& link_relative_point) const
         {
             if (link_name == "robot")
             {
                 const Eigen::Matrix3d rot_matrix = GetPosition().rotation();
-                const Eigen::Matrix3d hatted_link_relative_point = EigenHelpers::Skew(link_relative_point);
+                const Eigen::Matrix3d hatted_link_relative_point = EigenHelpers::Skew(link_relative_point.block<3, 1>(0, 0));
                 Eigen::Matrix<double, 3, 6> body_velocity_jacobian = Eigen::Matrix<double, 3, 6>::Zero();
                 body_velocity_jacobian.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
                 body_velocity_jacobian.block<3, 3>(0, 3) = -hatted_link_relative_point;
@@ -744,32 +828,6 @@ namespace simple_robot_models
             {
                 throw std::invalid_argument("Invalid link_name");
             }
-        }
-
-        inline Eigen::VectorXd ProcessCorrectionAction(const Eigen::VectorXd& raw_correction_action) const
-        {
-            assert(raw_correction_action.size() == 6);
-//            const double action_norm = raw_correction_action.norm();
-//            const Eigen::VectorXd real_correction = (action_norm > 0.05) ? (raw_correction_action / action_norm) * 0.05 : raw_correction_action;
-//            return real_correction;
-            // We treat translation and rotation separately
-            const Eigen::Vector3d raw_translation_correction = raw_correction_action.head<3>();
-            const Eigen::Vector3d raw_rotation_correction = raw_correction_action.tail<3>();
-            // Scale down the translation
-            const double translation_action_norm = raw_translation_correction.norm();
-            const Eigen::Vector3d real_translation_correction = (translation_action_norm > 0.005) ? (raw_translation_correction / translation_action_norm) * 0.005 : raw_translation_correction;
-            // Scale down the rotation
-            const double rotation_action_norm = raw_rotation_correction.norm();
-            const Eigen::Vector3d real_rotation_correction = (rotation_action_norm > 0.05) ? (raw_rotation_correction / rotation_action_norm) * 0.05 : raw_rotation_correction;
-            // Put them back together
-            Eigen::VectorXd real_correction(6);
-            real_correction << real_translation_correction, real_rotation_correction;
-            return real_correction;
-        }
-
-        inline double GetMaxMotionPerStep() const
-        {
-            return max_motion_per_unit_step_;
         }
 
         inline Eigen::Affine3d AverageConfigurations(const EigenHelpers::VectorAffine3d& configurations) const
@@ -846,7 +904,7 @@ namespace simple_robot_models
             type_ = type;
             if (IsContinuous())
             {
-                limits_ = std::pair<double, double>(-M_PI, M_PI);
+                limits_ = std::pair<double, double>(-std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
             }
             else
             {
@@ -936,6 +994,23 @@ namespace simple_robot_models
         inline bool IsFixed() const
         {
             if (type_ == JOINT_TYPE::FIXED)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline JOINT_TYPE GetType() const
+        {
+            return type_;
+        }
+
+        inline bool IsSameType(const SimpleJointModel& other) const
+        {
+            if (type_ == other.GetType())
             {
                 return true;
             }
@@ -1048,6 +1123,7 @@ namespace simple_robot_models
 
         inline double SignedDistance(const SimpleJointModel& other) const
         {
+            assert(IsSameType(other));
             return SignedDistance(GetValue(), other.GetValue());
         }
 
@@ -1063,6 +1139,7 @@ namespace simple_robot_models
 
         inline double Distance(const SimpleJointModel& other) const
         {
+            assert(IsSameType(other));
             return std::abs(SignedDistance(GetValue(), other.GetValue()));
         }
 
@@ -1164,16 +1241,16 @@ namespace simple_robot_models
     struct RobotLink
     {
         Eigen::Affine3d link_transform;
-        std::shared_ptr<EigenHelpers::VectorVector3d> link_points;
+        std::shared_ptr<EigenHelpers::VectorVector4d> link_points;
         std::string link_name;
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        RobotLink() : link_points(new EigenHelpers::VectorVector3d()) {}
+        RobotLink() : link_points(new EigenHelpers::VectorVector4d()) {}
 
-        RobotLink(const std::shared_ptr<EigenHelpers::VectorVector3d>& points, const std::string& name) : link_points(points), link_name(name) {}
+        RobotLink(const std::shared_ptr<EigenHelpers::VectorVector4d>& points, const std::string& name) : link_points(points), link_name(name) {}
 
-        inline void SetLinkPoints(const std::shared_ptr<EigenHelpers::VectorVector3d>& points)
+        inline void SetLinkPoints(const std::shared_ptr<EigenHelpers::VectorVector4d>& points)
         {
             link_points = points;
         }
@@ -1203,7 +1280,6 @@ namespace simple_robot_models
         std::vector<RobotLink> links_;
         std::vector<RobotJoint<ActuatorModel>> joints_;
         std::vector<double> joint_distance_weights_;
-        double max_motion_per_unit_step_;
         size_t num_active_joints_;
         bool initialized_;
 
@@ -1277,15 +1353,6 @@ namespace simple_robot_models
             //std::cout << "Set: " << PrettyPrint::PrettyPrint(GetPosition()) << std::endl;
             // Update forward kinematics
             UpdateTransforms();
-        }
-
-        inline void ResetControllers()
-        {
-            for (size_t idx = 0; idx < joints_.size(); idx++)
-            {
-                RobotJoint<ActuatorModel>& current_joint = joints_[idx];
-                current_joint.joint_controller.controller.Zero();
-            }
         }
 
         inline size_t GetNumActiveJoints() const
@@ -1386,49 +1453,6 @@ namespace simple_robot_models
             return allowed_self_collision_map;
         }
 
-        inline double ComputeMaxMotionPerStep() const
-        {
-            double max_motion = 0.0;
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = GetRawLinksPoints();
-            // Generate motion primitives
-            std::vector<Eigen::VectorXd> motion_primitives;
-            motion_primitives.reserve(GetNumActiveJoints() * 2);
-            for (ssize_t joint_idx = 0; joint_idx < (ssize_t)GetNumActiveJoints(); joint_idx++)
-            {
-                Eigen::VectorXd raw_motion_plus = Eigen::VectorXd::Zero((ssize_t)GetNumActiveJoints());
-                raw_motion_plus(joint_idx) = 0.125;
-                motion_primitives.push_back(raw_motion_plus);
-                Eigen::VectorXd raw_motion_neg = Eigen::VectorXd::Zero((ssize_t)GetNumActiveJoints());
-                raw_motion_neg(joint_idx) = -0.125;
-                motion_primitives.push_back(raw_motion_neg);
-            }
-            // Go through the robot model & compute how much it moves
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
-            {
-                // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
-                // Now, go through the points of the link
-                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
-                {
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = ComputeLinkPointJacobian(link_name, link_relative_point);
-                    // Compute max point motion
-                    for (size_t motion_idx = 0; motion_idx < motion_primitives.size(); motion_idx++)
-                    {
-                        const Eigen::VectorXd& current_motion = motion_primitives[motion_idx];
-                        const double point_motion = (point_jacobian * current_motion).row(0).norm();
-                        if (point_motion > max_motion)
-                        {
-                            max_motion = point_motion;
-                        }
-                    }
-                }
-            }
-            return (max_motion * 8.0);
-        }
-
         inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position, const std::vector<double>& joint_distance_weights)
         {
             base_transform_ = base_transform;
@@ -1445,7 +1469,6 @@ namespace simple_robot_models
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             ResetPosition(initial_position);
-            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
@@ -1465,7 +1488,6 @@ namespace simple_robot_models
             // Generate the self colllision map
             self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
             ResetPosition(initial_position);
-            max_motion_per_unit_step_ = ComputeMaxMotionPerStep();
             initialized_ = true;
         }
 
@@ -1522,9 +1544,9 @@ namespace simple_robot_models
             }
         }
 
-        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
         {
-            std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> links_points;
+            std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> links_points;
             for (size_t idx = 0; idx < links_.size(); idx++)
             {
                 const RobotLink& current_link = links_[idx];
@@ -1542,6 +1564,59 @@ namespace simple_robot_models
         {
             SetConfig(position);
             ResetControllers();
+        }
+
+        inline void ResetControllers()
+        {
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                current_joint.joint_controller.controller.Zero();
+            }
+        }
+
+        inline std::vector<simple_pid_controller::PIDParams> GetControllersParameters() const
+        {
+            std::vector<simple_pid_controller::PIDParams> controllers_parameters;
+            controllers_parameters.reserve(num_active_joints_);
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    controllers_parameters.push_back(current_joint.joint_controller.controller.GetParams());
+                }
+            }
+            controllers_parameters.shrink_to_fit();
+            return controllers_parameters;
+        }
+
+        inline const ActuatorModel& GetActuatorModel(const size_t joint_idx) const
+        {
+            size_t joint_index = 0;
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    if (joint_index == joint_idx)
+                    {
+                        return current_joint.joint_controller.actuator;
+                    }
+                    joint_index++;
+                }
+            }
+            assert(false);
         }
 
         inline Eigen::Affine3d GetLinkTransform(const std::string& link_name) const
@@ -1608,11 +1683,50 @@ namespace simple_robot_models
             return ComputeConfigurationDistance(GetPosition(), target);
         }
 
+        static inline Eigen::VectorXd GetDeltaBetween(const SimpleLinkedConfiguration& start, const SimpleLinkedConfiguration& target)
+        {
+            return ComputeUnweightedPerDimensionConfigurationRawDistance(start, target);
+        }
+
+        inline Eigen::VectorXd GetDeltaTo(const SimpleLinkedConfiguration& target) const
+        {
+            return ComputeUnweightedPerDimensionConfigurationRawDistance(GetPosition(), target);
+        }
+
         template<typename PRNG>
         inline Eigen::VectorXd GenerateControlAction(const SimpleLinkedConfiguration& target, const double controller_interval, PRNG& rng)
         {
             // Get the current position
             const SimpleLinkedConfiguration current = GetPosition(rng);
+            // Get the current error
+            const Eigen::VectorXd current_error = ComputeUnweightedPerDimensionConfigurationRawDistance(current, target);
+            // Make the control action
+            Eigen::VectorXd control_action = Eigen::VectorXd::Zero(current_error.size());
+            int64_t control_idx = 0;
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    const double joint_error = current_error(control_idx);
+                    const double joint_term = current_joint.joint_controller.controller.ComputeFeedbackTerm(joint_error, controller_interval);
+                    const double joint_control = current_joint.joint_controller.actuator.GetControlValue(joint_term);
+                    control_action(control_idx) = joint_control;
+                    control_idx++;
+                }
+            }
+            return control_action;
+        }
+
+        inline Eigen::VectorXd GenerateControlAction(const SimpleLinkedConfiguration& target, const double controller_interval)
+        {
+            // Get the current position
+            const SimpleLinkedConfiguration current = GetPosition();
             // Get the current error
             const Eigen::VectorXd current_error = ComputeUnweightedPerDimensionConfigurationRawDistance(current, target);
             // Make the control action
@@ -1699,12 +1813,80 @@ namespace simple_robot_models
             SetConfig(new_config);
         }
 
-        inline Eigen::Matrix<double, 6, Eigen::Dynamic> ComputeFullLinkPointJacobian(const std::string& link_name, const Eigen::Vector3d& link_relative_point) const
+        inline Eigen::VectorXd GetMaxVelocities() const
+        {
+            Eigen::VectorXd max_velocities = Eigen::VectorXd::Zero(num_active_joints_);
+            int64_t active_joint_idx = 0u;
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    assert(active_joint_idx < max_velocities.size());
+                    max_velocities(active_joint_idx) = current_joint.joint_controller.actuator.GetMaxVelocity();
+                    active_joint_idx++;
+                }
+            }
+            return max_velocities;
+        }
+
+        inline Eigen::VectorXd GetMaxVelocityNoise(const Eigen::VectorXd& velocities) const
+        {
+            assert((size_t)velocities.size() == num_active_joints_);
+            Eigen::VectorXd max_velocity_noise = Eigen::VectorXd::Zero(num_active_joints_);
+            int64_t active_joint_idx = 0u;
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    assert(active_joint_idx < max_velocity_noise.size());
+                    const double velocity_command = velocities(active_joint_idx);
+                    max_velocity_noise(active_joint_idx) = current_joint.joint_controller.actuator.GetMaxVelocityNoise(velocity_command);
+                    active_joint_idx++;
+                }
+            }
+            return max_velocity_noise;
+        }
+
+        inline Eigen::VectorXd GetMaxVelocityNoise() const
+        {
+            Eigen::VectorXd max_velocity_noise = Eigen::VectorXd::Zero(num_active_joints_);
+            int64_t active_joint_idx = 0u;
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    assert(active_joint_idx < max_velocity_noise.size());
+                    max_velocity_noise(active_joint_idx) = current_joint.joint_controller.actuator.GetMaxVelocityNoise();
+                    active_joint_idx++;
+                }
+            }
+            return max_velocity_noise;
+        }
+
+        inline Eigen::Matrix<double, 6, Eigen::Dynamic> ComputeFullLinkPointJacobian(const std::string& link_name, const Eigen::Vector4d& link_relative_point) const
         {
             // Get the link transform (by extension, this ensures we've been given a valid link)
             const Eigen::Affine3d link_transform = GetLinkTransform(link_name);
             // Transform the point into world frame
-            const Eigen::Vector3d world_point = link_transform * link_relative_point;
+            const Eigen::Vector3d world_point = (link_transform * link_relative_point).block<3, 1>(0, 0);
             // Make the jacobian storage
             Eigen::Matrix<double, 6, Eigen::Dynamic> jacobian = Eigen::Matrix<double, 6, Eigen::Dynamic>::Zero((ssize_t)6, (ssize_t)num_active_joints_);
             // First, check if the link name is a valid link name
@@ -1769,7 +1951,7 @@ namespace simple_robot_models
             return jacobian;
         }
 
-        inline Eigen::Matrix<double, 3, Eigen::Dynamic> ComputeLinkPointJacobian(const std::string& link_name, const Eigen::Vector3d& link_relative_point) const
+        inline Eigen::Matrix<double, 3, Eigen::Dynamic> ComputeLinkPointJacobian(const std::string& link_name, const Eigen::Vector4d& link_relative_point) const
         {
             const Eigen::Matrix<double, 6, Eigen::Dynamic> full_jacobian = ComputeFullLinkPointJacobian(link_name, link_relative_point);
             Eigen::Matrix<double, 3, Eigen::Dynamic> trans_only_jacobian(3, full_jacobian.cols());
@@ -1782,19 +1964,6 @@ namespace simple_robot_models
             assert(links_.size() > 0);
             const RobotLink& last_link = links_.back();
             return ComputeFullLinkPointJacobian(last_link.link_name, Eigen::Vector3d::Zero());
-        }
-
-        inline Eigen::VectorXd ProcessCorrectionAction(const Eigen::VectorXd& raw_correction_action) const
-        {
-            // Scale down the action
-            const double action_norm = raw_correction_action.norm();
-            const Eigen::VectorXd real_action = (action_norm > 0.005) ? (raw_correction_action / action_norm) * 0.005 : raw_correction_action;
-            return real_action;
-        }
-
-        inline double GetMaxMotionPerStep() const
-        {
-            return max_motion_per_unit_step_;
         }
 
         inline SimpleLinkedConfiguration AverageConfigurations(const std::vector<SimpleLinkedConfiguration>& configurations) const
@@ -1880,7 +2049,7 @@ namespace simple_robot_models
             return interpolated;
         }
 
-        inline Eigen::VectorXd ComputeUnweightedPerDimensionConfigurationRawDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2) const
+        static inline Eigen::VectorXd ComputeUnweightedPerDimensionConfigurationRawDistance(const SimpleLinkedConfiguration& config1, const SimpleLinkedConfiguration& config2)
         {
             assert(config1.size() == config2.size());
             Eigen::VectorXd distances = Eigen::VectorXd::Zero((ssize_t)(config1.size()));

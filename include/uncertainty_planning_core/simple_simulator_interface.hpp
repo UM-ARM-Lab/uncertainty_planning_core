@@ -86,12 +86,39 @@ namespace simple_simulator_interface
 
         struct StoredSurfaceNormal
         {
-            Eigen::Vector3d normal;
-            Eigen::Vector3d entry_direction;
+        protected:
 
-            StoredSurfaceNormal(const Eigen::Vector3d& in_normal, const Eigen::Vector3d& in_direction) : normal(EigenHelpers::SafeNormal(in_normal)), entry_direction(EigenHelpers::SafeNormal(in_direction)) {}
+            Eigen::Vector4d entry_direction_;
+            Eigen::Vector3d normal_;
 
-            StoredSurfaceNormal() : normal(Eigen::Vector3d(0.0, 0.0, 0.0)), entry_direction(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
+        public:
+
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+            StoredSurfaceNormal(const Eigen::Vector3d& normal, const Eigen::Vector3d& direction) : normal_(EigenHelpers::SafeNormal(normal))
+            {
+                const Eigen::Vector4d direction4d(direction.x(), direction.y(), direction.z(), 0.0);
+                entry_direction_ = (EigenHelpers::SafeNormal(direction4d));
+            }
+
+            StoredSurfaceNormal(const Eigen::Vector3d& normal, const Eigen::Vector4d& direction) : entry_direction_(EigenHelpers::SafeNormal(direction)), normal_(EigenHelpers::SafeNormal(normal)) {}
+
+            StoredSurfaceNormal() : entry_direction_(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0)), normal_(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
+
+            const Eigen::Vector4d& EntryDirection4d() const
+            {
+                return entry_direction_;
+            }
+
+            Eigen::Vector3d EntryDirection3d() const
+            {
+                return entry_direction_.block<3, 1>(0, 0);
+            }
+
+            const Eigen::Vector3d& Normal() const
+            {
+                return normal_;
+            }
         };
 
         VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>> surface_normal_grid_;
@@ -108,7 +135,7 @@ namespace simple_simulator_interface
             for (size_t idx = 0; idx < stored_surface_normals.size(); idx++)
             {
                 const StoredSurfaceNormal& stored_surface_normal = stored_surface_normals[idx];
-                const double dot_product = stored_surface_normal.entry_direction.dot(unit_direction);
+                const double dot_product = stored_surface_normal.EntryDirection3d().dot(unit_direction);
                 if (dot_product > best_dot_product)
                 {
                     best_dot_product = dot_product;
@@ -116,7 +143,30 @@ namespace simple_simulator_interface
                 }
             }
             assert(best_stored_index >= 0);
-            const Eigen::Vector3d& best_surface_normal = stored_surface_normals[(size_t)best_stored_index].normal;
+            const Eigen::Vector3d& best_surface_normal = stored_surface_normals[(size_t)best_stored_index].Normal();
+            return best_surface_normal;
+        }
+
+        static Eigen::Vector3d GetBestSurfaceNormal(const std::vector<StoredSurfaceNormal>& stored_surface_normals, const Eigen::Vector4d& direction)
+        {
+            assert(stored_surface_normals.size() > 0);
+            const double direction_norm = direction.norm();
+            assert(direction_norm > 0.0);
+            const Eigen::Vector4d unit_direction = direction / direction_norm;
+            int32_t best_stored_index = -1;
+            double best_dot_product = -std::numeric_limits<double>::infinity();
+            for (size_t idx = 0; idx < stored_surface_normals.size(); idx++)
+            {
+                const StoredSurfaceNormal& stored_surface_normal = stored_surface_normals[idx];
+                const double dot_product = stored_surface_normal.EntryDirection4d().dot(unit_direction);
+                if (dot_product > best_dot_product)
+                {
+                    best_dot_product = dot_product;
+                    best_stored_index = (int32_t)idx;
+                }
+            }
+            assert(best_stored_index >= 0);
+            const Eigen::Vector3d& best_surface_normal = stored_surface_normals[(size_t)best_stored_index].Normal();
             return best_surface_normal;
         }
 
@@ -140,14 +190,42 @@ namespace simple_simulator_interface
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const double x, const double y, const double z, const Eigen::Vector3d& direction) const
         {
             assert(initialized_);
-            const Eigen::Vector3d location(x, y, z);
+            const Eigen::Vector4d location(x, y, z, 1.0);
             return LookupSurfaceNormal(location, direction);
         }
 
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& direction) const
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex(location);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (indices.size() == 3)
+            {
+                return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector4d& location, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex4d(location);
+            if (indices.size() == 3)
+            {
+                return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector4d& location, const Eigen::Vector4d& direction) const
+        {
+            assert(initialized_);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex4d(location);
             if (indices.size() == 3)
             {
                 return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
@@ -187,6 +265,29 @@ namespace simple_simulator_interface
             }
         }
 
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector4d& direction) const
+        {
+            assert(initialized_);
+            const std::pair<const std::vector<StoredSurfaceNormal>&, bool> lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
+            if (lookup.second)
+            {
+                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.first;
+                if (stored_surface_normals.size() == 0)
+                {
+                    return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), true);
+                }
+                else
+                {
+                    // We get the "best" match surface normal given our entry direction
+                    return std::pair<Eigen::Vector3d, bool>(GetBestSurfaceNormal(stored_surface_normals, direction), true);
+                }
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
         inline bool InsertSurfaceNormal(const double x, const double y, const double z, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
         {
             assert(initialized_);
@@ -197,7 +298,7 @@ namespace simple_simulator_interface
         inline bool InsertSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex(location);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex3d(location);
             if (indices.size() == 3)
             {
                 return InsertSurfaceNormal(indices[0], indices[1], indices[2], surface_normal, entry_direction);
@@ -240,7 +341,7 @@ namespace simple_simulator_interface
         inline bool ClearStoredSurfaceNormals(const Eigen::Vector3d& location)
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex(location);
+            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex3d(location);
             if (indices.size() == 3)
             {
                 return ClearStoredSurfaceNormals(indices[0], indices[1], indices[2]);
@@ -323,6 +424,16 @@ namespace simple_simulator_interface
             return environment_;
         }
 
+        inline const sdf_tools::SignedDistanceField& GetEnvironmentSDF() const
+        {
+            return environment_sdf_;
+        }
+
+        inline sdf_tools::SignedDistanceField& GetMutableEnvironmentSDF()
+        {
+            return environment_sdf_;
+        }
+
         inline visualization_msgs::Marker ExportEnvironmentForDisplay(const float alpha=1.0f) const
         {
             return environment_.ExportForDisplay(alpha);
@@ -392,7 +503,7 @@ namespace simple_simulator_interface
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
             robot.UpdatePosition(configuration);
             // Now, go through the links and points of the robot for collision checking
@@ -400,16 +511,16 @@ namespace simple_simulator_interface
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
+                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
                 // Get the transform of the current link
                 const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    const geometry_msgs::Point marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_point);
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_point = link_transform * link_relative_point;
+                    const geometry_msgs::Point marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_point);
                     configuration_marker.points.push_back(marker_point);
                     if (link_relative_point.norm() == 0.0)
                     {
@@ -449,13 +560,13 @@ namespace simple_simulator_interface
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = *(robot_links_points[link_idx].second);
+                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
                 // Get the current transform
                 // Update the position of the robot
                 robot.UpdatePosition(configuration);
@@ -469,11 +580,11 @@ namespace simple_simulator_interface
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_current_point = current_link_transform * link_relative_point;
-                    const Eigen::Vector3d environment_relative_current_plus_control_point = current_plus_control_link_transform * link_relative_point;
-                    const geometry_msgs::Point current_marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_current_point);
-                    const geometry_msgs::Point current_plus_control_marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_current_plus_control_point);
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_current_point = current_link_transform * link_relative_point;
+                    const Eigen::Vector4d environment_relative_current_plus_control_point = current_plus_control_link_transform * link_relative_point;
+                    const geometry_msgs::Point current_marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_current_point);
+                    const geometry_msgs::Point current_plus_control_marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_current_plus_control_point);
                     configuration_marker.points.push_back(current_marker_point);
                     configuration_marker.points.push_back(current_plus_control_marker_point);
                     configuration_marker.colors.push_back(real_color);
@@ -486,6 +597,10 @@ namespace simple_simulator_interface
         virtual std::map<std::string, double> GetStatistics() const = 0;
 
         virtual void ResetStatistics() = 0;
+
+        virtual bool CheckConfigCollision(const Robot& immutable_robot, const Configuration& config, const double inflation_ratio=1.0) const = 0;
+
+        virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(Robot& mutable_robot, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
 
         virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
 

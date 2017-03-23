@@ -349,11 +349,7 @@ namespace uncertainty_planning_tools
             return std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>>(expectation_, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>(std::pair<double, Eigen::VectorXd>(variance_, variances_), std::pair<double, Eigen::VectorXd>(space_independent_variance_, space_independent_variances_)));
         }
 
-        inline UncertaintyPlannerState() : goal_Pfeasibility_(0.0), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false)
-        {
-            arc_helpers::RequireAlignment(expectation_, 16u);
-            arc_helpers::RequireAlignment(command_, 16u);
-        }
+        inline UncertaintyPlannerState() : goal_Pfeasibility_(0.0), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false) {}
 
         inline bool IsInitialized() const
         {

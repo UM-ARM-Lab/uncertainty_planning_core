@@ -86,6 +86,23 @@ namespace simple_uncertainty_models
             const double noisy_control_input = real_control_input + noise;
             return noisy_control_input;
         }
+
+        inline double GetMaxVelocity() const
+        {
+            return actuator_limit_;
+        }
+
+        inline double GetMaxVelocityNoise(const double velocity) const
+        {
+            const double real_control_input = GetControlValue(velocity);
+            const double max_noise = noise_bound_ * real_control_input;
+            return max_noise;
+        }
+
+        inline double GetMaxVelocityNoise() const
+        {
+            return GetMaxVelocityNoise(GetMaxVelocity());
+        }
     };
 
     typedef std::vector<std::pair<std::pair<double, double>, std::vector<double>>> JointUncertaintySampleModel;

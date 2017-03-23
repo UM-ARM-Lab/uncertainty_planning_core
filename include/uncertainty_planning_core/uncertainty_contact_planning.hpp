@@ -1208,17 +1208,17 @@ namespace uncertainty_contact_planning
             }
         }
 
-        inline Eigen::Vector3d Get3DPointForConfig(const Robot& immutable_robot, const Configuration& config) const
+        inline Eigen::Vector4d Get3DPointForConfig(const Robot& immutable_robot, const Configuration& config) const
         {
             Robot robot = immutable_robot;
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             robot.UpdatePosition(config);
             const std::string& link_name = robot_links_points.back().first;
-            const EigenHelpers::VectorVector3d& link_points = (*robot_links_points.back().second);
+            const EigenHelpers::VectorVector4d& link_points = (*robot_links_points.back().second);
             const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
             //const Eigen::Vector3d link_relative_point(0.0, 0.0, 0.0);
-            const Eigen::Vector3d& link_relative_point = link_points.back();
-            const Eigen::Vector3d config_point = link_transform * link_relative_point;
+            const Eigen::Vector4d& link_relative_point = link_points.back();
+            const Eigen::Vector4d config_point = link_transform * link_relative_point;
             return config_point;
         }
 
@@ -1256,8 +1256,8 @@ namespace uncertainty_contact_planning
                 {
                     const Configuration current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
                     const Configuration previous_config = policy_graph.GetNodeImmutable(previous_index).GetValueImmutable().GetExpectation();
-                    const Eigen::Vector3d current_config_point = Get3DPointForConfig(robot_, current_config);
-                    const Eigen::Vector3d previous_config_point = Get3DPointForConfig(robot_, previous_config);
+                    const Eigen::Vector4d current_config_point = Get3DPointForConfig(robot_, current_config);
+                    const Eigen::Vector4d previous_config_point = Get3DPointForConfig(robot_, previous_config);
                     visualization_msgs::Marker edge_marker;
                     edge_marker.action = visualization_msgs::Marker::ADD;
                     edge_marker.ns = "policy_graph";
@@ -1283,8 +1283,8 @@ namespace uncertainty_contact_planning
                     {
                         continue;
                     }
-                    edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current_config_point));
-                    edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(previous_config_point));
+                    edge_marker.points.push_back(EigenHelpersConversions::EigenVector4dToGeometryPoint(current_config_point));
+                    edge_marker.points.push_back(EigenHelpersConversions::EigenVector4dToGeometryPoint(previous_config_point));
                     policy_markers.markers.push_back(edge_marker);
                 }
             }
@@ -1306,14 +1306,14 @@ namespace uncertainty_contact_planning
             blue_color.b = 1.0f;
             blue_color.a = 1.0f;
             const Configuration previous_config = policy_graph.GetNodeImmutable(current_state_idx).GetValueImmutable().GetExpectation();
-            Eigen::Vector3d previous_point = Get3DPointForConfig(robot_, previous_config);
+            Eigen::Vector4d previous_point = Get3DPointForConfig(robot_, previous_config);
             int64_t previous_index = previous_index_map[(size_t)current_state_idx];
             int idx = 1;
             while (previous_index != -1)
             {
                 const int64_t current_idx = previous_index;
                 const Configuration current_config = policy_graph.GetNodeImmutable(current_idx).GetValueImmutable().GetExpectation();
-                const Eigen::Vector3d current_config_point = Get3DPointForConfig(robot_, current_config);
+                const Eigen::Vector4d current_config_point = Get3DPointForConfig(robot_, current_config);
                 visualization_msgs::Marker edge_marker;
                 edge_marker.action = visualization_msgs::Marker::ADD;
                 edge_marker.ns = policy_name;
@@ -1329,8 +1329,8 @@ namespace uncertainty_contact_planning
                 const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
                 edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
                 edge_marker.color = color;
-                edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(previous_point));
-                edge_marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current_config_point));
+                edge_marker.points.push_back(EigenHelpersConversions::EigenVector4dToGeometryPoint(previous_point));
+                edge_marker.points.push_back(EigenHelpersConversions::EigenVector4dToGeometryPoint(current_config_point));
                 policy_markers.markers.push_back(edge_marker);
                 previous_index = previous_index_map[(size_t)current_idx];
                 if (previous_index == current_idx)
@@ -1363,7 +1363,7 @@ namespace uncertainty_contact_planning
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
             robot.UpdatePosition(configuration);
             // Now, go through the links and points of the robot for collision checking
@@ -1371,16 +1371,16 @@ namespace uncertainty_contact_planning
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = (*robot_links_points[link_idx].second);
+                const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 // Get the transform of the current link
                 const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    const geometry_msgs::Point marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_point);
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_point = link_transform * link_relative_point;
+                    const geometry_msgs::Point marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_point);
                     configuration_marker.points.push_back(marker_point);
                     if (link_relative_point.norm() == 0.0)
                     {
@@ -1448,13 +1448,13 @@ namespace uncertainty_contact_planning
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = (*robot_links_points[link_idx].second);
+                const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 // Get the current transform
                 // Update the position of the robot
                 robot.UpdatePosition(configuration);
@@ -1468,11 +1468,11 @@ namespace uncertainty_contact_planning
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_current_point = current_link_transform * link_relative_point;
-                    const Eigen::Vector3d environment_relative_current_plus_control_point = current_plus_control_link_transform * link_relative_point;
-                    const geometry_msgs::Point current_marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_current_point);
-                    const geometry_msgs::Point current_plus_control_marker_point = EigenHelpersConversions::EigenVector3dToGeometryPoint(environment_relative_current_plus_control_point);
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_current_point = current_link_transform * link_relative_point;
+                    const Eigen::Vector4d environment_relative_current_plus_control_point = current_plus_control_link_transform * link_relative_point;
+                    const geometry_msgs::Point current_marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_current_point);
+                    const geometry_msgs::Point current_plus_control_marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_current_plus_control_point);
                     configuration_marker.points.push_back(current_marker_point);
                     configuration_marker.points.push_back(current_plus_control_marker_point);
                     configuration_marker.colors.push_back(real_color);
@@ -1598,7 +1598,7 @@ namespace uncertainty_contact_planning
         {
             Robot robot = immutable_robot;
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
             robot.UpdatePosition(configuration);
             std::vector<std::vector<uint32_t>> link_region_signatures(robot_links_points.size());
@@ -1607,7 +1607,7 @@ namespace uncertainty_contact_planning
             {
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector3d& link_points = (*robot_links_points[link_idx].second);
+                const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 std::vector<uint32_t> link_region_signature(link_points.size());
                 // Get the transform of the current link
                 const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
@@ -1615,9 +1615,9 @@ namespace uncertainty_contact_planning
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
                     // Transform the link point into the environment frame
-                    const Eigen::Vector3d& link_relative_point = link_points[point_idx];
-                    const Eigen::Vector3d environment_relative_point = link_transform * link_relative_point;
-                    std::pair<const sdf_tools::TAGGED_OBJECT_COLLISION_CELL&, bool> query = simulator_ptr_->GetEnvironment().GetImmutable(environment_relative_point);
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_point = link_transform * link_relative_point;
+                    std::pair<const sdf_tools::TAGGED_OBJECT_COLLISION_CELL&, bool> query = simulator_ptr_->GetEnvironment().GetImmutable4d(environment_relative_point);
                     if (query.second)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& environment_cell = query.first;
@@ -1706,7 +1706,7 @@ namespace uncertainty_contact_planning
             {
                 const double percent = (double)step / (double)steps;
                 const Eigen::Vector3d intermediate_point = EigenHelpers::Interpolate(start, end, percent);
-                const float occupancy = environment.GetImmutable(intermediate_point).first.occupancy;
+                const float occupancy = environment.GetImmutable3d(intermediate_point).first.occupancy;
                 if (occupancy > 0.5f)
                 {
                     return false;
@@ -1719,7 +1719,7 @@ namespace uncertainty_contact_planning
         {
             Robot robot = immutable_robot;
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector3d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             EigenHelpers::VectorVector3d start_config_actuation_centers(robot_links_points.size());
             EigenHelpers::VectorVector3d end_config_actuation_centers(robot_links_points.size());
             // Update the position of the robot
