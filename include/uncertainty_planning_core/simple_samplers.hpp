@@ -59,6 +59,16 @@ namespace simple_samplers
             state << x, y, zr;
             return state;
         }
+
+        virtual Eigen::Matrix<double, 3, 1> Sample(const std::function<double()>& uniform_unit_dist_fn) const
+        {
+            const double x = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_dist_fn());
+            const double y = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_dist_fn());
+            const double zr = EigenHelpers::Interpolate(-M_PI, M_PI, uniform_unit_dist_fn());
+            Eigen::Matrix<double, 3, 1> state;
+            state << x, y, zr;
+            return state;
+        }
     };
 
     template <typename Generator>
@@ -101,6 +111,16 @@ namespace simple_samplers
             const Eigen::Affine3d state = Eigen::Translation3d(x, y, z) * quat;
             return state;
         }
+
+        virtual Eigen::Affine3d Sample(const std::function<double()>& uniform_unit_dist_fn) const
+        {
+            const double x = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_dist_fn());
+            const double y = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_dist_fn());
+            const double z = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_dist_fn());
+            const Eigen::Quaterniond quat = rotation_generator_.GenerateUniformRandomQuaternion(uniform_unit_dist_fn);
+            const Eigen::Affine3d state = Eigen::Translation3d(x, y, z) * quat;
+            return state;
+        }
     };
 
     template <typename Generator>
@@ -133,6 +153,28 @@ namespace simple_samplers
                 {
                     const std::pair<double, double> limits = current_joint.GetLimits();
                     const double sampled_val = EigenHelpers::Interpolate(limits.first, limits.second, uniform_unit_distribution_(prng));
+                    sampled.push_back(current_joint.CopyWithNewValue(sampled_val));
+                }
+            }
+            return sampled;
+        }
+
+        virtual simple_robot_models::SimpleLinkedConfiguration Sample(const std::function<double()>& uniform_unit_dist_fn) const
+        {
+            simple_robot_models::SimpleLinkedConfiguration sampled;
+            sampled.reserve(representative_configuration_.size());
+            for (size_t idx = 0; idx < representative_configuration_.size(); idx++)
+            {
+                const simple_robot_models::SimpleJointModel& current_joint = representative_configuration_[idx];
+                if (current_joint.IsContinuous())
+                {
+                    const double sampled_val = EigenHelpers::Interpolate(-M_PI, M_PI, uniform_unit_dist_fn());
+                    sampled.push_back(current_joint.CopyWithNewValue(sampled_val));
+                }
+                else
+                {
+                    const std::pair<double, double> limits = current_joint.GetLimits();
+                    const double sampled_val = EigenHelpers::Interpolate(limits.first, limits.second, uniform_unit_dist_fn());
                     sampled.push_back(current_joint.CopyWithNewValue(sampled_val));
                 }
             }
