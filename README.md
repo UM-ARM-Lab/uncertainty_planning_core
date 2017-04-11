@@ -12,7 +12,7 @@ This package is the core of our framework for motion planning and execution with
 - Interface for robot simulators to integrate with the planner
 - Concrete instantiations of the planner and execution policy for SE(2), SE(3), and linked robots
 
-While the planner and execution policy are themselves template-based, this package provides a library containing concrete instantiations of the planner for different types of robot. When possible, you should use these rather interfacing with the planner directly.
+While the planner and execution policy are themselves template-based, this package provides a library containing concrete instantiations of the planner for different types of robot. When possible, you should use these rather than interfacing with the planner directly.
 
 ## Dependencies
 
