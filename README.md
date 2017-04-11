@@ -16,18 +16,18 @@ While the planner and execution policy are themselves template-based, this packa
 
 ## Dependencies
 
-- [arc_utilities](github.com/UM-ARM-LAB/arc_utilities)
+- [arc_utilities](https://github.com/UM-ARM-LAB/arc_utilities)
  
 Provides a range of utility and math functions, as well as templated implementations of kinodynamic RRT, Dijkstra's algorithm, and hierarchical clustering.
 
-- [sdf_tools](github.com/UM-ARM-LAB/sdf_tools)
+- [sdf_tools](https://github.com/UM-ARM-LAB/sdf_tools)
 
 Tools for modeling environments using voxel grids, including several types of collision maps, signed distance fields, and optional integration with MoveIt!
 
-- [ROS Kinetic](ros.org)
+- [ROS Kinetic](http://ros.org)
 
 ROS is required for the build system, Catkin, and for RViz, which the planner uses as an optional visualization interface.
 
 ## Examples
 
-To see several examples of using the planner and execution policy, see [uncertainty_planning_examples](github.com/UM-ARM-LAB/uncertainty_planning_examples)
+To see several examples of using the planner and execution policy, see [uncertainty_planning_examples](https://github.com/UM-ARM-LAB/uncertainty_planning_examples)
