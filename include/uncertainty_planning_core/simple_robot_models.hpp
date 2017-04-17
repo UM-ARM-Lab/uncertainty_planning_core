@@ -1525,6 +1525,11 @@ namespace simple_robot_models
             UpdateTransforms();
         }
 
+        inline Eigen::Affine3d GetBaseTransform() const
+        {
+            return base_transform_;
+        }
+
         inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
         {
             assert(link1_index < links_.size());

@@ -55,6 +55,11 @@ namespace simple_simulator_interface
     struct ForwardSimulationStepTrace
     {
         std::vector<ForwardSimulationResolverTrace<Configuration, ConfigAlloc>> resolver_steps;
+
+        inline void Reset()
+        {
+            resolver_steps.clear();
+        }
     };
 
     template<typename Configuration, typename ConfigAlloc=std::allocator<Configuration>>
@@ -399,6 +404,17 @@ namespace simple_simulator_interface
             debug_level_ = debug_level;
         }
 
+        inline int32_t GetDebugLevel() const
+        {
+            return debug_level_;
+        }
+
+        inline int32_t SetDebugLevel(const int32_t debug_level)
+        {
+            debug_level_ = debug_level;
+            return debug_level_;
+        }
+
         inline Eigen::Affine3d GetOriginTransform() const
         {
             return environment_.GetOriginTransform();
@@ -598,7 +614,7 @@ namespace simple_simulator_interface
 
         virtual void ResetStatistics() = 0;
 
-        virtual bool CheckConfigCollision(const Robot& immutable_robot, const Configuration& config, const double inflation_ratio=1.0) const = 0;
+        virtual bool CheckConfigCollision(const Robot& immutable_robot, const Configuration& config, const double inflation_ratio=0.0) const = 0;
 
         virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(Robot& mutable_robot, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const = 0;
 
