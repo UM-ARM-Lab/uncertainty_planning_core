@@ -1640,7 +1640,7 @@ namespace simple_robot_models
             return initialized_;
         }
 
-        inline void SetBaseTransform(const Eigen::Affine3d& base_transform)
+        inline void UpdateBaseTransform(const Eigen::Affine3d& base_transform)
         {
             base_transform_ = base_transform;
             UpdateTransforms();
