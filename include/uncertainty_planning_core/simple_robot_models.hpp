@@ -1275,10 +1275,22 @@ namespace simple_robot_models
     {
     protected:
 
+        struct KinematicSkeletonElement
+        {
+            int64_t parent_link_index_;
+            int64_t parent_joint_index_;
+            std::vector<int64_t> child_link_indices_;
+            std::vector<int64_t> child_joint_indices_;
+
+            KinematicSkeletonElement() : parent_link_index_(-1), parent_joint_index_(-1) {}
+        };
+
         Eigen::Affine3d base_transform_;
         Eigen::MatrixXi self_collision_map_;
         std::vector<RobotLink> links_;
         std::vector<RobotJoint<ActuatorModel>> joints_;
+        std::vector<KinematicSkeletonElement> kinematic_skeleton_;
+        std::map<int64_t, int64_t> active_joint_index_map_;
         std::vector<double> joint_distance_weights_;
         size_t num_active_joints_;
         bool initialized_;
@@ -1355,61 +1367,152 @@ namespace simple_robot_models
             UpdateTransforms();
         }
 
-        inline size_t GetNumActiveJoints() const
+        static inline std::pair<size_t, std::map<int64_t, int64_t>> MakeActiveJointIndexMap(const std::vector<RobotJoint<ActuatorModel>>& joints)
         {
-            size_t num_active_joints = 0u;
-            for (size_t idx = 0; idx < joints_.size(); idx++)
+            size_t num_active_joints = 0;
+            std::map<int64_t, int64_t> active_joint_index_map;
+            for (size_t idx = 0; idx < joints.size(); idx++)
             {
-                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& current_joint = joints[idx];
                 // Skip fixed joints
                 if (!(current_joint.joint_model.IsFixed()))
                 {
+                    active_joint_index_map[(int64_t)idx] = (int64_t)num_active_joints;
                     num_active_joints++;
                 }
+                else
+                {
+                    active_joint_index_map[(int64_t)idx] = -1;
+                }
             }
-            return num_active_joints;
+            return std::make_pair(num_active_joints, active_joint_index_map);
+        }
+
+        static bool ExploreChildren(const std::vector<KinematicSkeletonElement>& kinematic_skeleton, const int64_t current_index, std::map<int64_t, uint8_t>& cycle_detection_map)
+        {
+            // Check if we've been here before
+            cycle_detection_map[current_index]++;
+            const uint8_t check_val = cycle_detection_map[current_index];
+            if (check_val != 0x01)
+            {
+                std::cerr << "Invalid kinematic structure, link " << current_index << " is part of a cycle" << std::endl;
+                return true;
+            }
+            else
+            {
+                const KinematicSkeletonElement& current_element = kinematic_skeleton[current_index];
+                const std::vector<int64_t>& current_child_indices = current_element.child_link_indices_;
+                for (size_t idx = 0; idx < current_child_indices.size(); idx++)
+                {
+                    // Get the current child index
+                    const int64_t current_child_index = current_child_indices[idx];
+                    const bool child_cycle_detected = ExploreChildren(kinematic_skeleton, current_child_index, cycle_detection_map);
+                    if (child_cycle_detected)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        static bool CheckKinematicSkeleton(const std::vector<KinematicSkeletonElement>& kinematic_skeleton)
+        {
+            // Step through each state in the tree. Make sure that the linkage to the parent and child states are correct
+            for (size_t current_index = 0; current_index < kinematic_skeleton.size(); current_index++)
+            {
+                // For every element, make sure all the parent<->child linkages are valid
+                const KinematicSkeletonElement& current_element = kinematic_skeleton[current_index];
+                // Check the linkage to the parent state
+                const int64_t parent_index = current_element.parent_link_index_;
+                if ((parent_index >= 0) && (parent_index < (int64_t)kinematic_skeleton.size()))
+                {
+                    if (parent_index != (int64_t)current_index)
+                    {
+                        const KinematicSkeletonElement& parent_element = kinematic_skeleton[parent_index];
+                        // Make sure the corresponding parent contains the current node in the list of child indices
+                        const std::vector<int64_t>& parent_child_indices = parent_element.child_link_indices_;
+                        auto index_found = std::find(parent_child_indices.begin(), parent_child_indices.end(), (int64_t)current_index);
+                        if (index_found == parent_child_indices.end())
+                        {
+                            std::cerr << "Parent element " << parent_index << " does not contain child index for current element " << current_index << std::endl;
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        std::cerr << "Invalid parent index " << parent_index << " for element " << current_index << " [Indices can't be the same]" << std::endl;
+                        return false;
+                    }
+                }
+                else if (parent_index < -1)
+                {
+                    std::cerr << "Invalid parent index " << parent_index << " for element " << current_index << std::endl;
+                    return false;
+                }
+                // Check the linkage to the child states
+                const std::vector<int64_t>& current_child_indices = current_element.child_link_indices_;
+                for (size_t idx = 0; idx < current_child_indices.size(); idx++)
+                {
+                    // Get the current child index
+                    const int64_t current_child_index = current_child_indices[idx];
+                    if ((current_child_index > 0) && (current_child_index < (int64_t)kinematic_skeleton.size()))
+                    {
+                        if (current_child_index != (int64_t)current_index)
+                        {
+                            const KinematicSkeletonElement& child_element = kinematic_skeleton[current_child_index];
+                            // Make sure the child node points to us as the parent index
+                            const int64_t child_parent_index = child_element.parent_link_index_;
+                            if (child_parent_index != (int64_t)current_index)
+                            {
+                                std::cerr << "Parent index " << child_parent_index << " for current child element " << current_child_index << " does not match index " << current_index << " for current element " << std::endl;
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            std::cerr << "Invalid child index " << current_child_index << " for element " << current_index << " [Indices can't be the same]" << std::endl;
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        std::cerr << "Invalid child index " << current_child_index << " for element " << current_index << std::endl;
+                        return false;
+                    }
+                }
+            }
+            // Now that we know all the linkage connections are valid, we need to make sure it is connected and acyclic
+            std::map<int64_t, uint8_t> cycle_detection_map;
+            const bool cycle_detected = ExploreChildren(kinematic_skeleton, 0, cycle_detection_map);
+            if (cycle_detected)
+            {
+                return false;
+            }
+            // Make sure we encountered every link ONCE
+            for (size_t link_idx = 0; link_idx < kinematic_skeleton.size(); link_idx++)
+            {
+                const uint8_t check_val = arc_helpers::RetrieveOrDefault(cycle_detection_map, (int64_t)link_idx, (uint8_t)0x00);
+                if (check_val != 0x01)
+                {
+                    std::cerr << "Invalid kinematic structure, link " << link_idx << " not reachable from the root" << std::endl;
+                    return false;
+                }
+            }
+            return true;
         }
 
     public:
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        static inline bool SanityCheckRobotModel(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints)
+        static inline std::pair<std::vector<KinematicSkeletonElement>, bool> SanityCheckRobotModel(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints)
         {
+            // Make sure we have enough links and joints
             if (links.size() != (joints.size() + 1))
             {
                 std::cerr << links.size() << " links are not enough for " << joints.size() << " joints" << std::endl;
-                return false;
-            }
-            // We need to make sure that every joint references valid links, and that the links+joints form a valid kinematic chain
-            int64_t last_child_index = 0u;
-            for (size_t idx = 0; idx < joints.size(); idx++)
-            {
-                const RobotJoint<ActuatorModel>& current_joint = joints[idx];
-                if (current_joint.parent_link_index != last_child_index)
-                {
-                    std::cerr << "Parent link index must be the same as the previous joint's child link index" << std::endl;
-                    return false;
-                }
-                if (current_joint.child_link_index != (current_joint.parent_link_index + 1))
-                {
-                    std::cerr << "Parent and child links must have successive indices" << std::endl;
-                    return false;
-                }
-                if ((current_joint.child_link_index >= (int64_t)links.size()) || (current_joint.child_link_index < 0))
-                {
-                    std::cerr << "Invalid child link index" << std::endl;
-                    return false;
-                }
-                last_child_index = current_joint.child_link_index;
-                // Last, check the joint axes
-                const double joint_axis_norm = current_joint.joint_axis.norm();
-                const double error = std::abs(joint_axis_norm - 1.0);
-                if (error > std::numeric_limits<double>::epsilon())
-                {
-                    std::cerr << "Joint axis is not a unit vector" << std::endl;
-                    return false;
-                }
+                return std::make_pair(std::vector<KinematicSkeletonElement>(), false);
             }
             // Make sure the links all have unique names
             std::map<std::string, uint32_t> link_name_check_map;
@@ -1420,7 +1523,7 @@ namespace simple_robot_models
                 if (link_name_check_map[link_name] > 1)
                 {
                     std::cerr << "Link " << link_name << " is not unique" << std::endl;
-                    return false;
+                    return std::make_pair(std::vector<KinematicSkeletonElement>(), false);
                 }
             }
             // Make sure the joints all have unique names
@@ -1432,10 +1535,42 @@ namespace simple_robot_models
                 if (joint_name_check_map[joint_name] > 1)
                 {
                     std::cerr << "Joint " << joint_name << " is not unique" << std::endl;
-                    return false;
+                    return std::make_pair(std::vector<KinematicSkeletonElement>(), false);
                 }
             }
-            return true;
+            // Make the kinematic skeleton structure for checking
+            std::vector<KinematicSkeletonElement> kinematic_skeleton(links.size(), KinematicSkeletonElement());
+            for (size_t joint_idx = 0; joint_idx < joints.size(); joint_idx++)
+            {
+                // Get the current joint
+                const RobotJoint<ActuatorModel>& current_joint = joints[joint_idx];
+                // Check the joint axes
+                const double joint_axis_norm = current_joint.joint_axis.norm();
+                const double error = std::abs(joint_axis_norm - 1.0);
+                if (error > std::numeric_limits<double>::epsilon())
+                {
+                    std::cerr << "Joint axis is not a unit vector" << std::endl;
+                    return std::make_pair(std::vector<KinematicSkeletonElement>(), false);
+                }
+                // Add the edge into the kinematic skeleton
+                const int64_t parent_link_index = current_joint.parent_link_index;
+                const int64_t child_link_index = current_joint.child_link_index;
+                // Set the child->parent relationship
+                kinematic_skeleton[(size_t)child_link_index].parent_link_index_ = parent_link_index;
+                kinematic_skeleton[(size_t)child_link_index].parent_joint_index_ = joint_idx;
+                // Set the parent->child relationship
+                kinematic_skeleton[(size_t)parent_link_index].child_link_indices_.push_back(child_link_index);
+                kinematic_skeleton[(size_t)parent_link_index].child_joint_indices_.push_back(joint_idx);
+            }
+            // Make sure the first link is the root
+            const KinematicSkeletonElement& root_element = kinematic_skeleton[0];
+            if (root_element.parent_joint_index_ != -1 || root_element.parent_link_index_ != -1)
+            {
+                std::cerr << "Invalid kinematic structure, first link is not the root" << std::endl;
+                return std::make_pair(std::vector<KinematicSkeletonElement>(), false);
+            }
+            const bool valid_kinematics = CheckKinematicSkeleton(kinematic_skeleton);
+            return std::make_pair(kinematic_skeleton, valid_kinematics);
         }
 
         static inline Eigen::MatrixXi GenerateAllowedSelfColllisionMap(const size_t num_links, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions)
@@ -1459,30 +1594,16 @@ namespace simple_robot_models
             // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
             links_ = links;
             joints_ = joints;
-            if (!SanityCheckRobotModel(links_, joints_))
+            const auto model_validity_check = SanityCheckRobotModel(links_, joints_);
+            if (!model_validity_check.second)
             {
                 throw std::invalid_argument("Attempted to construct a SimpleLinkedRobot with an invalid robot model");
             }
-            num_active_joints_ = GetNumActiveJoints();
-            assert(joint_distance_weights.size() == num_active_joints_);
-            joint_distance_weights_ = EigenHelpers::Abs(joint_distance_weights);
-            // Generate the self colllision map
-            self_collision_map_ = GenerateAllowedSelfColllisionMap(links_.size(), allowed_self_collisions);
-            ResetPosition(initial_position);
-            initialized_ = true;
-        }
-
-        inline SimpleLinkedRobot(const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position, const std::vector<double>& joint_distance_weights)
-        {
-            base_transform_ = Eigen::Affine3d::Identity();
-            // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
-            links_ = links;
-            joints_ = joints;
-            if (!SanityCheckRobotModel(links_, joints_))
-            {
-                throw std::invalid_argument("Attempted to construct a SimpleLinkedRobot with an invalid robot model");
-            }
-            num_active_joints_ = GetNumActiveJoints();
+            kinematic_skeleton_ = model_validity_check.first;
+            // Get information about the active joints
+            const auto active_joint_query = MakeActiveJointIndexMap(joints_);
+            num_active_joints_ = active_joint_query.first;
+            active_joint_index_map_ = active_joint_query.second;
             assert(joint_distance_weights.size() == num_active_joints_);
             joint_distance_weights_ = EigenHelpers::Abs(joint_distance_weights);
             // Generate the self colllision map
@@ -1895,63 +2016,60 @@ namespace simple_robot_models
             // Make the jacobian storage
             Eigen::Matrix<double, 6, Eigen::Dynamic> jacobian = Eigen::Matrix<double, 6, Eigen::Dynamic>::Zero((ssize_t)6, (ssize_t)num_active_joints_);
             // First, check if the link name is a valid link name
-            bool link_found = false;
+            int64_t link_idx = -1;
             for (size_t idx = 0; idx < links_.size(); idx++)
             {
                 const std::string& current_link_name = links_[idx].link_name;
                 if (current_link_name == link_name)
                 {
-                    link_found = true;
+                    link_idx = (int64_t)idx;
                     break;
                 }
             }
-            if (link_found == false)
+            if (link_idx < 0)
             {
                 std::cerr << "Link " << link_name << " does not exist" << std::endl;
                 return jacobian;
             }
             // Second, check if the link name is the first (root) link
-            if (links_[0].link_name == link_name)
+            if (link_idx == 0)
             {
                 // If so, return zeros for the jacobian, because the point *CANNOT MOVE*
                 return jacobian;
             }
-            // Go through the kinematic chain and compute the jacobian
-            int64_t joint_idx = 0;
-            for (size_t idx = 0; idx < joints_.size(); idx++)
+            // Walk up the kinematic tree and fill in the blocks one at a time
+            int64_t current_link_index = link_idx;
+            while (current_link_index > 0)
             {
+                const KinematicSkeletonElement& current_element = kinematic_skeleton_[current_link_index];
+                const int64_t parent_joint_index = current_element.parent_joint_index_;
+                assert(parent_joint_index >= 0);
+                const int64_t active_joint_index = active_joint_index_map_.at(parent_joint_index);
                 // Get the current joint
-                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                const RobotJoint<ActuatorModel>& parent_joint = joints_[parent_joint_index];
                 // Get the child link
-                const RobotLink& child_link = links_[(size_t)current_joint.child_link_index];
+                const RobotLink& child_link = links_[(size_t)parent_joint.child_link_index];
                 // Get the transform of the current joint
                 const Eigen::Affine3d joint_transform = child_link.link_transform;
                 // Compute the jacobian for the current joint
-                if (current_joint.joint_model.IsRevolute())
+                if (parent_joint.joint_model.IsRevolute())
                 {
-                    const Eigen::Vector3d joint_axis = (Eigen::Vector3d)(joint_transform.rotation() * current_joint.joint_axis);
-                    jacobian.block<3,1>(0, joint_idx) = jacobian.block<3,1>(0, joint_idx) + joint_axis.cross(world_point - joint_transform.translation());
-                    jacobian.block<3,1>(3, joint_idx) = jacobian.block<3,1>(3, joint_idx) + joint_axis;
-                    // Increment our joint count
-                    joint_idx++;
+                    const Eigen::Vector3d joint_axis = (Eigen::Vector3d)(joint_transform.rotation() * parent_joint.joint_axis);
+                    jacobian.block<3,1>(0, active_joint_index) = joint_axis.cross(world_point - joint_transform.translation());
+                    jacobian.block<3,1>(3, active_joint_index) = joint_axis;
                 }
-                else if (current_joint.joint_model.IsPrismatic())
+                else if (parent_joint.joint_model.IsPrismatic())
                 {
-                    const Eigen::Vector3d joint_axis = (Eigen::Vector3d)(joint_transform * current_joint.joint_axis);
-                    jacobian.block<3,1>(0, joint_idx) = jacobian.block<3,1>(0, joint_idx) + joint_axis;
-                    // Increment our joint count
-                    joint_idx++;
+                    const Eigen::Vector3d joint_axis = (Eigen::Vector3d)(joint_transform * parent_joint.joint_axis);
+                    jacobian.block<3,1>(0, active_joint_index) = joint_axis;
                 }
                 else
                 {
-                    assert(current_joint.joint_model.IsFixed());
+                    assert(parent_joint.joint_model.IsFixed());
                     // We do nothing for fixed joints
                 }
-                // Check if we're done - joints after our target link aren't part of the jacobian
-                if (child_link.link_name == link_name)
-                {
-                    break;
-                }
+                // Update
+                current_link_index = current_element.parent_link_index_;
             }
             return jacobian;
         }
