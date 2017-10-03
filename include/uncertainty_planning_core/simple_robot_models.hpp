@@ -924,10 +924,10 @@ namespace simple_robot_models
         inline uint64_t SerializeSelf(std::vector<uint8_t>& buffer) const
         {
             const uint64_t start_buffer_size = buffer.size();
-            arc_helpers::SerializeFixedSizePOD<double>(limits_.first, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(limits_.second, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(value_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint32_t>((uint32_t)type_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(limits_.first, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(limits_.second, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(value_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>((uint32_t)type_, buffer);
             // Figure out how many bytes were written
             const uint64_t end_buffer_size = buffer.size();
             const uint64_t bytes_written = end_buffer_size - start_buffer_size;
@@ -938,16 +938,16 @@ namespace simple_robot_models
         {
             assert(current < buffer.size());
             uint64_t current_position = current;
-            const std::pair<double, uint64_t> deserialized_limits_first = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_limits_first = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             limits_.first = deserialized_limits_first.first;
             current_position += deserialized_limits_first.second;
-            const std::pair<double, uint64_t> deserialized_limits_second = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_limits_second = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             limits_.second = deserialized_limits_second.first;
             current_position += deserialized_limits_second.second;
-            const std::pair<double, uint64_t> deserialized_value = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_value = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             value_ = deserialized_value.first;
             current_position += deserialized_value.second;
-            const std::pair<uint32_t, uint64_t> deserialized_type = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> deserialized_type = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             type_ = (JOINT_TYPE)deserialized_type.first;
             current_position += deserialized_type.second;
             // Figure out how many bytes were read
@@ -1167,12 +1167,12 @@ namespace simple_robot_models
 
         static inline uint64_t Serialize(const std::vector<SimpleJointModel>& value, std::vector<uint8_t>& buffer)
         {
-            return arc_helpers::SerializeVector<SimpleJointModel>(value, buffer, SimpleJointModel::Serialize);
+            return arc_utilities::SerializeVector<SimpleJointModel>(value, buffer, SimpleJointModel::Serialize);
         }
 
         static inline std::pair<std::vector<SimpleJointModel>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return arc_helpers::DeserializeVector<SimpleJointModel>(buffer, current, SimpleJointModel::Deserialize);
+            return arc_utilities::DeserializeVector<SimpleJointModel>(buffer, current, SimpleJointModel::Deserialize);
         }
     };
 

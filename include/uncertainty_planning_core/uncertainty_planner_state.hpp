@@ -67,31 +67,31 @@ namespace uncertainty_planning_tools
             assert(initialized_);
             const uint64_t start_buffer_size = buffer.size();
             // First thing we save is the qualified type id
-            arc_helpers::SerializeFixedSizePOD<uint64_t>(std::numeric_limits<uint64_t>::max(), buffer);
-            arc_helpers::SerializeString<char>(GetConfigurationType(), buffer);
-            arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)has_particles_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)use_for_nearest_neighbors_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(attempt_count_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(reached_count_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(reverse_attempt_count_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(reverse_reached_count_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(step_size_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(parent_motion_Pfeasibility_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(effective_edge_Pfeasibility_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(motion_Pfeasibility_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(variance_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(space_independent_variance_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint64_t>(state_id_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint64_t>(transition_id_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint64_t>(reverse_transition_id_, buffer);
-            arc_helpers::SerializeFixedSizePOD<uint64_t>(split_id_, buffer);
-            arc_helpers::SerializeFixedSizePOD<double>(goal_Pfeasibility_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint64_t>(std::numeric_limits<uint64_t>::max(), buffer);
+            arc_utilities::SerializeString<char>(GetConfigurationType(), buffer);
+            arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)has_particles_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)use_for_nearest_neighbors_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>(attempt_count_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>(reached_count_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>(reverse_attempt_count_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>(reverse_reached_count_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(step_size_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(parent_motion_Pfeasibility_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(effective_edge_Pfeasibility_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(motion_Pfeasibility_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(variance_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(space_independent_variance_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint64_t>(state_id_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint64_t>(transition_id_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint64_t>(reverse_transition_id_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint64_t>(split_id_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(goal_Pfeasibility_, buffer);
             ConfigSerializer::Serialize(expectation_, buffer);
             ConfigSerializer::Serialize(command_, buffer);
             EigenHelpers::Serialize(variances_, buffer);
             EigenHelpers::Serialize(space_independent_variances_, buffer);
             // Serialize the particles
-            arc_helpers::SerializeVector<Configuration, ConfigAlloc>(particles_, buffer, &ConfigSerializer::Serialize);
+            arc_utilities::SerializeVector<Configuration, ConfigAlloc>(particles_, buffer, &ConfigSerializer::Serialize);
             // Figure out how many bytes we wrote
             const uint64_t end_buffer_size = buffer.size();
             const uint64_t bytes_written = end_buffer_size - start_buffer_size;
@@ -112,14 +112,14 @@ namespace uncertainty_planning_tools
             // First thing we save is the qualified type id
             const uint64_t reference_qualified_type_id_hash = std::numeric_limits<uint64_t>::max();
             const std::string reference_configuration_type = GetConfigurationType();
-            const std::pair<uint64_t, uint64_t> deserialized_qualified_type_id_hash = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            const std::pair<uint64_t, uint64_t> deserialized_qualified_type_id_hash = arc_utilities::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
             const uint64_t qualified_type_id_hash = deserialized_qualified_type_id_hash.first;
             current_position += deserialized_qualified_type_id_hash.second;
             // Check types
             // If the file used the legacy type ID, we can't safely check it (std::hash is not required to be consistent across program executions!) so we warn the user and continue
             if (qualified_type_id_hash == reference_qualified_type_id_hash)
             {
-                const std::pair<std::string, uint64_t> deserialized_configuration_type = arc_helpers::DeserializeString<char>(buffer, current_position);
+                const std::pair<std::string, uint64_t> deserialized_configuration_type = arc_utilities::DeserializeString<char>(buffer, current_position);
                 const std::string& configuration_type = deserialized_configuration_type.first;
                 current_position += deserialized_configuration_type.second;
                 if (configuration_type != reference_configuration_type)
@@ -132,57 +132,57 @@ namespace uncertainty_planning_tools
                 std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nLoaded file uses old TypeId hash and cannot be safely checked\nPROCEED WITH CAUTION - THIS MAY CAUSE UNDEFINED BEHAVIOR IN LOADING\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
             }
             // Load fixed size members
-            const std::pair<uint8_t, uint64_t> deserialized_has_particles = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+            const std::pair<uint8_t, uint64_t> deserialized_has_particles = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
             has_particles_ = (bool)deserialized_has_particles.first;
             current_position += deserialized_has_particles.second;
-            const std::pair<uint8_t, uint64_t> deserialized_use_for_nearest_neighbors = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+            const std::pair<uint8_t, uint64_t> deserialized_use_for_nearest_neighbors = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
             use_for_nearest_neighbors_ = (bool)deserialized_use_for_nearest_neighbors.first;
             current_position += deserialized_use_for_nearest_neighbors.second;
-            const std::pair<uint32_t, uint64_t> deserialized_attempt_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> deserialized_attempt_count = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             attempt_count_ = deserialized_attempt_count.first;
             current_position += deserialized_attempt_count.second;
-            const std::pair<uint32_t, uint64_t> deserialized_reached_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> deserialized_reached_count = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             reached_count_ = deserialized_reached_count.first;
             current_position += deserialized_reached_count.second;
             raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
-            const std::pair<uint32_t, uint64_t> deserialized_reverse_attempt_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> deserialized_reverse_attempt_count = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             reverse_attempt_count_ = deserialized_reverse_attempt_count.first;
             current_position += deserialized_reverse_attempt_count.second;
-            const std::pair<uint32_t, uint64_t> deserialized_reverse_reached_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> deserialized_reverse_reached_count = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             reverse_reached_count_ = deserialized_reverse_reached_count.first;
             current_position += deserialized_reverse_reached_count.second;
             reverse_edge_Pfeasibility_ = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
-            const std::pair<double, uint64_t> deserialized_step_size = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_step_size = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             step_size_ = deserialized_step_size.first;
             current_position += deserialized_step_size.second;
-            const std::pair<double, uint64_t> deserialized_parent_motion_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_parent_motion_Pfeasibility = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             parent_motion_Pfeasibility_ = deserialized_parent_motion_Pfeasibility.first;
             current_position += deserialized_parent_motion_Pfeasibility.second;
-            const std::pair<double, uint64_t> deserialized_effective_edge_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_effective_edge_Pfeasibility = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             effective_edge_Pfeasibility_ = deserialized_effective_edge_Pfeasibility.first;
             current_position += deserialized_effective_edge_Pfeasibility.second;
-            const std::pair<double, uint64_t> deserialized_motion_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_motion_Pfeasibility = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             motion_Pfeasibility_ = deserialized_motion_Pfeasibility.first;
             current_position += deserialized_motion_Pfeasibility.second;
-            const std::pair<double, uint64_t> deserialized_variance = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_variance = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             variance_ = deserialized_variance.first;
             current_position += deserialized_variance.second;
-            const std::pair<double, uint64_t> deserialized_space_independent_variance = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_space_independent_variance = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             space_independent_variance_ = deserialized_space_independent_variance.first;
             current_position += deserialized_space_independent_variance.second;
-            const std::pair<uint64_t, uint64_t> deserialized_state_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            const std::pair<uint64_t, uint64_t> deserialized_state_id = arc_utilities::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
             state_id_ = deserialized_state_id.first;
             current_position += deserialized_state_id.second;
-            const std::pair<uint64_t, uint64_t> deserialized_transition_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            const std::pair<uint64_t, uint64_t> deserialized_transition_id = arc_utilities::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
             transition_id_ = deserialized_transition_id.first;
             current_position += deserialized_transition_id.second;
-            const std::pair<uint64_t, uint64_t> deserialized_reverse_transition_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            const std::pair<uint64_t, uint64_t> deserialized_reverse_transition_id = arc_utilities::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
             reverse_transition_id_ = deserialized_reverse_transition_id.first;
             current_position += deserialized_reverse_transition_id.second;
-            const std::pair<uint64_t, uint64_t> deserialized_split_id = arc_helpers::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
+            const std::pair<uint64_t, uint64_t> deserialized_split_id = arc_utilities::DeserializeFixedSizePOD<uint64_t>(buffer, current_position);
             split_id_ = deserialized_split_id.first;
             current_position += deserialized_split_id.second;
-            const std::pair<double, uint64_t> deserialized_goal_Pfeasibility = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> deserialized_goal_Pfeasibility = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             goal_Pfeasibility_ = deserialized_goal_Pfeasibility.first;
             current_position += deserialized_goal_Pfeasibility.second;
             // Load the variable-sized components
@@ -199,7 +199,7 @@ namespace uncertainty_planning_tools
             space_independent_variances_ = deserialized_space_independent_variances.first;
             current_position += deserialized_space_independent_variances.second;
             // Load the particles
-            const std::pair<std::vector<Configuration, ConfigAlloc>, uint64_t> deserialized_particles = arc_helpers::DeserializeVector<Configuration, ConfigAlloc>(buffer, current_position, &ConfigSerializer::Deserialize);
+            const std::pair<std::vector<Configuration, ConfigAlloc>, uint64_t> deserialized_particles = arc_utilities::DeserializeVector<Configuration, ConfigAlloc>(buffer, current_position, &ConfigSerializer::Deserialize);
             particles_ = deserialized_particles.first;
             current_position += deserialized_particles.second;
             // Initialize the state

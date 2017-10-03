@@ -351,20 +351,20 @@ namespace execution_policy
         {
             const uint64_t start_buffer_size = buffer.size();
             // Serialize the initialized
-            arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
             // Serialize the planner tree
             std::function<uint64_t(const UncertaintyPlanningTreeState&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn = [] (const UncertaintyPlanningTreeState& state, std::vector<uint8_t>& buffer) { return UncertaintyPlanningTreeState::Serialize(state, buffer, UncertaintyPlanningState::Serialize); };
-            arc_helpers::SerializeVector(planner_tree_, buffer, planning_tree_state_serializer_fn);
+            arc_utilities::SerializeVector(planner_tree_, buffer, planning_tree_state_serializer_fn);
             // Serialize the goal
             ConfigSerializer::Serialize(goal_, buffer);
             // Serialize the marginal edge weight
-            arc_helpers::SerializeFixedSizePOD<double>(marginal_edge_weight_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(marginal_edge_weight_, buffer);
             // Serialize the conformant planning threshold
-            arc_helpers::SerializeFixedSizePOD<double>(conformant_planning_threshold_, buffer);
+            arc_utilities::SerializeFixedSizePOD<double>(conformant_planning_threshold_, buffer);
             // Serialize the edge attempt threshold
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(edge_attempt_threshold_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>(edge_attempt_threshold_, buffer);
             // Serialize the policy action attempt count
-            arc_helpers::SerializeFixedSizePOD<uint32_t>(policy_action_attempt_count_, buffer);
+            arc_utilities::SerializeFixedSizePOD<uint32_t>(policy_action_attempt_count_, buffer);
             // Figure out how many bytes were written
             const uint64_t end_buffer_size = buffer.size();
             const uint64_t bytes_written = end_buffer_size - start_buffer_size;
@@ -375,12 +375,12 @@ namespace execution_policy
         {
             uint64_t current_position = current;
             // Deserialize the initialized
-            const std::pair<uint8_t, uint64_t> initialized_deserialized = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+            const std::pair<uint8_t, uint64_t> initialized_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
             initialized_ = (bool)initialized_deserialized.first;
             current_position += initialized_deserialized.second;
             // Deserialize the planner tree
             std::function<std::pair<UncertaintyPlanningTreeState, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return UncertaintyPlanningTreeState::Deserialize(buffer, current, UncertaintyPlanningState::Deserialize); };
-            const std::pair<UncertaintyPlanningTree, uint64_t> planner_tree_deserialized = arc_helpers::DeserializeVector<UncertaintyPlanningTreeState>(buffer, current_position, planning_tree_state_deserializer_fn);
+            const std::pair<UncertaintyPlanningTree, uint64_t> planner_tree_deserialized = arc_utilities::DeserializeVector<UncertaintyPlanningTreeState>(buffer, current_position, planning_tree_state_deserializer_fn);
             planner_tree_ = planner_tree_deserialized.first;
             current_position += planner_tree_deserialized.second;
             // Deserialize the goal
@@ -388,19 +388,19 @@ namespace execution_policy
             goal_ = goal_deserialized.first;
             current_position += goal_deserialized.second;
             // Deserialize the marginal edge weight
-            const std::pair<double, uint64_t> marginal_edge_weight_deserialized = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> marginal_edge_weight_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             marginal_edge_weight_ = marginal_edge_weight_deserialized.first;
             current_position += marginal_edge_weight_deserialized.second;
             // Deserialize the conformant planning threshold
-            const std::pair<double, uint64_t> conformant_planning_threshold_deserialized = arc_helpers::DeserializeFixedSizePOD<double>(buffer, current_position);
+            const std::pair<double, uint64_t> conformant_planning_threshold_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
             conformant_planning_threshold_ = conformant_planning_threshold_deserialized.first;
             current_position += conformant_planning_threshold_deserialized.second;
             // Deserialize the edge attempt threshold
-            const std::pair<uint32_t, uint64_t> edge_attempt_threshold_deserialized = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> edge_attempt_threshold_deserialized = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             edge_attempt_threshold_ = edge_attempt_threshold_deserialized.first;
             current_position += edge_attempt_threshold_deserialized.second;
             // Deserialize the policy action attempt count
-            const std::pair<uint32_t, uint64_t> policy_action_attempt_count_deserialized = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
+            const std::pair<uint32_t, uint64_t> policy_action_attempt_count_deserialized = arc_utilities::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             policy_action_attempt_count_ = policy_action_attempt_count_deserialized.first;
             current_position += policy_action_attempt_count_deserialized.second;
             // Rebuild the policy graph
