@@ -6,6 +6,7 @@
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/pretty_print.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
 #include <uncertainty_planning_core/simple_pid_controller.hpp>
 #include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 
@@ -25,12 +26,12 @@ namespace simple_robot_models
 
         static inline uint64_t Serialize(const Eigen::Matrix<double, 3, 1>& value, std::vector<uint8_t>& buffer)
         {
-            return EigenHelpers::Serialize(value, buffer);
+            return arc_utilities::SerializeEigenType(value, buffer);
         }
 
         static inline std::pair<Eigen::Matrix<double, 3, 1>, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return EigenHelpers::Deserialize<Eigen::Matrix<double, 3, 1>>(buffer, current);
+            return arc_utilities::DeserializeEigenType<Eigen::Matrix<double, 3, 1>>(buffer, current);
         }
     };
 
@@ -440,12 +441,12 @@ namespace simple_robot_models
 
         static inline uint64_t Serialize(const Eigen::Isometry3d& value, std::vector<uint8_t>& buffer)
         {
-            return EigenHelpers::Serialize(value, buffer);
+            return arc_utilities::SerializeEigenType(value, buffer);
         }
 
         static inline std::pair<Eigen::Isometry3d, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return EigenHelpers::Deserialize<Eigen::Isometry3d>(buffer, current);
+            return arc_utilities::DeserializeEigenType<Eigen::Isometry3d>(buffer, current);
         }
     };
 

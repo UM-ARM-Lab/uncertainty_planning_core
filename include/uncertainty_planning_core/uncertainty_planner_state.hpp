@@ -9,6 +9,7 @@
 #include <random>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
 
 #ifndef UNCERTAINTY_PLANNER_STATE_HPP
 #define UNCERTAINTY_PLANNER_STATE_HPP
@@ -88,8 +89,8 @@ namespace uncertainty_planning_tools
             arc_utilities::SerializeFixedSizePOD<double>(goal_Pfeasibility_, buffer);
             ConfigSerializer::Serialize(expectation_, buffer);
             ConfigSerializer::Serialize(command_, buffer);
-            EigenHelpers::Serialize(variances_, buffer);
-            EigenHelpers::Serialize(space_independent_variances_, buffer);
+            arc_utilities::SerializeEigenType(variances_, buffer);
+            arc_utilities::SerializeEigenType(space_independent_variances_, buffer);
             // Serialize the particles
             arc_utilities::SerializeVector<Configuration, ConfigAlloc>(particles_, buffer, &ConfigSerializer::Serialize);
             // Figure out how many bytes we wrote
@@ -192,10 +193,10 @@ namespace uncertainty_planning_tools
             const std::pair<Configuration, uint64_t> deserialized_command = ConfigSerializer::Deserialize(buffer, current_position);
             command_ = deserialized_command.first;
             current_position += deserialized_command.second;
-            const std::pair<Eigen::VectorXd, uint64_t> deserialized_variances = EigenHelpers::Deserialize<Eigen::VectorXd>(buffer, current_position);
+            const std::pair<Eigen::VectorXd, uint64_t> deserialized_variances = arc_utilities::DeserializeEigenType<Eigen::VectorXd>(buffer, current_position);
             variances_ = deserialized_variances.first;
             current_position += deserialized_variances.second;
-            const std::pair<Eigen::VectorXd, uint64_t> deserialized_space_independent_variances = EigenHelpers::Deserialize<Eigen::VectorXd>(buffer, current_position);
+            const std::pair<Eigen::VectorXd, uint64_t> deserialized_space_independent_variances = arc_utilities::DeserializeEigenType<Eigen::VectorXd>(buffer, current_position);
             space_independent_variances_ = deserialized_space_independent_variances.first;
             current_position += deserialized_space_independent_variances.second;
             // Load the particles
