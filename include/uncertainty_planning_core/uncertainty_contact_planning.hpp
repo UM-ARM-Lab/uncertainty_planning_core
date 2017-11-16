@@ -219,8 +219,8 @@ namespace uncertainty_contact_planning
         {
             std::cout << "Serializing planner tree..." << std::endl;
             std::function<uint64_t(const UncertaintyPlanningTreeState&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn = [] (const UncertaintyPlanningTreeState& state, std::vector<uint8_t>& buffer) { return UncertaintyPlanningTreeState::Serialize(state, buffer, UncertaintyPlanningState::Serialize); };
-            arc_helpers::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
-            const uint64_t size = arc_helpers::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
+            arc_utilities::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
+            const uint64_t size = arc_utilities::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
             std::cout << "...planner tree of " << planner_tree.size() << " states serialized into " << buffer.size() << " bytes" << std::endl;
             return size;
         }
@@ -229,7 +229,7 @@ namespace uncertainty_contact_planning
         {
             std::cout << "Deserializing planner tree..." << std::endl;
             std::function<std::pair<UncertaintyPlanningTreeState, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return UncertaintyPlanningTreeState::Deserialize(buffer, current, UncertaintyPlanningState::Deserialize); };
-            const std::pair<UncertaintyPlanningTree, uint64_t> deserialized_tree = arc_helpers::DeserializeVector<UncertaintyPlanningTreeState>(buffer, current, planning_tree_state_deserializer_fn);
+            const std::pair<UncertaintyPlanningTree, uint64_t> deserialized_tree = arc_utilities::DeserializeVector<UncertaintyPlanningTreeState>(buffer, current, planning_tree_state_deserializer_fn);
             std::cout << "...planner tree of " << deserialized_tree.first.size() << " states deserialized from " << deserialized_tree.second << " bytes" << std::endl;
             return deserialized_tree;
         }
