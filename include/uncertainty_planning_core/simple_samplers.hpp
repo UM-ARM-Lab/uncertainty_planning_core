@@ -72,7 +72,7 @@ namespace simple_samplers
     };
 
     template <typename Generator>
-    class SimpleSE3BaseSampler : public SimpleBaseSampler<Eigen::Affine3d, Generator>
+    class SimpleSE3BaseSampler : public SimpleBaseSampler<Eigen::Isometry3d, Generator>
     {
     protected:
 
@@ -86,7 +86,7 @@ namespace simple_samplers
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        SimpleSE3BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits) : SimpleBaseSampler<Eigen::Affine3d, Generator>(), uniform_unit_distribution_(0.0, 1.0)
+        SimpleSE3BaseSampler(const std::pair<double, double>& x_limits, const std::pair<double, double>& y_limits, const std::pair<double, double>& z_limits) : SimpleBaseSampler<Eigen::Isometry3d, Generator>(), uniform_unit_distribution_(0.0, 1.0)
         {
             assert(!(std::isnan(x_limits.first) || std::isinf(x_limits.first)));
             assert(!(std::isnan(x_limits.second) || std::isinf(x_limits.second)));
@@ -102,23 +102,23 @@ namespace simple_samplers
             z_limits_ = z_limits;
         }
 
-        virtual Eigen::Affine3d Sample(Generator& prng)
+        virtual Eigen::Isometry3d Sample(Generator& prng)
         {
             const double x = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
             const double y = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
             const double z = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
             const Eigen::Quaterniond quat = rotation_generator_.GetQuaternion(prng);
-            const Eigen::Affine3d state = Eigen::Translation3d(x, y, z) * quat;
+            const Eigen::Isometry3d state = Eigen::Translation3d(x, y, z) * quat;
             return state;
         }
 
-        virtual Eigen::Affine3d Sample(const std::function<double()>& uniform_unit_dist_fn) const
+        virtual Eigen::Isometry3d Sample(const std::function<double()>& uniform_unit_dist_fn) const
         {
             const double x = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_dist_fn());
             const double y = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_dist_fn());
             const double z = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_dist_fn());
             const Eigen::Quaterniond quat = rotation_generator_.GenerateUniformRandomQuaternion(uniform_unit_dist_fn);
-            const Eigen::Affine3d state = Eigen::Translation3d(x, y, z) * quat;
+            const Eigen::Isometry3d state = Eigen::Translation3d(x, y, z) * quat;
             return state;
         }
     };

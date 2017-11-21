@@ -141,9 +141,9 @@ namespace uncertainty_planning_core
     typedef std::shared_ptr<SE2Sampler> SE2SamplerPtr;
     typedef uncertainty_contact_planning::UncertaintyPlanningSpace<SE2Robot, SE2Config, SE2ConfigSerializer, SE2ConfigAlloc, PRNG> SE2PlanningSpace;
 
-    typedef Eigen::Affine3d SE3Config;
-    typedef Eigen::aligned_allocator<Eigen::Affine3d> SE3ConfigAlloc;
-    typedef simple_robot_models::EigenAffine3dSerializer SE3ConfigSerializer;
+    typedef Eigen::Isometry3d SE3Config;
+    typedef Eigen::aligned_allocator<Eigen::Isometry3d> SE3ConfigAlloc;
+    typedef simple_robot_models::EigenIsometry3dSerializer SE3ConfigSerializer;
     typedef execution_policy::ExecutionPolicy<SE3Config, SE3ConfigSerializer, SE3ConfigAlloc> SE3Policy;
     typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator SE3ActuatorModel;
     typedef simple_robot_models::SimpleSE3Robot SE3Robot;

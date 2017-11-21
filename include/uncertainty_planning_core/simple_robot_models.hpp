@@ -41,15 +41,19 @@ namespace simple_robot_models
         double kd;
         double integral_clamp;
         double velocity_limit;
+        double acceleration_limit;
         double max_sensor_noise;
-        double max_actuator_noise;
+        double max_actuator_proportional_noise;
+        double max_actuator_minimum_noise;
         double r_kp;
         double r_ki;
         double r_kd;
         double r_integral_clamp;
         double r_velocity_limit;
+        double r_acceleration_limit;
         double r_max_sensor_noise;
-        double r_max_actuator_noise;
+        double r_max_actuator_proportional_noise;
+        double r_max_actuator_minimum_noise;
 
         SE2_ROBOT_CONFIG()
         {
@@ -58,33 +62,41 @@ namespace simple_robot_models
             kd = 0.0;
             integral_clamp = 0.0;
             velocity_limit = 0.0;
+            acceleration_limit = 0.0;
             max_sensor_noise = 0.0;
-            max_actuator_noise = 0.0;
+            max_actuator_proportional_noise = 0.0;
+            max_actuator_minimum_noise = 0.0;
             r_kp = 0.0;
             r_ki = 0.0;
             r_kd = 0.0;
             r_integral_clamp = 0.0;
             r_velocity_limit = 0.0;
+            r_acceleration_limit = 0.0;
             r_max_sensor_noise = 0.0;
-            r_max_actuator_noise = 0.0;
+            r_max_actuator_proportional_noise = 0.0;
+            r_max_actuator_minimum_noise = 0.0;
         }
 
-        SE2_ROBOT_CONFIG(const double in_kp, const double in_ki, const double in_kd, const double in_integral_clamp, const double in_velocity_limit, const double in_max_sensor_noise, const double in_max_actuator_noise, const double in_r_kp, const double in_r_ki, const double in_r_kd, const double in_r_integral_clamp, const double in_r_velocity_limit, const double in_r_max_sensor_noise, const double in_r_max_actuator_noise)
+        SE2_ROBOT_CONFIG(const double in_kp, const double in_ki, const double in_kd, const double in_integral_clamp, const double in_velocity_limit, const double in_acceleration_limit, const double in_max_sensor_noise, const double in_max_actuator_proportional_noise, const double in_max_actuator_minimum_noise, const double in_r_kp, const double in_r_ki, const double in_r_kd, const double in_r_integral_clamp, const double in_r_velocity_limit, const double in_r_acceleration_limit, const double in_r_max_sensor_noise, const double in_r_max_actuator_proportional_noise, const double in_r_max_actuator_minimum_noise)
         {
             kp = in_kp;
             ki = in_ki;
             kd = in_kd;
             integral_clamp = in_integral_clamp;
             velocity_limit = in_velocity_limit;
+            acceleration_limit = in_acceleration_limit;
             max_sensor_noise = in_max_sensor_noise;
-            max_actuator_noise = in_max_actuator_noise;
+            max_actuator_proportional_noise = in_max_actuator_proportional_noise;
+            max_actuator_minimum_noise = in_max_actuator_minimum_noise;
             r_kp = in_r_kp;
             r_ki = in_r_ki;
             r_kd = in_r_kd;
             r_integral_clamp = in_r_integral_clamp;
             r_velocity_limit = in_r_velocity_limit;
+            r_acceleration_limit = in_r_acceleration_limit;
             r_max_sensor_noise = in_r_max_sensor_noise;
-            r_max_actuator_noise = in_r_max_actuator_noise;
+            r_max_actuator_proportional_noise = in_r_max_actuator_proportional_noise;
+            r_max_actuator_minimum_noise = in_r_max_actuator_minimum_noise;
         }
     };
 
@@ -92,7 +104,7 @@ namespace simple_robot_models
     {
     protected:
 
-        Eigen::Affine3d pose_;
+        Eigen::Isometry3d pose_;
         Eigen::Matrix<double, 3, 1> config_;
         std::shared_ptr<EigenHelpers::VectorVector4d> link_points_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
@@ -104,6 +116,8 @@ namespace simple_robot_models
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator x_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator y_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator zr_axis_actuator_;
+        double position_distance_weight_;
+        double rotation_distance_weight_;
         bool initialized_;
 
         inline void SetConfig(const Eigen::Matrix<double, 3, 1>& new_config)
@@ -121,17 +135,19 @@ namespace simple_robot_models
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const SE2_ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const SE2_ROBOT_CONFIG& robot_config, const double position_distance_weight, const double rotation_distance_weight) : link_points_(robot_points)
         {
+            position_distance_weight_ = std::abs(position_distance_weight);
+            rotation_distance_weight_ = std::abs(rotation_distance_weight);
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             zr_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.r_kp, robot_config.r_ki, robot_config.r_kd, robot_config.r_integral_clamp);
             x_axis_sensor_ = simple_uncertainty_models::TruncatedNormalUncertainSensor(-robot_config.max_sensor_noise, robot_config.max_sensor_noise);
             y_axis_sensor_ = simple_uncertainty_models::TruncatedNormalUncertainSensor(-robot_config.max_sensor_noise, robot_config.max_sensor_noise);
             zr_axis_sensor_ = simple_uncertainty_models::TruncatedNormalUncertainSensor(-robot_config.r_max_sensor_noise, robot_config.r_max_sensor_noise);
-            x_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
-            y_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
-            zr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
+            x_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.velocity_limit, robot_config.acceleration_limit, robot_config.max_actuator_proportional_noise, robot_config.max_actuator_minimum_noise, 0.5);
+            y_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.velocity_limit, robot_config.acceleration_limit, robot_config.max_actuator_proportional_noise, robot_config.max_actuator_minimum_noise, 0.5);
+            zr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_velocity_limit, robot_config.r_acceleration_limit, robot_config.r_max_actuator_proportional_noise, robot_config.r_max_actuator_minimum_noise, 0.5);
             ResetPosition(initial_position);
             initialized_ = true;
         }
@@ -171,7 +187,6 @@ namespace simple_robot_models
             return std::vector<simple_pid_controller::PIDParams>{x_axis_controller_.GetParams(), y_axis_controller_.GetParams(), zr_axis_controller_.GetParams()};
         }
 
-
         inline const simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator& GetActuatorModel(const size_t joint_idx) const
         {
             if (joint_idx == 0)
@@ -192,7 +207,7 @@ namespace simple_robot_models
             }
         }
 
-        inline Eigen::Affine3d GetLinkTransform(const std::string& link_name) const
+        inline Eigen::Isometry3d GetLinkTransform(const std::string& link_name) const
         {
             if (link_name == "robot")
             {
@@ -336,7 +351,7 @@ namespace simple_robot_models
             {
                 const Eigen::Matrix<double, 3, 1> current_config = GetPosition();
                 // Transform the point into world frame
-                const Eigen::Affine3d current_transform = GetLinkTransform("robot");
+                const Eigen::Isometry3d current_transform = GetLinkTransform("robot");
                 const Eigen::Vector3d current_position(current_config(0), current_config(1), 0.0);
                 const Eigen::Vector3d world_point = (current_transform * link_relative_point).block<3, 1>(0, 0);
                 // Make the jacobian
@@ -348,7 +363,7 @@ namespace simple_robot_models
                 jacobian.block<3,1>(0, 1) = jacobian.block<3,1>(0, 1) + Eigen::Vector3d::UnitY();
                 // Rotatational joints
                 // Compute Z-axis joint axis
-                const Eigen::Affine3d z_joint_transform = current_transform;
+                const Eigen::Isometry3d z_joint_transform = current_transform;
                 const Eigen::Vector3d z_joint_axis = (Eigen::Vector3d)(z_joint_transform.rotation() * Eigen::Vector3d::UnitZ());
                 jacobian.block<3,1>(0, 2) = jacobian.block<3,1>(0, 2) + z_joint_axis.cross(world_point - current_position);
                 return jacobian;
@@ -359,13 +374,13 @@ namespace simple_robot_models
             }
         }
 
-        inline Eigen::Affine3d ComputePose() const
+        inline Eigen::Isometry3d ComputePose() const
         {
             const Eigen::Matrix<double, 3, 1> current_config = GetPosition();
             const Eigen::Translation3d current_position(current_config(0), current_config(1), 0.0);
             const double current_z_angle = current_config(2);
-            const Eigen::Affine3d z_joint_transform = current_position * Eigen::Quaterniond::Identity();
-            const Eigen::Affine3d body_transform = z_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_z_angle, Eigen::Vector3d::UnitZ())));
+            const Eigen::Isometry3d z_joint_transform = current_position * Eigen::Quaterniond::Identity();
+            const Eigen::Isometry3d body_transform = z_joint_transform * (Eigen::Translation3d::Identity() * Eigen::Quaterniond(Eigen::AngleAxisd(current_z_angle, Eigen::Vector3d::UnitZ())));
             return body_transform;
         }
 
@@ -425,27 +440,27 @@ namespace simple_robot_models
             const Eigen::VectorXd dim_distances = ComputePerDimensionConfigurationRawDistance(config1, config2);
             const double trans_dist = sqrt((dim_distances(0) * dim_distances(0)) + (dim_distances(1) * dim_distances(1)));
             const double rots_dist = std::abs(dim_distances(2));
-            return trans_dist + rots_dist;
+            return (trans_dist * position_distance_weight_) + (rots_dist * rotation_distance_weight_);
         }
     };
 
-    class EigenAffine3dSerializer
+    class EigenIsometry3dSerializer
     {
     public:
 
         static inline std::string TypeName()
         {
-            return std::string("EigenAffine3dSerializer");
+            return std::string("EigenIsometry3dSerializer");
         }
 
-        static inline uint64_t Serialize(const Eigen::Affine3d& value, std::vector<uint8_t>& buffer)
+        static inline uint64_t Serialize(const Eigen::Isometry3d& value, std::vector<uint8_t>& buffer)
         {
             return EigenHelpers::Serialize(value, buffer);
         }
 
-        static inline std::pair<Eigen::Affine3d, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        static inline std::pair<Eigen::Isometry3d, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return EigenHelpers::Deserialize<Eigen::Affine3d>(buffer, current);
+            return EigenHelpers::Deserialize<Eigen::Isometry3d>(buffer, current);
         }
     };
 
@@ -456,15 +471,19 @@ namespace simple_robot_models
         double kd;
         double integral_clamp;
         double velocity_limit;
+        double acceleration_limit;
         double max_sensor_noise;
-        double max_actuator_noise;
+        double max_actuator_proportional_noise;
+        double max_actuator_minimum_noise;
         double r_kp;
         double r_ki;
         double r_kd;
         double r_integral_clamp;
         double r_velocity_limit;
+        double r_acceleration_limit;
         double r_max_sensor_noise;
-        double r_max_actuator_noise;
+        double r_max_actuator_proportional_noise;
+        double r_max_actuator_minimum_noise;
 
         SE3_ROBOT_CONFIG()
         {
@@ -473,33 +492,41 @@ namespace simple_robot_models
             kd = 0.0;
             integral_clamp = 0.0;
             velocity_limit = 0.0;
+            acceleration_limit = 0.0;
             max_sensor_noise = 0.0;
-            max_actuator_noise = 0.0;
+            max_actuator_proportional_noise = 0.0;
+            max_actuator_minimum_noise = 0.0;
             r_kp = 0.0;
             r_ki = 0.0;
             r_kd = 0.0;
             r_integral_clamp = 0.0;
             r_velocity_limit = 0.0;
+            r_acceleration_limit = 0.0;
             r_max_sensor_noise = 0.0;
-            r_max_actuator_noise = 0.0;
+            r_max_actuator_proportional_noise = 0.0;
+            r_max_actuator_minimum_noise = 0.0;
         }
 
-        SE3_ROBOT_CONFIG(const double in_kp, const double in_ki, const double in_kd, const double in_integral_clamp, const double in_velocity_limit, const double in_max_sensor_noise, const double in_max_actuator_noise, const double in_r_kp, const double in_r_ki, const double in_r_kd, const double in_r_integral_clamp, const double in_r_velocity_limit, const double in_r_max_sensor_noise, const double in_r_max_actuator_noise)
+        SE3_ROBOT_CONFIG(const double in_kp, const double in_ki, const double in_kd, const double in_integral_clamp, const double in_velocity_limit, const double in_acceleration_limit, const double in_max_sensor_noise, const double in_max_actuator_proportional_noise, const double in_max_actuator_minimum_noise, const double in_r_kp, const double in_r_ki, const double in_r_kd, const double in_r_integral_clamp, const double in_r_velocity_limit, const double in_r_acceleration_limit, const double in_r_max_sensor_noise, const double in_r_max_actuator_proportional_noise, const double in_r_max_actuator_minimum_noise)
         {
             kp = in_kp;
             ki = in_ki;
             kd = in_kd;
             integral_clamp = in_integral_clamp;
             velocity_limit = in_velocity_limit;
+            acceleration_limit = in_acceleration_limit;
             max_sensor_noise = in_max_sensor_noise;
-            max_actuator_noise = in_max_actuator_noise;
+            max_actuator_proportional_noise = in_max_actuator_proportional_noise;
+            max_actuator_minimum_noise = in_max_actuator_minimum_noise;
             r_kp = in_r_kp;
             r_ki = in_r_ki;
             r_kd = in_r_kd;
             r_integral_clamp = in_r_integral_clamp;
             r_velocity_limit = in_r_velocity_limit;
+            r_acceleration_limit = in_r_acceleration_limit;
             r_max_sensor_noise = in_r_max_sensor_noise;
-            r_max_actuator_noise = in_r_max_actuator_noise;
+            r_max_actuator_proportional_noise = in_r_max_actuator_proportional_noise;
+            r_max_actuator_minimum_noise = in_r_max_actuator_minimum_noise;
         }
     };
 
@@ -507,7 +534,7 @@ namespace simple_robot_models
     {
     protected:
 
-        Eigen::Affine3d config_;
+        Eigen::Isometry3d config_;
         std::shared_ptr<EigenHelpers::VectorVector4d> link_points_;
         simple_pid_controller::SimplePIDController x_axis_controller_;
         simple_pid_controller::SimplePIDController y_axis_controller_;
@@ -527,9 +554,11 @@ namespace simple_robot_models
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator xr_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator yr_axis_actuator_;
         simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator zr_axis_actuator_;
+        double position_distance_weight_;
+        double rotation_distance_weight_;
         bool initialized_;
 
-        inline void SetConfig(const Eigen::Affine3d& new_config)
+        inline void SetConfig(const Eigen::Isometry3d& new_config)
         {
             //std::cout << "Raw config to set: " << new_config << std::endl;
             config_ = new_config;
@@ -539,8 +568,10 @@ namespace simple_robot_models
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Affine3d& initial_position, const SE3_ROBOT_CONFIG& robot_config) : link_points_(robot_points)
+        inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Isometry3d& initial_position, const SE3_ROBOT_CONFIG& robot_config, const double position_distance_weight, const double rotation_distance_weight) : link_points_(robot_points)
         {
+            position_distance_weight_ = std::abs(position_distance_weight);
+            rotation_distance_weight_ = std::abs(rotation_distance_weight);
             x_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             y_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
             z_axis_controller_ = simple_pid_controller::SimplePIDController(robot_config.kp, robot_config.ki, robot_config.kd, robot_config.integral_clamp);
@@ -553,12 +584,12 @@ namespace simple_robot_models
             xr_axis_sensor_ = simple_uncertainty_models::TruncatedNormalUncertainSensor(-robot_config.r_max_sensor_noise, robot_config.r_max_sensor_noise);
             yr_axis_sensor_ = simple_uncertainty_models::TruncatedNormalUncertainSensor(-robot_config.r_max_sensor_noise, robot_config.r_max_sensor_noise);
             zr_axis_sensor_ = simple_uncertainty_models::TruncatedNormalUncertainSensor(-robot_config.r_max_sensor_noise, robot_config.r_max_sensor_noise);
-            x_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
-            y_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
-            z_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.max_actuator_noise, robot_config.velocity_limit);
-            xr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
-            yr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
-            zr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_max_actuator_noise, robot_config.r_velocity_limit);
+            x_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.velocity_limit, robot_config.acceleration_limit, robot_config.max_actuator_proportional_noise, robot_config.max_actuator_minimum_noise, 0.5);
+            y_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.velocity_limit, robot_config.acceleration_limit, robot_config.max_actuator_proportional_noise, robot_config.max_actuator_minimum_noise, 0.5);
+            z_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.velocity_limit, robot_config.acceleration_limit, robot_config.max_actuator_proportional_noise, robot_config.max_actuator_minimum_noise, 0.5);
+            xr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_velocity_limit, robot_config.r_acceleration_limit, robot_config.r_max_actuator_proportional_noise, robot_config.r_max_actuator_minimum_noise, 0.5);
+            yr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_velocity_limit, robot_config.r_acceleration_limit, robot_config.r_max_actuator_proportional_noise, robot_config.r_max_actuator_minimum_noise, 0.5);
+            zr_axis_actuator_ = simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(robot_config.r_velocity_limit, robot_config.r_acceleration_limit, robot_config.r_max_actuator_proportional_noise, robot_config.r_max_actuator_minimum_noise, 0.5);
             ResetPosition(initial_position);
             initialized_ = true;
         }
@@ -575,12 +606,12 @@ namespace simple_robot_models
             return true;
         }
 
-        inline void UpdatePosition(const Eigen::Affine3d& position)
+        inline void UpdatePosition(const Eigen::Isometry3d& position)
         {
             SetConfig(position);
         }
 
-        inline void ResetPosition(const Eigen::Affine3d& position)
+        inline void ResetPosition(const Eigen::Isometry3d& position)
         {
             SetConfig(position);
             ResetControllers();
@@ -633,7 +664,7 @@ namespace simple_robot_models
             }
         }
 
-        inline Eigen::Affine3d GetLinkTransform(const std::string& link_name) const
+        inline Eigen::Isometry3d GetLinkTransform(const std::string& link_name) const
         {
             if (link_name == "robot")
             {
@@ -645,15 +676,15 @@ namespace simple_robot_models
             }
         }
 
-        inline Eigen::Affine3d GetPosition() const
+        inline Eigen::Isometry3d GetPosition() const
         {
             return config_;
         }
 
         template<typename PRNG>
-        inline Eigen::Affine3d GetPosition(PRNG& rng) const
+        inline Eigen::Isometry3d GetPosition(PRNG& rng) const
         {
-            const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(Eigen::Affine3d::Identity(), GetPosition());
+            const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(Eigen::Isometry3d::Identity(), GetPosition());
             Eigen::Matrix<double, 6, 1> noisy_twist = Eigen::Matrix<double, 6, 1>::Zero();
             noisy_twist(0) = x_axis_sensor_.GetSensorValue(twist(0), rng);
             noisy_twist(1) = y_axis_sensor_.GetSensorValue(twist(1), rng);
@@ -662,30 +693,30 @@ namespace simple_robot_models
             noisy_twist(4) = yr_axis_sensor_.GetSensorValue(twist(4), rng);
             noisy_twist(5) = zr_axis_sensor_.GetSensorValue(twist(5), rng);
             // Compute the motion transform
-            const Eigen::Affine3d motion_transform = EigenHelpers::ExpTwist(noisy_twist, 1.0);
+            const Eigen::Isometry3d motion_transform = EigenHelpers::ExpTwist(noisy_twist, 1.0);
             return motion_transform;
         }
 
-        inline double ComputeDistanceTo(const Eigen::Affine3d& target) const
+        inline double ComputeDistanceTo(const Eigen::Isometry3d& target) const
         {
             return ComputeConfigurationDistance(GetPosition(), target);
         }
 
-        static inline Eigen::VectorXd GetDeltaBetween(const Eigen::Affine3d& start, const Eigen::Affine3d& target)
+        static inline Eigen::VectorXd GetDeltaBetween(const Eigen::Isometry3d& start, const Eigen::Isometry3d& target)
         {
             return EigenHelpers::TwistBetweenTransforms(start, target);
         }
 
-        inline Eigen::VectorXd GetDeltaTo(const Eigen::Affine3d& target) const
+        inline Eigen::VectorXd GetDeltaTo(const Eigen::Isometry3d& target) const
         {
             return EigenHelpers::TwistBetweenTransforms(GetPosition(), target);
         }
 
         template<typename PRNG>
-        inline Eigen::VectorXd GenerateControlAction(const Eigen::Affine3d& target, const double controller_interval, PRNG& rng)
+        inline Eigen::VectorXd GenerateControlAction(const Eigen::Isometry3d& target, const double controller_interval, PRNG& rng)
         {
             // Get the current position
-            const Eigen::Affine3d current = GetPosition(rng);
+            const Eigen::Isometry3d current = GetPosition(rng);
             // Get the twist from the current position to the target position
             const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(current, target);
             // Compute feedback terms
@@ -712,10 +743,10 @@ namespace simple_robot_models
             return control_action;
         }
 
-        inline Eigen::VectorXd GenerateControlAction(const Eigen::Affine3d& target, const double controller_interval)
+        inline Eigen::VectorXd GenerateControlAction(const Eigen::Isometry3d& target, const double controller_interval)
         {
             // Get the current position
-            const Eigen::Affine3d current = GetPosition();
+            const Eigen::Isometry3d current = GetPosition();
             // Get the twist from the current position to the target position
             const Eigen::Matrix<double, 6, 1> twist = EigenHelpers::TwistBetweenTransforms(current, target);
             // Compute feedback terms
@@ -755,8 +786,8 @@ namespace simple_robot_models
             noisy_twist(4) = yr_axis_actuator_.GetControlValue(input(4), rng);
             noisy_twist(5) = zr_axis_actuator_.GetControlValue(input(5), rng);
             // Compute the motion transform
-            const Eigen::Affine3d motion_transform = EigenHelpers::ExpTwist(noisy_twist, 1.0);
-            const Eigen::Affine3d new_config = GetPosition() * motion_transform;
+            const Eigen::Isometry3d motion_transform = EigenHelpers::ExpTwist(noisy_twist, 1.0);
+            const Eigen::Isometry3d new_config = GetPosition() * motion_transform;
             // Update config
             SetConfig(new_config);
         }
@@ -773,8 +804,8 @@ namespace simple_robot_models
             twist(4) = yr_axis_actuator_.GetControlValue(input(4));
             twist(5) = zr_axis_actuator_.GetControlValue(input(5));
             // Compute the motion transform
-            const Eigen::Affine3d motion_transform = EigenHelpers::ExpTwist(twist, 1.0);
-            const Eigen::Affine3d new_config = GetPosition() * motion_transform;
+            const Eigen::Isometry3d motion_transform = EigenHelpers::ExpTwist(twist, 1.0);
+            const Eigen::Isometry3d new_config = GetPosition() * motion_transform;
             // Update config
             SetConfig(new_config);
         }
@@ -830,24 +861,24 @@ namespace simple_robot_models
             }
         }
 
-        inline Eigen::Affine3d AverageConfigurations(const EigenHelpers::VectorAffine3d& configurations) const
+        inline Eigen::Isometry3d AverageConfigurations(const EigenHelpers::VectorIsometry3d& configurations) const
         {
             if (configurations.size() > 0)
             {
-                return EigenHelpers::AverageEigenAffine3d(configurations);
+                return EigenHelpers::AverageEigenIsometry3d(configurations);
             }
             else
             {
-                return Eigen::Affine3d::Identity();
+                return Eigen::Isometry3d::Identity();
             }
         }
 
-        inline Eigen::Affine3d InterpolateBetweenConfigurations(const Eigen::Affine3d& start, const Eigen::Affine3d& end, const double ratio) const
+        inline Eigen::Isometry3d InterpolateBetweenConfigurations(const Eigen::Isometry3d& start, const Eigen::Isometry3d& end, const double ratio) const
         {
             return EigenHelpers::Interpolate(start, end, ratio);
         }
 
-        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const Eigen::Affine3d& config1, const Eigen::Affine3d& config2) const
+        inline Eigen::VectorXd ComputePerDimensionConfigurationRawDistance(const Eigen::Isometry3d& config1, const Eigen::Isometry3d& config2) const
         {
             // This should change to use a 6dof twist instead
             const Eigen::Vector3d tc1 = config1.translation();
@@ -862,14 +893,20 @@ namespace simple_robot_models
             return dim_distances;
         }
 
-        inline Eigen::VectorXd ComputePerDimensionConfigurationDistance(const Eigen::Affine3d& config1, const Eigen::Affine3d& config2) const
+        inline Eigen::VectorXd ComputePerDimensionConfigurationDistance(const Eigen::Isometry3d& config1, const Eigen::Isometry3d& config2) const
         {
             return ComputePerDimensionConfigurationRawDistance(config1, config2).cwiseAbs();
         }
 
-        inline double ComputeConfigurationDistance(const Eigen::Affine3d& config1, const Eigen::Affine3d& config2) const
+        inline double ComputeConfigurationDistance(const Eigen::Isometry3d& config1, const Eigen::Isometry3d& config2) const
         {
-            return (EigenHelpers::Distance(config1, config2, 0.5) * 2.0);
+            const Eigen::Vector3d v1 = config1.translation();
+            const Eigen::Quaterniond q1(config1.rotation());
+            const Eigen::Vector3d v2 = config2.translation();
+            const Eigen::Quaterniond q2(config2.rotation());
+            const double vdist = EigenHelpers::Distance(v1, v2);
+            const double qdist = EigenHelpers::Distance(q1, q2);
+            return (vdist * position_distance_weight_) + (qdist * rotation_distance_weight_);
         }
     };
 
@@ -1186,8 +1223,10 @@ namespace simple_robot_models
         double kd;
         double integral_clamp;
         double velocity_limit;
+        double acceleration_limit;
         double max_sensor_noise;
-        double max_actuator_noise;
+        double max_actuator_proportional_noise;
+        double max_actuator_minimum_noise;
 
         LINKED_ROBOT_CONFIG()
         {
@@ -1196,19 +1235,28 @@ namespace simple_robot_models
             kd = 0.0;
             integral_clamp = 0.0;
             velocity_limit = 0.0;
+            acceleration_limit = 0.0;
             max_sensor_noise = 0.0;
-            max_actuator_noise = 0.0;
+            max_actuator_proportional_noise = 0.0;
+            max_actuator_minimum_noise = 0.0;
         }
 
-        LINKED_ROBOT_CONFIG(const double in_kp, const double in_ki, const double in_kd, const double in_integral_clamp, const double in_velocity_limit, const double in_max_sensor_noise, const double in_max_actuator_noise)
+        LINKED_ROBOT_CONFIG(const double in_kp, const double in_ki, const double in_kd, const double in_integral_clamp, const double in_velocity_limit, const double in_acceleration_limit, const double in_max_sensor_noise, const double in_max_actuator_proportional_noise, const double in_max_actuator_minimum_noise)
         {
             kp = in_kp;
             ki = in_ki;
             kd = in_kd;
             integral_clamp = in_integral_clamp;
             velocity_limit = in_velocity_limit;
+            acceleration_limit = in_acceleration_limit;
             max_sensor_noise = in_max_sensor_noise;
-            max_actuator_noise = in_max_actuator_noise;
+            max_actuator_proportional_noise = in_max_actuator_proportional_noise;
+            max_actuator_minimum_noise = in_max_actuator_minimum_noise;
+        }
+
+        inline simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator MakeTNUVActuatorModel() const
+        {
+            return simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator(velocity_limit, acceleration_limit, max_actuator_proportional_noise, max_actuator_minimum_noise, 0.5);
         }
     };
 
@@ -1240,7 +1288,7 @@ namespace simple_robot_models
 
     struct RobotLink
     {
-        Eigen::Affine3d link_transform;
+        Eigen::Isometry3d link_transform;
         std::shared_ptr<EigenHelpers::VectorVector4d> link_points;
         std::string link_name;
 
@@ -1259,7 +1307,7 @@ namespace simple_robot_models
     template<typename ActuatorModel>
     struct RobotJoint
     {
-        Eigen::Affine3d joint_transform;
+        Eigen::Isometry3d joint_transform;
         Eigen::Vector3d joint_axis;
         int64_t parent_link_index;
         int64_t child_link_index;
@@ -1285,7 +1333,7 @@ namespace simple_robot_models
             KinematicSkeletonElement() : parent_link_index_(-1), parent_joint_index_(-1) {}
         };
 
-        Eigen::Affine3d base_transform_;
+        Eigen::Isometry3d base_transform_;
         Eigen::MatrixXi self_collision_map_;
         std::vector<RobotLink> links_;
         std::vector<RobotJoint<ActuatorModel>> joints_;
@@ -1310,25 +1358,25 @@ namespace simple_robot_models
                 // Get the child link
                 RobotLink& child_link = links_[(size_t)current_joint.child_link_index];
                 // Get the parent_link transform
-                const Eigen::Affine3d parent_transform = parent_link.link_transform;
+                const Eigen::Isometry3d parent_transform = parent_link.link_transform;
                 // Get the parent_link->joint transform
-                const Eigen::Affine3d parent_to_joint_transform = current_joint.joint_transform;
+                const Eigen::Isometry3d parent_to_joint_transform = current_joint.joint_transform;
                 //std::cout << "Parent link origin->joint " << idx << " transform: " << PrettyPrint::PrettyPrint(parent_to_joint_transform) << std::endl;
                 // Compute the base->joint_transform
-                const Eigen::Affine3d complete_transform = parent_transform * parent_to_joint_transform;
+                const Eigen::Isometry3d complete_transform = parent_transform * parent_to_joint_transform;
                 // Compute the joint transform
                 if (current_joint.joint_model.IsRevolute())
                 {
-                    const Eigen::Affine3d joint_transform = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(Eigen::AngleAxisd(current_joint.joint_model.GetValue(), current_joint.joint_axis));
-                    const Eigen::Affine3d child_transform = complete_transform * joint_transform;
+                    const Eigen::Isometry3d joint_transform = Eigen::Translation3d(0.0, 0.0, 0.0) * Eigen::Quaterniond(Eigen::AngleAxisd(current_joint.joint_model.GetValue(), current_joint.joint_axis));
+                    const Eigen::Isometry3d child_transform = complete_transform * joint_transform;
                     child_link.link_transform = child_transform;
                     //std::cout << "Computed joint transform for revolute joint " << idx << " with value " << current_joint.joint_model.GetValue() << " transform: " << PrettyPrint::PrettyPrint(joint_transform) << std::endl;
                 }
                 else if (current_joint.joint_model.IsPrismatic())
                 {
                     const Eigen::Translation3d joint_translation = (Eigen::Translation3d)(current_joint.joint_axis * current_joint.joint_model.GetValue());
-                    const Eigen::Affine3d joint_transform = joint_translation * Eigen::Quaterniond::Identity();
-                    const Eigen::Affine3d child_transform = complete_transform * joint_transform;
+                    const Eigen::Isometry3d joint_transform = joint_translation * Eigen::Quaterniond::Identity();
+                    const Eigen::Isometry3d child_transform = complete_transform * joint_transform;
                     child_link.link_transform = child_transform;
                     //std::cout << "Computed transform for prismatic joint " << idx << " with value " << current_joint.joint_model.GetValue() << " transform: " << PrettyPrint::PrettyPrint(joint_transform) << std::endl;
                 }
@@ -1588,7 +1636,7 @@ namespace simple_robot_models
             return allowed_self_collision_map;
         }
 
-        inline SimpleLinkedRobot(const Eigen::Affine3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position, const std::vector<double>& joint_distance_weights)
+        inline SimpleLinkedRobot(const Eigen::Isometry3d& base_transform, const std::vector<RobotLink>& links, const std::vector<RobotJoint<ActuatorModel>>& joints, const std::vector<std::pair<size_t, size_t>>& allowed_self_collisions, const SimpleLinkedConfiguration& initial_position, const std::vector<double>& joint_distance_weights)
         {
             base_transform_ = base_transform;
             // We take a list of robot links and a list of robot joints, but we have to sanity-check them first
@@ -1640,13 +1688,13 @@ namespace simple_robot_models
             return initialized_;
         }
 
-        inline void UpdateBaseTransform(const Eigen::Affine3d& base_transform)
+        inline void UpdateBaseTransform(const Eigen::Isometry3d& base_transform)
         {
             base_transform_ = base_transform;
             UpdateTransforms();
         }
 
-        inline Eigen::Affine3d GetBaseTransform() const
+        inline Eigen::Isometry3d GetBaseTransform() const
         {
             return base_transform_;
         }
@@ -1745,7 +1793,7 @@ namespace simple_robot_models
             assert(false);
         }
 
-        inline Eigen::Affine3d GetLinkTransform(const std::string& link_name) const
+        inline Eigen::Isometry3d GetLinkTransform(const std::string& link_name) const
         {
             for (size_t idx = 0; idx < links_.size(); idx++)
             {
@@ -1961,6 +2009,28 @@ namespace simple_robot_models
             return max_velocities;
         }
 
+        inline Eigen::VectorXd GetMaxAccelerations() const
+        {
+            Eigen::VectorXd max_accelerations = Eigen::VectorXd::Zero(num_active_joints_);
+            int64_t active_joint_idx = 0u;
+            for (size_t idx = 0; idx < joints_.size(); idx++)
+            {
+                const RobotJoint<ActuatorModel>& current_joint = joints_[idx];
+                // Skip fixed joints
+                if (current_joint.joint_model.IsFixed())
+                {
+                    continue;
+                }
+                else
+                {
+                    assert(active_joint_idx < max_accelerations.size());
+                    max_accelerations(active_joint_idx) = current_joint.joint_controller.actuator.GetMaxAcceleration();
+                    active_joint_idx++;
+                }
+            }
+            return max_accelerations;
+        }
+
         inline Eigen::VectorXd GetMaxVelocityNoise(const Eigen::VectorXd& velocities) const
         {
             assert((size_t)velocities.size() == num_active_joints_);
@@ -2010,7 +2080,7 @@ namespace simple_robot_models
         inline Eigen::Matrix<double, 6, Eigen::Dynamic> ComputeFullLinkPointJacobian(const std::string& link_name, const Eigen::Vector4d& link_relative_point) const
         {
             // Get the link transform (by extension, this ensures we've been given a valid link)
-            const Eigen::Affine3d link_transform = GetLinkTransform(link_name);
+            const Eigen::Isometry3d link_transform = GetLinkTransform(link_name);
             // Transform the point into world frame
             const Eigen::Vector3d world_point = (link_transform * link_relative_point).block<3, 1>(0, 0);
             // Make the jacobian storage
@@ -2050,7 +2120,7 @@ namespace simple_robot_models
                 // Get the child link
                 const RobotLink& child_link = links_[(size_t)parent_joint.child_link_index];
                 // Get the transform of the current joint
-                const Eigen::Affine3d joint_transform = child_link.link_transform;
+                const Eigen::Isometry3d joint_transform = child_link.link_transform;
                 // Compute the jacobian for the current joint
                 if (parent_joint.joint_model.IsRevolute())
                 {

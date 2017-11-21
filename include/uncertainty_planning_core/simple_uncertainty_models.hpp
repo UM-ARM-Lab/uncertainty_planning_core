@@ -51,14 +51,16 @@ namespace simple_uncertainty_models
 
         bool initialized_;
         mutable arc_helpers::TruncatedNormalDistribution noise_distribution_;
-        double actuator_limit_;
-        double noise_bound_;
+        double velocity_limit_;
+        double acceleration_limit_;
+        double proportional_noise_bound_;
+        double minimum_noise_bound_;
 
     public:
 
-        TruncatedNormalUncertainVelocityActuator(const double noise_bound, const double actuator_limit) : initialized_(true), noise_distribution_(0.0, 0.5 , -1.0, 1.0), actuator_limit_(std::abs(actuator_limit)), noise_bound_(std::abs(noise_bound)) {}
+        TruncatedNormalUncertainVelocityActuator(const double velocity_limit, const double acceleration_limit, const double proportional_noise_bound, const double minimum_noise_bound, const double percent_variance) : initialized_(true), noise_distribution_(0.0, arc_helpers::ClampValue(std::abs(percent_variance), 0.0, 1.0), -1.0, 1.0), velocity_limit_(std::abs(velocity_limit)), acceleration_limit_(std::abs(acceleration_limit)), proportional_noise_bound_(std::abs(proportional_noise_bound)), minimum_noise_bound_(std::abs(minimum_noise_bound)) {}
 
-        TruncatedNormalUncertainVelocityActuator() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0), actuator_limit_(0.0), noise_bound_(0.0) {}
+        TruncatedNormalUncertainVelocityActuator() : initialized_(false), noise_distribution_(0.0, 1.0, 0.0, 0.0), velocity_limit_(0.0), acceleration_limit_(0.0), proportional_noise_bound_(0.0), minimum_noise_bound_(0.0) {}
 
         inline bool IsInitialized() const
         {
@@ -69,34 +71,47 @@ namespace simple_uncertainty_models
         {
             assert(std::isnan(control_input) == false);
             assert(std::isinf(control_input) == false);
-            double real_control_input = std::min(actuator_limit_, control_input);
-            real_control_input = std::max(-actuator_limit_, real_control_input);
-            return real_control_input;
+            return arc_helpers::ClampValue(control_input, -velocity_limit_, velocity_limit_);
         }
 
         template<typename RNG>
         inline double GetControlValue(const double control_input, RNG& rng) const
         {
             const double real_control_input = GetControlValue(control_input);
-            // This is the version used in WAFR SE(2) and SE(3)
-            //const double noise = noise_distribution_(rng) * noise_bound_;
-            // This is the version trialled in WAFR R(7), where noise is proportional to velocity
-            const double noise = noise_distribution_(rng) * (noise_bound_ * real_control_input);
+            // This is the version trialled in thesis, where noise is proportional to velocity with a "floor"
+            // This can emulate proportional-only and percent-max noise with different parameters
+            const double real_proportional_noise_bound = proportional_noise_bound_ * std::abs(real_control_input);
+            const double real_minimum_noise_bound = minimum_noise_bound_ * velocity_limit_;
+            const double real_noise_bound = std::max(real_proportional_noise_bound, real_minimum_noise_bound);
+            const double real_noise = noise_distribution_(rng) * real_noise_bound;
             // Combine noise with control input
-            const double noisy_control_input = real_control_input + noise;
+            const double noisy_control_input = real_control_input + real_noise;
             return noisy_control_input;
         }
 
         inline double GetMaxVelocity() const
         {
-            return actuator_limit_;
+            return velocity_limit_;
+        }
+
+        inline double GetMaxAcceleration() const
+        {
+            return acceleration_limit_;
         }
 
         inline double GetMaxVelocityNoise(const double velocity) const
         {
             const double real_control_input = GetControlValue(velocity);
-            const double max_noise = noise_bound_ * real_control_input;
-            return max_noise;
+            if (real_control_input >= 0.0)
+            {
+                const double max_noise = std::max((proportional_noise_bound_ * real_control_input), (minimum_noise_bound_ * velocity_limit_));
+                return max_noise;
+            }
+            else
+            {
+                const double max_noise = std::min((proportional_noise_bound_ * real_control_input), (minimum_noise_bound_ * -velocity_limit_));
+                return max_noise;
+            }
         }
 
         inline double GetMaxVelocityNoise() const

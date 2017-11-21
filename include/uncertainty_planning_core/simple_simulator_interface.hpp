@@ -179,7 +179,7 @@ namespace simple_simulator_interface
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        SurfaceNormalGrid(const Eigen::Affine3d& origin_transform, const double resolution, const double x_size, const double y_size, const double z_size)
+        SurfaceNormalGrid(const Eigen::Isometry3d& origin_transform, const double resolution, const double x_size, const double y_size, const double z_size)
         {
             surface_normal_grid_ = VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>>(origin_transform, resolution, x_size, y_size, z_size, std::vector<StoredSurfaceNormal>());
             initialized_ = true;
@@ -202,10 +202,10 @@ namespace simple_simulator_interface
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& direction) const
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex3d(location);
-            if (indices.size() == 3)
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
             {
-                return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
+                return LookupSurfaceNormal(index, direction);
             }
             else
             {
@@ -216,10 +216,10 @@ namespace simple_simulator_interface
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector4d& location, const Eigen::Vector3d& direction) const
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex4d(location);
-            if (indices.size() == 3)
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex4d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
             {
-                return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
+                return LookupSurfaceNormal(index, direction);
             }
             else
             {
@@ -230,10 +230,10 @@ namespace simple_simulator_interface
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector4d& location, const Eigen::Vector4d& direction) const
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex4d(location);
-            if (indices.size() == 3)
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex4d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
             {
-                return LookupSurfaceNormal(indices[0], indices[1], indices[2], direction);
+                return LookupSurfaceNormal(index, direction);
             }
             else
             {
@@ -242,6 +242,12 @@ namespace simple_simulator_interface
         }
 
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            return LookupSurfaceNormal(index.x, index.y, index.z, direction);
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector4d& direction) const
         {
             assert(initialized_);
             return LookupSurfaceNormal(index.x, index.y, index.z, direction);
@@ -303,10 +309,10 @@ namespace simple_simulator_interface
         inline bool InsertSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex3d(location);
-            if (indices.size() == 3)
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
             {
-                return InsertSurfaceNormal(indices[0], indices[1], indices[2], surface_normal, entry_direction);
+                return InsertSurfaceNormal(index, surface_normal, entry_direction);
             }
             else
             {
@@ -346,10 +352,10 @@ namespace simple_simulator_interface
         inline bool ClearStoredSurfaceNormals(const Eigen::Vector3d& location)
         {
             assert(initialized_);
-            const std::vector<int64_t> indices = surface_normal_grid_.LocationToGridIndex3d(location);
-            if (indices.size() == 3)
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
             {
-                return ClearStoredSurfaceNormals(indices[0], indices[1], indices[2]);
+                return ClearStoredSurfaceNormals(index);
             }
             else
             {
@@ -415,7 +421,7 @@ namespace simple_simulator_interface
             return debug_level_;
         }
 
-        inline Eigen::Affine3d GetOriginTransform() const
+        inline Eigen::Isometry3d GetOriginTransform() const
         {
             return environment_.GetOriginTransform();
         }
@@ -514,8 +520,8 @@ namespace simple_simulator_interface
             configuration_marker.scale.x = this->GetResolution();
             configuration_marker.scale.y = this->GetResolution();
             configuration_marker.scale.z = this->GetResolution();
-            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
+            const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot
@@ -529,7 +535,7 @@ namespace simple_simulator_interface
                 const std::string& link_name = robot_links_points[link_idx].first;
                 const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -571,8 +577,8 @@ namespace simple_simulator_interface
             configuration_marker.scale.x = this->GetResolution() * 0.5;
             configuration_marker.scale.y = this->GetResolution() * 0.5;
             configuration_marker.scale.z = this->GetResolution() * 0.5;
-            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
+            const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot
@@ -587,11 +593,11 @@ namespace simple_simulator_interface
                 // Update the position of the robot
                 robot.UpdatePosition(configuration);
                 // Get the transform of the current link
-                const Eigen::Affine3d current_link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_link_transform = robot.GetLinkTransform(link_name);
                 // Apply the control input
                 robot.ApplyControlInput(control_input);
                 // Get the transform of the current link
-                const Eigen::Affine3d current_plus_control_link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_plus_control_link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {

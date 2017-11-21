@@ -1215,7 +1215,7 @@ namespace uncertainty_contact_planning
             robot.UpdatePosition(config);
             const std::string& link_name = robot_links_points.back().first;
             const EigenHelpers::VectorVector4d& link_points = (*robot_links_points.back().second);
-            const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+            const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
             //const Eigen::Vector3d link_relative_point(0.0, 0.0, 0.0);
             const Eigen::Vector4d& link_relative_point = link_points.back();
             const Eigen::Vector4d config_point = link_transform * link_relative_point;
@@ -1269,8 +1269,8 @@ namespace uncertainty_contact_planning
                     edge_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
                     edge_marker.scale.y = simulator_ptr_->GetResolution() * 1.5;
                     edge_marker.scale.z = simulator_ptr_->GetResolution() * 1.5;
-                    const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
-                    edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
+                    const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+                    edge_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
                     if (current_index < previous_index)
                     {
                         edge_marker.color = forward_color;
@@ -1326,8 +1326,8 @@ namespace uncertainty_contact_planning
                 edge_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
                 edge_marker.scale.y = simulator_ptr_->GetResolution() * 1.5;
                 edge_marker.scale.z = simulator_ptr_->GetResolution() * 1.5;
-                const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
-                edge_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
+                const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+                edge_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
                 edge_marker.color = color;
                 edge_marker.points.push_back(EigenHelpersConversions::EigenVector4dToGeometryPoint(previous_point));
                 edge_marker.points.push_back(EigenHelpersConversions::EigenVector4dToGeometryPoint(current_config_point));
@@ -1358,8 +1358,8 @@ namespace uncertainty_contact_planning
             configuration_marker.scale.x = simulator_ptr_->GetResolution();
             configuration_marker.scale.y = simulator_ptr_->GetResolution();
             configuration_marker.scale.z = simulator_ptr_->GetResolution();
-            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
+            const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
@@ -1373,7 +1373,7 @@ namespace uncertainty_contact_planning
                 const std::string& link_name = robot_links_points[link_idx].first;
                 const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1443,8 +1443,8 @@ namespace uncertainty_contact_planning
             configuration_marker.scale.x = simulator_ptr_->GetResolution() * 0.5;
             configuration_marker.scale.y = simulator_ptr_->GetResolution() * 0.5;
             configuration_marker.scale.z = simulator_ptr_->GetResolution() * 0.5;
-            const Eigen::Affine3d base_transform = Eigen::Affine3d::Identity();
-            configuration_marker.pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(base_transform);
+            const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
@@ -1459,11 +1459,11 @@ namespace uncertainty_contact_planning
                 // Update the position of the robot
                 robot.UpdatePosition(configuration);
                 // Get the transform of the current link
-                const Eigen::Affine3d current_link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_link_transform = robot.GetLinkTransform(link_name);
                 // Apply the control input
                 robot.ApplyControlInput(control_input);
                 // Get the transform of the current link
-                const Eigen::Affine3d current_plus_control_link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_plus_control_link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1610,7 +1610,7 @@ namespace uncertainty_contact_planning
                 const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 std::vector<uint32_t> link_region_signature(link_points.size());
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1705,7 +1705,7 @@ namespace uncertainty_contact_planning
             for (uint32_t step = 1u; step <= steps; step++)
             {
                 const double percent = (double)step / (double)steps;
-                const Eigen::Vector3d intermediate_point = EigenHelpers::Interpolate(start, end, percent);
+                const Eigen::Vector3d intermediate_point = EigenHelpers::Interpolate3d(start, end, percent);
                 const float occupancy = environment.GetImmutable3d(intermediate_point).first.occupancy;
                 if (occupancy > 0.5f)
                 {
@@ -1730,7 +1730,7 @@ namespace uncertainty_contact_planning
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 const Eigen::Vector3d link_point = link_transform.translation();
                 start_config_actuation_centers[link_idx] = link_point;
             }
@@ -1742,7 +1742,7 @@ namespace uncertainty_contact_planning
                 // Grab the link name and points
                 const std::string& link_name = robot_links_points[link_idx].first;
                 // Get the transform of the current link
-                const Eigen::Affine3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 const Eigen::Vector3d link_point = link_transform.translation();
                 end_config_actuation_centers[link_idx] = link_point;
             }
