@@ -413,25 +413,13 @@ namespace uncertainty_contact_planning
             // Draw the simulation environment
             display_pub.publish(simulator_ptr_->ExportAllForDisplay());
             // Draw the start and goal
-            std_msgs::ColorRGBA start_color;
-            start_color.r = 1.0;
-            start_color.g = 0.5;
-            start_color.b = 0.0;
-            start_color.a = 1.0;
-            std_msgs::ColorRGBA goal_color;
-            goal_color.r = 1.0;
-            goal_color.g = 0.0;
-            goal_color.b = 1.0;
-            goal_color.a = 1.0;
-            visualization_msgs::Marker start_marker = DrawRobotConfiguration(robot_, start, start_color);
-            start_marker.ns = "start_state";
-            start_marker.id = 1;
-            visualization_msgs::Marker goal_marker = DrawRobotConfiguration(robot_, goal, goal_color);
-            goal_marker.ns = "goal_state";
-            goal_marker.id = 1;
+            const std_msgs::ColorRGBA start_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(1.0, 0.5, 0.0, 1.0);
+            const std_msgs::ColorRGBA goal_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(1.0, 0.0, 1.0, 1.0);
+            const visualization_msgs::MarkerArray start_markers = DrawRobotConfiguration(robot_, start, start_color, 1, "start_state");
+            const visualization_msgs::MarkerArray goal_markers = DrawRobotConfiguration(robot_, goal, goal_color, 1, "goal_state");
             visualization_msgs::MarkerArray simulator_step_display_rep;
-            simulator_step_display_rep.markers.push_back(start_marker);
-            simulator_step_display_rep.markers.push_back(goal_marker);
+            simulator_step_display_rep.markers.insert(simulator_step_display_rep.markers.end(), start_markers.markers.begin(), start_markers.markers.end());
+            simulator_step_display_rep.markers.insert(simulator_step_display_rep.markers.end(), goal_markers.markers.begin(), goal_markers.markers.end());
             display_pub.publish(simulator_step_display_rep);
             // Wait for input
             std::cout << "Press ENTER to solve..." << std::endl;
@@ -444,26 +432,10 @@ namespace uncertainty_contact_planning
             if (debug_level_ >= 20)
             {
                 // Draw the action
-                std_msgs::ColorRGBA free_color;
-                free_color.r = 0.0;
-                free_color.g = 1.0;
-                free_color.b = 0.0;
-                free_color.a = 1.0;
-                std_msgs::ColorRGBA colliding_color;
-                colliding_color.r = 1.0;
-                colliding_color.g = 0.0;
-                colliding_color.b = 0.0;
-                colliding_color.a = 1.0;
-                std_msgs::ColorRGBA control_input_color;
-                control_input_color.r = 1.0;
-                control_input_color.g = 1.0;
-                control_input_color.b = 0.0;
-                control_input_color.a = 1.0;
-                std_msgs::ColorRGBA control_step_color;
-                control_step_color.r = 0.0;
-                control_step_color.g = 1.0;
-                control_step_color.b = 1.0;
-                control_step_color.a = 1.0;
+                const std_msgs::ColorRGBA free_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 1.0, 0.0, 1.0);
+                const std_msgs::ColorRGBA colliding_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(1.0, 0.0, 0.0, 1.0);
+                const std_msgs::ColorRGBA control_input_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(1.0, 1.0, 0.0, 1.0);
+                const std_msgs::ColorRGBA control_step_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 1.0, 1.0, 1.0);
                 // Keep track of previous position
                 Configuration previous_config = start;
                 for (size_t step_idx = 0; step_idx < trace.resolver_steps.size(); step_idx++)
@@ -487,14 +459,12 @@ namespace uncertainty_contact_planning
                             const Configuration& current_config = contact_resolution_trace.contact_resolution_steps[contact_resolution_step_idx];
                             previous_config = current_config;
                             const std_msgs::ColorRGBA& current_color = (contact_resolution_step_idx == (contact_resolution_trace.contact_resolution_steps.size() - 1)) ? free_color : colliding_color;
-                            visualization_msgs::Marker step_marker = DrawRobotConfiguration(robot_, current_config, current_color);
-                            step_marker.ns = "step_state";
-                            step_marker.id = 1;
+                            const visualization_msgs::MarkerArray step_markers = DrawRobotConfiguration(robot_, current_config, current_color, 1, "step_state_");
                             visualization_msgs::Marker control_step_marker = DrawRobotControlInput(robot_, current_config, -control_input_step, control_step_color);
                             control_step_marker.ns = "control_step_state";
                             control_step_marker.id = 1;
                             visualization_msgs::MarkerArray simulator_step_display_rep;
-                            simulator_step_display_rep.markers.push_back(step_marker);
+                            simulator_step_display_rep.markers = step_markers.markers;
                             simulator_step_display_rep.markers.push_back(control_step_marker);
                             display_pub.publish(simulator_step_display_rep);
                             // Wait for input
@@ -530,25 +500,13 @@ namespace uncertainty_contact_planning
                 std::cin.get();
             }
             // Draw the start and goal
-            std_msgs::ColorRGBA start_color;
-            start_color.r = 1.0;
-            start_color.g = 0.0;
-            start_color.b = 0.0;
-            start_color.a = 1.0;
-            visualization_msgs::Marker start_marker = DrawRobotConfiguration(robot_, start, start_color);
-            start_marker.ns = "start_state";
-            start_marker.id = 1;
-            std_msgs::ColorRGBA goal_color;
-            goal_color.r = 0.0;
-            goal_color.g = 1.0;
-            goal_color.b = 0.0;
-            goal_color.a = 1.0;
-            visualization_msgs::Marker goal_marker = DrawRobotConfiguration(robot_, goal, goal_color);
-            goal_marker.ns = "goal_state";
-            goal_marker.id = 1;
+            const std_msgs::ColorRGBA start_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(1.0, 0.0, 0.0, 1.0);
+            const visualization_msgs::MarkerArray start_markers = DrawRobotConfiguration(robot_, start, start_color, 1, "start_state");
+            const std_msgs::ColorRGBA goal_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 1.0, 0.0, 1.0);
+            const visualization_msgs::MarkerArray goal_markers = DrawRobotConfiguration(robot_, goal, goal_color, 1, "goal_state");
             visualization_msgs::MarkerArray problem_display_rep;
-            problem_display_rep.markers.push_back(start_marker);
-            problem_display_rep.markers.push_back(goal_marker);
+            problem_display_rep.markers.insert(problem_display_rep.markers.end(), start_markers.markers.begin(), start_markers.markers.end());
+            problem_display_rep.markers.insert(problem_display_rep.markers.end(), goal_markers.markers.begin(), goal_markers.markers.end());
             display_pub.publish(problem_display_rep);
             // Wait for input
             if (debug_level_ >= 10)
@@ -562,7 +520,7 @@ namespace uncertainty_contact_planning
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state); };
             std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReached(goal_candidate, goal_state, edge_attempt_count, allow_contacts); };
-            std::function<void(UncertaintyPlanningTreeState&)> goal_reached_callback = [&] (UncertaintyPlanningTreeState& new_goal_state) { return GoalReachedCallback(new_goal_state, edge_attempt_count, start_time); };
+            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree[new_goal_state_idx], edge_attempt_count, start_time); };
             std::function<UncertaintyPlanningState(void)> state_sampling_fn = [&] (void) { return SampleRandomTargetState(); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<UncertaintyPlanningState(void)> complete_sampling_fn = [&](void) { if (goal_bias_distribution(rng_) > goal_bias) { auto state = state_sampling_fn(); arc_helpers::ConditionalPrint("Sampled state", 2, debug_level_); return state; } else { arc_helpers::ConditionalPrint("Sampled goal state", 2, debug_level_); return goal_state; } };
@@ -608,6 +566,8 @@ namespace uncertainty_contact_planning
                     {
                         double goal_reached_probability = planned_path[planned_path.size() - 1].GetGoalPfeasibility() * planned_path[planned_path.size() - 1].GetMotionPfeasibility();
                         visualization_msgs::MarkerArray path_display_rep;
+                        const std::string forward_expectation_ns = "final_path_" + std::to_string(pidx + 1);
+                        const std::string reverse_expectation_ns = "final_path_reversible_" + std::to_string(pidx + 1);
                         for (size_t idx = 0; idx < planned_path.size(); idx++)
                         {
                             const UncertaintyPlanningState& current_state = planned_path[idx];
@@ -617,21 +577,17 @@ namespace uncertainty_contact_planning
                             forward_color.g = 0.0f;
                             forward_color.b = 0.0f;
                             forward_color.a = (float)current_state.GetMotionPfeasibility();
-                            visualization_msgs::Marker forward_expectation_marker = DrawRobotConfiguration(robot_, current_configuration, forward_color);
-                            forward_expectation_marker.id = (int)idx;
-                            forward_expectation_marker.ns = "final_path_" + std::to_string(pidx + 1);
-                            // Make the display color
+                            const visualization_msgs::MarkerArray forward_expectation_markers = DrawRobotConfiguration(robot_, current_configuration, forward_color, (int32_t)path_display_rep.markers.size() + 1, forward_expectation_ns);
+                            // Add the markers
+                            path_display_rep.markers.insert(path_display_rep.markers.end(), forward_expectation_markers.markers.begin(), forward_expectation_markers.markers.end());
                             std_msgs::ColorRGBA reverse_color;
                             reverse_color.r = (float)(1.0 - goal_reached_probability);
                             reverse_color.g = 0.0f;
                             reverse_color.b = 0.0f;
                             reverse_color.a = (float)current_state.GetReverseEdgePfeasibility();
-                            visualization_msgs::Marker reverse_expectation_marker = DrawRobotConfiguration(robot_, current_configuration, reverse_color);
-                            reverse_expectation_marker.id = (int)idx;
-                            reverse_expectation_marker.ns = "final_path_reversible_" + std::to_string(pidx + 1);;
+                            const visualization_msgs::MarkerArray reverse_expectation_markers = DrawRobotConfiguration(robot_, current_configuration, reverse_color, (int32_t)path_display_rep.markers.size() + 1, reverse_expectation_ns);
                             // Add the markers
-                            path_display_rep.markers.push_back(forward_expectation_marker);
-                            path_display_rep.markers.push_back(reverse_expectation_marker);
+                            path_display_rep.markers.insert(path_display_rep.markers.end(), reverse_expectation_markers.markers.begin(), reverse_expectation_markers.markers.end());
                         }
                         display_pub.publish(path_display_rep);
                     }
@@ -998,27 +954,23 @@ namespace uncertainty_contact_planning
                 parent_state_color.g = 0.5f;
                 parent_state_color.b = 1.0f;
                 parent_state_color.a = 0.5f;
-                visualization_msgs::Marker parent_state_marker = DrawRobotConfiguration(robot_, parent_state_config, parent_state_color);
-                parent_state_marker.id = 1;
-                parent_state_marker.ns = "parent_state_marker";
+                const visualization_msgs::MarkerArray parent_state_markers = DrawRobotConfiguration(robot_, parent_state_config, parent_state_color, 1, "parent_state_marker");
                 std_msgs::ColorRGBA current_config_color;
                 current_config_color.r = 0.0f;
                 current_config_color.g = 0.0f;
                 current_config_color.b = 1.0f;
                 current_config_color.a = 0.5f;
-                visualization_msgs::Marker current_config_marker = DrawRobotConfiguration(robot_, current_config, current_config_color);
-                current_config_marker.id = 1;
-                current_config_marker.ns = "current_config_marker";
+                const visualization_msgs::MarkerArray current_config_markers = DrawRobotConfiguration(robot_, current_config, current_config_color, 1, "current_config_marker");
                 std_msgs::ColorRGBA action_color;
                 action_color.r = 1.0f;
                 action_color.g = 0.0f;
                 action_color.b = 1.0f;
                 action_color.a = 0.5f;
-                visualization_msgs::Marker action_marker = DrawRobotConfiguration(robot_, action, action_color);
-                action_marker.id = 1;
-                action_marker.ns = "action_marker";
+                const visualization_msgs::MarkerArray action_markers = DrawRobotConfiguration(robot_, action, action_color, 1, "action_marker");
                 visualization_msgs::MarkerArray policy_query_markers;
-                policy_query_markers.markers = {current_config_marker, parent_state_marker, action_marker};
+                policy_query_markers.markers.insert(policy_query_markers.markers.end(), parent_state_markers.markers.begin(), parent_state_markers.markers.end());
+                policy_query_markers.markers.insert(policy_query_markers.markers.end(), current_config_markers.markers.begin(), current_config_markers.markers.end());
+                policy_query_markers.markers.insert(policy_query_markers.markers.end(), action_markers.markers.begin(), action_markers.markers.end());
                 display_pub.publish(policy_query_markers);
                 if (wait_for_user)
                 {
@@ -1110,27 +1062,23 @@ namespace uncertainty_contact_planning
                 parent_state_color.g = 0.5f;
                 parent_state_color.b = 1.0f;
                 parent_state_color.a = 0.5f;
-                visualization_msgs::Marker parent_state_marker = DrawRobotConfiguration(robot_, parent_state_config, parent_state_color);
-                parent_state_marker.id = 1;
-                parent_state_marker.ns = "parent_state_marker";
+                const visualization_msgs::MarkerArray parent_state_markers = DrawRobotConfiguration(robot_, parent_state_config, parent_state_color, 1, "parent_state_marker");
                 std_msgs::ColorRGBA current_config_color;
                 current_config_color.r = 0.0f;
                 current_config_color.g = 0.0f;
                 current_config_color.b = 1.0f;
                 current_config_color.a = 0.5f;
-                visualization_msgs::Marker current_config_marker = DrawRobotConfiguration(robot_, current_config, current_config_color);
-                current_config_marker.id = 1;
-                current_config_marker.ns = "current_config_marker";
+                const visualization_msgs::MarkerArray current_config_markers = DrawRobotConfiguration(robot_, current_config, current_config_color, 1, "current_config_marker");
                 std_msgs::ColorRGBA action_color;
                 action_color.r = 1.0f;
                 action_color.g = 0.0f;
                 action_color.b = 1.0f;
                 action_color.a = 0.5f;
-                visualization_msgs::Marker action_marker = DrawRobotConfiguration(robot_, action, action_color);
-                action_marker.id = 1;
-                action_marker.ns = "action_marker";
+                const visualization_msgs::MarkerArray action_markers = DrawRobotConfiguration(robot_, action, action_color, 1, "action_marker");
                 visualization_msgs::MarkerArray policy_query_markers;
-                policy_query_markers.markers = {current_config_marker, parent_state_marker, action_marker};
+                policy_query_markers.markers.insert(policy_query_markers.markers.end(), parent_state_markers.markers.begin(), parent_state_markers.markers.end());
+                policy_query_markers.markers.insert(policy_query_markers.markers.end(), current_config_markers.markers.begin(), current_config_markers.markers.end());
+                policy_query_markers.markers.insert(policy_query_markers.markers.end(), action_markers.markers.begin(), action_markers.markers.end());
                 display_pub.publish(policy_query_markers);
                 if (wait_for_user)
                 {
@@ -1184,19 +1132,18 @@ namespace uncertainty_contact_planning
             if (trajectory.size() > 1)
             {
                 // Draw one step at a time
+                int32_t trace_marker_idx = 1;
                 for (size_t idx = 0; idx < trajectory.size(); idx++)
                 {
                     const Configuration& current_configuration = trajectory[idx];
                     // Draw a ball at the current location
-                    visualization_msgs::Marker current_marker = DrawRobotConfiguration(robot_, current_configuration, color);
-                    visualization_msgs::Marker trace_marker = current_marker;
-                    trace_marker.ns = ns;
-                    trace_marker.id = (int)idx + 1;
-                    current_marker.ns = "current_policy_exec";
-                    current_marker.id = 1;
+                    const visualization_msgs::MarkerArray current_markers = DrawRobotConfiguration(robot_, current_configuration, color, 1, "current_policy_exec");
+                    const visualization_msgs::MarkerArray trace_markers = DrawRobotConfiguration(robot_, current_configuration, color, trace_marker_idx, ns);
+                    trace_marker_idx += (int32_t)trace_markers.markers.size();
                     // Send the markers for display
                     visualization_msgs::MarkerArray display_markers;
-                    display_markers.markers = {current_marker, trace_marker};
+                    display_markers.markers.insert(display_markers.markers.end(), current_markers.markers.begin(), current_markers.markers.end());
+                    display_markers.markers.insert(display_markers.markers.end(), trace_markers.markers.begin(), trace_markers.markers.end());
                     display_pub.publish(display_markers);
                     // Wait for a bit
                     std::this_thread::sleep_for(std::chrono::duration<double>(draw_wait));
@@ -1211,9 +1158,9 @@ namespace uncertainty_contact_planning
         inline Eigen::Vector4d Get3DPointForConfig(const Robot& immutable_robot, const Configuration& config) const
         {
             Robot robot = immutable_robot;
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             robot.UpdatePosition(config);
-            const std::string& link_name = robot_links_points.back().first;
+            const std::string& link_name = robot_links_points.back().first.first;
             const EigenHelpers::VectorVector4d& link_points = (*robot_links_points.back().second);
             const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
             //const Eigen::Vector3d link_relative_point(0.0, 0.0, 0.0);
@@ -1247,10 +1194,8 @@ namespace uncertainty_contact_planning
                 if (current_index == previous_index)
                 {
                     const Configuration current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
-                    visualization_msgs::Marker target_marker = DrawRobotConfiguration(robot_, current_config, blue_color);
-                    target_marker.ns = "policy_graph";
-                    target_marker.id = (int)idx + 1;
-                    policy_markers.markers.push_back(target_marker);
+                    const visualization_msgs::MarkerArray target_markers = DrawRobotConfiguration(robot_, current_config, blue_color, 1, "policy_graph_goal");
+                    policy_markers.markers.insert(policy_markers.markers.end(), target_markers.markers.begin(), target_markers.markers.end());
                 }
                 else
                 {
@@ -1343,14 +1288,60 @@ namespace uncertainty_contact_planning
             display_pub.publish(policy_markers);
         }
 
-        inline visualization_msgs::Marker DrawRobotConfiguration(const Robot& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
+        inline visualization_msgs::MarkerArray MakeConfigurationDisplayRepMixed(const Robot& immutable_robot, const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            // Perform FK on the current config
+            Robot working_robot = immutable_robot;
+            working_robot.UpdatePosition(configuration);
+            // Now, go through the links and points of the robot for collision checking
+            visualization_msgs::MarkerArray configuration_markers;
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first.first;
+                const simple_robot_models::MODEL_GEOMETRY_TYPE link_geometry_type = robot_links_points[link_idx].first.second;
+                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                // Get the transform of the current link
+                const Eigen::Isometry3d link_transform = working_robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector4d& raw_link_sphere = link_points[point_idx];
+                    const double sphere_radius = (link_geometry_type == simple_robot_models::SPHERES) ? raw_link_sphere(3) : (simulator_ptr_->GetResolution() * 0.5);
+                    const Eigen::Vector4d link_relative_sphere_origin(raw_link_sphere(0), raw_link_sphere(1), raw_link_sphere(2), 1.0);
+                    const Eigen::Vector4d environment_relative_sphere_origin = link_transform * link_relative_sphere_origin;
+                    // Make the marker for the current sphere
+                    std_msgs::ColorRGBA real_color = color;
+                    visualization_msgs::Marker configuration_marker;
+                    configuration_marker.action = visualization_msgs::Marker::ADD;
+                    configuration_marker.ns = config_marker_ns;
+                    configuration_marker.id = starting_index + (uint32_t)configuration_markers.markers.size();
+                    configuration_marker.frame_locked = false;
+                    configuration_marker.lifetime = ros::Duration(0.0);
+                    configuration_marker.type = visualization_msgs::Marker::SPHERE;
+                    configuration_marker.header.frame_id = simulator_ptr_->GetFrame();
+                    configuration_marker.scale.x = sphere_radius * 2.0;
+                    configuration_marker.scale.y = sphere_radius * 2.0;
+                    configuration_marker.scale.z = sphere_radius * 2.0;
+                    configuration_marker.pose.position = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_sphere_origin);
+                    configuration_marker.pose.orientation = EigenHelpersConversions::EigenQuaterniondToGeometryQuaternion(Eigen::Quaterniond::Identity());
+                    configuration_marker.color = real_color;
+                    // Store it
+                    configuration_markers.markers.push_back(configuration_marker);
+                }
+            }
+            return configuration_markers;
+        }
+
+        inline visualization_msgs::MarkerArray MakeConfigurationDisplayRepPoints(const Robot& immutable_robot, const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
         {
             Robot robot = immutable_robot;
             std_msgs::ColorRGBA real_color = color;
             visualization_msgs::Marker configuration_marker;
             configuration_marker.action = visualization_msgs::Marker::ADD;
-            configuration_marker.ns = "UNKNOWN";
-            configuration_marker.id = 1;
+            configuration_marker.ns = config_marker_ns;
+            configuration_marker.id = starting_index;
             configuration_marker.frame_locked = false;
             configuration_marker.lifetime = ros::Duration(0.0);
             configuration_marker.type = visualization_msgs::Marker::SPHERE_LIST;
@@ -1362,15 +1353,15 @@ namespace uncertainty_contact_planning
             configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
             // Make the individual points
-            // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
             robot.UpdatePosition(configuration);
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
+                const std::string& link_name = robot_links_points[link_idx].first.first;
+                const simple_robot_models::MODEL_GEOMETRY_TYPE link_geometry_type = robot_links_points[link_idx].first.second;
+                assert(link_geometry_type == simple_robot_models::POINTS);
                 const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 // Get the transform of the current link
                 const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
@@ -1397,19 +1388,44 @@ namespace uncertainty_contact_planning
                     }
                 }
             }
-            return configuration_marker;
+            visualization_msgs::MarkerArray configuration_markers;
+            configuration_markers.markers = {configuration_marker};
+            return configuration_markers;
+        }
+
+        inline visualization_msgs::MarkerArray DrawRobotConfiguration(const Robot& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            bool points_only = true;
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = immutable_robot.GetRawLinksPoints();
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                const simple_robot_models::MODEL_GEOMETRY_TYPE link_geometry_type = robot_links_points[link_idx].first.second;
+                if (link_geometry_type != simple_robot_models::POINTS)
+                {
+                    points_only = false;
+                }
+            }
+            if (points_only)
+            {
+                return MakeConfigurationDisplayRepPoints(immutable_robot, robot_links_points, configuration, color, starting_index, config_marker_ns);
+            }
+            else
+            {
+                return MakeConfigurationDisplayRepMixed(immutable_robot, robot_links_points, configuration, color, starting_index, config_marker_ns);
+            }
         }
 
         inline visualization_msgs::MarkerArray DrawParticles(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
         {
             Robot robot = immutable_robot;
             visualization_msgs::MarkerArray markers;
+            int32_t starting_idx = 1;
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
-                visualization_msgs::Marker particle_marker = DrawRobotConfiguration(robot, particles[idx], color);
-                particle_marker.ns = ns;
-                particle_marker.id = (int32_t)idx + 1;
-                markers.markers.push_back(particle_marker);
+                const visualization_msgs::MarkerArray particle_markers = DrawRobotConfiguration(robot, particles[idx], color, starting_idx, ns);
+                markers.markers.insert(markers.markers.end(), particle_markers.markers.begin(), particle_markers.markers.end());
+                starting_idx = (int32_t)markers.markers.size() + 1;
             }
             return markers;
         }
@@ -1418,12 +1434,12 @@ namespace uncertainty_contact_planning
         {
             Robot robot = immutable_robot;
             visualization_msgs::MarkerArray markers;
+            int32_t starting_idx = 1;
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
-                visualization_msgs::Marker particle_marker = DrawRobotConfiguration(robot, particles[idx].first, color);
-                particle_marker.ns = ns;
-                particle_marker.id = (int32_t)idx + 1;
-                markers.markers.push_back(particle_marker);
+                const visualization_msgs::MarkerArray particle_markers = DrawRobotConfiguration(robot, particles[idx].first, color, starting_idx, ns);
+                markers.markers.insert(markers.markers.end(), particle_markers.markers.begin(), particle_markers.markers.end());
+                starting_idx = (int32_t)markers.markers.size() + 1;
             }
             return markers;
         }
@@ -1448,12 +1464,12 @@ namespace uncertainty_contact_planning
             configuration_marker.color = real_color;
             // Make the individual points
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
+                const std::string& link_name = robot_links_points[link_idx].first.first;
                 const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 // Get the current transform
                 // Update the position of the robot
@@ -1598,7 +1614,7 @@ namespace uncertainty_contact_planning
         {
             Robot robot = immutable_robot;
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Update the position of the robot
             robot.UpdatePosition(configuration);
             std::vector<std::vector<uint32_t>> link_region_signatures(robot_links_points.size());
@@ -1606,7 +1622,7 @@ namespace uncertainty_contact_planning
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
+                const std::string& link_name = robot_links_points[link_idx].first.first;
                 const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 std::vector<uint32_t> link_region_signature(link_points.size());
                 // Get the transform of the current link
@@ -1671,7 +1687,7 @@ namespace uncertainty_contact_planning
             // Let's build the distance function
             // This is a little special - we use the lambda to capture the local context, so we can pass indices to the clustering instead of the actual configurations, but have the clustering *operate* over configurations
             std::function<double(const size_t&, const size_t&)> distance_fn = [&] (const size_t& idx1, const size_t& idx2) { return ComputeConvexRegionSignatureDistance(particle_region_signatures[idx1], particle_region_signatures[idx2]); };
-            const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(initial_cluster, distance_fn);
+            const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrixParallel(initial_cluster, distance_fn);
             //std::cout << "Region signature distance matrix " << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
             // Check the max element of the distance matrix
             const double max_distance = distance_matrix.maxCoeff();
@@ -1719,7 +1735,7 @@ namespace uncertainty_contact_planning
         {
             Robot robot = immutable_robot;
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             EigenHelpers::VectorVector3d start_config_actuation_centers(robot_links_points.size());
             EigenHelpers::VectorVector3d end_config_actuation_centers(robot_links_points.size());
             // Update the position of the robot
@@ -1728,7 +1744,7 @@ namespace uncertainty_contact_planning
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
+                const std::string& link_name = robot_links_points[link_idx].first.first;
                 // Get the transform of the current link
                 const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 const Eigen::Vector3d link_point = link_transform.translation();
@@ -1740,7 +1756,7 @@ namespace uncertainty_contact_planning
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
+                const std::string& link_name = robot_links_points[link_idx].first.first;
                 // Get the transform of the current link
                 const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 const Eigen::Vector3d link_point = link_transform.translation();
@@ -1957,7 +1973,7 @@ namespace uncertainty_contact_planning
             {
                 const std::vector<size_t>& current_cluster = initial_clusters[cluster_idx];
                 // First, we build the distance matrix
-                const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrix(current_cluster, distance_fn);
+                const Eigen::MatrixXd distance_matrix = arc_helpers::BuildDistanceMatrixParallel(current_cluster, distance_fn);
                 // Check the max element of the distance matrix
                 const double max_distance = distance_matrix.maxCoeff();
                 //std::cout << "Distance matrix:\n" << PrettyPrint::PrettyPrint(distance_matrix) << std::endl;
@@ -2241,7 +2257,7 @@ namespace uncertainty_contact_planning
                 {
                     for (size_t idx = 0; idx < propagated_state.first.size(); idx++)
                     {
-                        int64_t state_index = (int64_t)state_counter_ + ((int64_t)idx - ((int64_t)propagated_state.first.size() - 1));
+                        //int64_t state_index = (int64_t)state_counter_ + ((int64_t)idx - ((int64_t)propagated_state.first.size() - 1));
                         // Yeah, sorry about the ternary. This is so we can still have a const reference
                         //const UncertaintyPlanningState& previous_state = (propagated_state.first[idx].second >= 0) ? propagated_state.first[propagated_state.first[idx].second].first : nearest;
                         const UncertaintyPlanningState& current_state = propagated_state.first[idx].first;
@@ -2260,17 +2276,9 @@ namespace uncertainty_contact_planning
                         forward_color.g = (float)(1.0 - motion_Pfeasibility);
                         forward_color.b = (float)(1.0 - motion_Pfeasibility);
                         forward_color.a = 1.0f - ((float)(erf(raw_variance) * variance_alpha_));
-                        visualization_msgs::Marker forward_expectation_marker = DrawRobotConfiguration(robot_, current_state.GetExpectation(), forward_color);
-                        forward_expectation_marker.id = (int)state_index;
-                        if (edge_Pfeasibility == 1.0f)
-                        {
-                            forward_expectation_marker.ns = "forward_expectation";
-                        }
-                        else
-                        {
-                            forward_expectation_marker.ns = "split_forward_expectation";
-                        }
-                        propagation_display_rep.markers.push_back(forward_expectation_marker);
+                        const std::string forward_expectation_marker_ns = (edge_Pfeasibility == 1.0) ? "forward_expectation" : "split_forward_expectation";
+                        const visualization_msgs::MarkerArray forward_expectation_markers = DrawRobotConfiguration(robot_, current_state.GetExpectation(), forward_color, (int32_t)propagation_display_rep.markers.size() + 1, forward_expectation_marker_ns);
+                        propagation_display_rep.markers.insert(propagation_display_rep.markers.end(), forward_expectation_markers.markers.begin(), forward_expectation_markers.markers.end());
                         if (reverse_edge_Pfeasibility > 0.5)
                         {
                             // Make the display color
@@ -2279,17 +2287,9 @@ namespace uncertainty_contact_planning
                             reverse_color.g = (float)(1.0 - motion_Pfeasibility);
                             reverse_color.b = (float)(1.0 - motion_Pfeasibility);
                             reverse_color.a = (float)reverse_edge_Pfeasibility;
-                            visualization_msgs::Marker reverse_expectation_marker = DrawRobotConfiguration(robot_, current_state.GetExpectation(), reverse_color);
-                            reverse_expectation_marker.id = (int)state_index;
-                            if (edge_Pfeasibility == 1.0)
-                            {
-                                reverse_expectation_marker.ns = "reverse_expectation";
-                            }
-                            else
-                            {
-                                reverse_expectation_marker.ns = "split_reverse_expectation";
-                            }
-                            propagation_display_rep.markers.push_back(reverse_expectation_marker);
+                            const std::string reverse_expectation_marker_ns = (edge_Pfeasibility == 1.0) ? "reverse_expectation" : "split_reverse_expectation";
+                            const visualization_msgs::MarkerArray reverse_expectation_markers = DrawRobotConfiguration(robot_, current_state.GetExpectation(), reverse_color, (int32_t)propagation_display_rep.markers.size() + 1, reverse_expectation_marker_ns);
+                            propagation_display_rep.markers.insert(propagation_display_rep.markers.end(), reverse_expectation_markers.markers.begin(), reverse_expectation_markers.markers.end());
                         }
                     }
                 }

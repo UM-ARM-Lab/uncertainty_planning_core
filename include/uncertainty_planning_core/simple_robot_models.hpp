@@ -14,6 +14,8 @@
 
 namespace simple_robot_models
 {
+    enum MODEL_GEOMETRY_TYPE { POINTS, SPHERES };
+
     class EigenMatrixD31Serializer
     {
     public:
@@ -119,6 +121,7 @@ namespace simple_robot_models
         double position_distance_weight_;
         double rotation_distance_weight_;
         bool initialized_;
+        MODEL_GEOMETRY_TYPE geometry_type_;
 
         inline void SetConfig(const Eigen::Matrix<double, 3, 1>& new_config)
         {
@@ -135,7 +138,7 @@ namespace simple_robot_models
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Matrix<double, 3, 1>& initial_position, const SE2_ROBOT_CONFIG& robot_config, const double position_distance_weight, const double rotation_distance_weight) : link_points_(robot_points)
+        inline SimpleSE2Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const MODEL_GEOMETRY_TYPE geometry_type, const Eigen::Matrix<double, 3, 1>& initial_position, const SE2_ROBOT_CONFIG& robot_config, const double position_distance_weight, const double rotation_distance_weight) : link_points_(robot_points), geometry_type_(geometry_type)
         {
             position_distance_weight_ = std::abs(position_distance_weight);
             rotation_distance_weight_ = std::abs(rotation_distance_weight);
@@ -152,9 +155,9 @@ namespace simple_robot_models
             initialized_ = true;
         }
 
-        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::pair<std::string, MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
         {
-            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>{std::make_pair("robot", link_points_)};
+            return std::vector<std::pair<std::pair<std::string, MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>>{std::make_pair(std::make_pair("robot", geometry_type_), link_points_)};
         }
 
         inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
@@ -557,6 +560,7 @@ namespace simple_robot_models
         double position_distance_weight_;
         double rotation_distance_weight_;
         bool initialized_;
+        MODEL_GEOMETRY_TYPE geometry_type_;
 
         inline void SetConfig(const Eigen::Isometry3d& new_config)
         {
@@ -568,7 +572,7 @@ namespace simple_robot_models
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const Eigen::Isometry3d& initial_position, const SE3_ROBOT_CONFIG& robot_config, const double position_distance_weight, const double rotation_distance_weight) : link_points_(robot_points)
+        inline SimpleSE3Robot(const std::shared_ptr<EigenHelpers::VectorVector4d>& robot_points, const MODEL_GEOMETRY_TYPE geometry_type, const Eigen::Isometry3d& initial_position, const SE3_ROBOT_CONFIG& robot_config, const double position_distance_weight, const double rotation_distance_weight) : link_points_(robot_points), geometry_type_(geometry_type)
         {
             position_distance_weight_ = std::abs(position_distance_weight);
             rotation_distance_weight_ = std::abs(rotation_distance_weight);
@@ -594,9 +598,9 @@ namespace simple_robot_models
             initialized_ = true;
         }
 
-        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::pair<std::string, MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
         {
-            return std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>{std::make_pair("robot", link_points_)};
+            return std::vector<std::pair<std::pair<std::string, MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>>{std::make_pair(std::make_pair("robot", geometry_type_), link_points_)};
         }
 
         inline bool CheckIfSelfCollisionAllowed(const size_t link1_index, const size_t link2_index) const
@@ -1186,7 +1190,7 @@ namespace simple_robot_models
         }
     };
 
-    std::ostream& operator<<(std::ostream& strm, const SimpleJointModel& joint_model)
+    inline std::ostream& operator<<(std::ostream& strm, const SimpleJointModel& joint_model)
     {
         const std::pair<double, double> limits = joint_model.GetLimits();
         strm << joint_model.GetValue() << "[" << limits.first << "," << limits.second << ")";
@@ -1291,12 +1295,17 @@ namespace simple_robot_models
         Eigen::Isometry3d link_transform;
         std::shared_ptr<EigenHelpers::VectorVector4d> link_points;
         std::string link_name;
+        MODEL_GEOMETRY_TYPE geometry_type;
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        RobotLink() : link_points(new EigenHelpers::VectorVector4d()) {}
+        RobotLink() : link_points(new EigenHelpers::VectorVector4d()), geometry_type(MODEL_GEOMETRY_TYPE::POINTS) {}
 
-        RobotLink(const std::shared_ptr<EigenHelpers::VectorVector4d>& points, const std::string& name) : link_points(points), link_name(name) {}
+        RobotLink(const std::string& name) : link_points(new EigenHelpers::VectorVector4d()), link_name(name), geometry_type(MODEL_GEOMETRY_TYPE::POINTS) {}
+
+        RobotLink(const std::string& name, const MODEL_GEOMETRY_TYPE type) : link_points(new EigenHelpers::VectorVector4d()), link_name(name), geometry_type(type) {}
+
+        RobotLink(const std::shared_ptr<EigenHelpers::VectorVector4d>& points, const std::string& name, const MODEL_GEOMETRY_TYPE type) : link_points(points), link_name(name), geometry_type(type) {}
 
         inline void SetLinkPoints(const std::shared_ptr<EigenHelpers::VectorVector4d>& points)
         {
@@ -1718,13 +1727,13 @@ namespace simple_robot_models
             }
         }
 
-        inline std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
+        inline std::vector<std::pair<std::pair<std::string, MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> GetRawLinksPoints() const
         {
-            std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> links_points;
+            std::vector<std::pair<std::pair<std::string, MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> links_points;
             for (size_t idx = 0; idx < links_.size(); idx++)
             {
                 const RobotLink& current_link = links_[idx];
-                links_points.push_back(std::make_pair(current_link.link_name, current_link.link_points));
+                links_points.push_back(std::make_pair(std::make_pair(current_link.link_name, current_link.geometry_type), current_link.link_points));
             }
             return links_points;
         }

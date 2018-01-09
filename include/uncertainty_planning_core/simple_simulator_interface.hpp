@@ -17,6 +17,7 @@
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <omp.h>
+#include <uncertainty_planning_core/simple_robot_models.hpp>
 
 #ifndef SIMPLE_SIMULATOR_INTERFACE_HPP
 #define SIMPLE_SIMULATOR_INTERFACE_HPP
@@ -505,14 +506,60 @@ namespace simple_simulator_interface
             return color;
         }
 
-        inline visualization_msgs::Marker DrawRobotConfiguration(const Robot& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color) const
+        inline visualization_msgs::MarkerArray MakeConfigurationDisplayRepMixed(const Robot& immutable_robot, const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            // Perform FK on the current config
+            Robot working_robot = immutable_robot;
+            working_robot.UpdatePosition(configuration);
+            // Now, go through the links and points of the robot for collision checking
+            visualization_msgs::MarkerArray configuration_markers;
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_links_points[link_idx].first.first;
+                const simple_robot_models::MODEL_GEOMETRY_TYPE link_geometry_type = robot_links_points[link_idx].first.second;
+                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                // Get the transform of the current link
+                const Eigen::Isometry3d link_transform = working_robot.GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector4d& raw_link_sphere = link_points[point_idx];
+                    const double sphere_radius = (link_geometry_type == simple_robot_models::SPHERES) ? raw_link_sphere(3) : (this->GetResolution() * 0.5);
+                    const Eigen::Vector4d link_relative_sphere_origin(raw_link_sphere(0), raw_link_sphere(1), raw_link_sphere(2), 1.0);
+                    const Eigen::Vector4d environment_relative_sphere_origin = link_transform * link_relative_sphere_origin;
+                    // Make the marker for the current sphere
+                    std_msgs::ColorRGBA real_color = color;
+                    visualization_msgs::Marker configuration_marker;
+                    configuration_marker.action = visualization_msgs::Marker::ADD;
+                    configuration_marker.ns = config_marker_ns;
+                    configuration_marker.id = starting_index + (uint32_t)configuration_markers.markers.size();
+                    configuration_marker.frame_locked = false;
+                    configuration_marker.lifetime = ros::Duration(0.0);
+                    configuration_marker.type = visualization_msgs::Marker::SPHERE;
+                    configuration_marker.header.frame_id = this->GetFrame();
+                    configuration_marker.scale.x = sphere_radius * 2.0;
+                    configuration_marker.scale.y = sphere_radius * 2.0;
+                    configuration_marker.scale.z = sphere_radius * 2.0;
+                    configuration_marker.pose.position = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_sphere_origin);
+                    configuration_marker.pose.orientation = EigenHelpersConversions::EigenQuaterniondToGeometryQuaternion(Eigen::Quaterniond::Identity());
+                    configuration_marker.color = real_color;
+                    // Store it
+                    configuration_markers.markers.push_back(configuration_marker);
+                }
+            }
+            return configuration_markers;
+        }
+
+        inline visualization_msgs::MarkerArray MakeConfigurationDisplayRepPoints(const Robot& immutable_robot, const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
         {
             Robot robot = immutable_robot;
             std_msgs::ColorRGBA real_color = color;
             visualization_msgs::Marker configuration_marker;
             configuration_marker.action = visualization_msgs::Marker::ADD;
-            configuration_marker.ns = "UNKNOWN";
-            configuration_marker.id = 1;
+            configuration_marker.ns = config_marker_ns;
+            configuration_marker.id = starting_index;
             configuration_marker.frame_locked = false;
             configuration_marker.lifetime = ros::Duration(0.0);
             configuration_marker.type = visualization_msgs::Marker::SPHERE_LIST;
@@ -523,17 +570,17 @@ namespace simple_simulator_interface
             const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
             configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
             configuration_marker.color = real_color;
-            // Make the indivudal points
-            // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            // Make the individual points
             // Update the position of the robot
             robot.UpdatePosition(configuration);
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                const std::string& link_name = robot_links_points[link_idx].first.first;
+                const simple_robot_models::MODEL_GEOMETRY_TYPE link_geometry_type = robot_links_points[link_idx].first.second;
+                assert(link_geometry_type == simple_robot_models::POINTS);
+                const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
                 // Get the transform of the current link
                 const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
                 // Now, go through the points of the link
@@ -559,7 +606,32 @@ namespace simple_simulator_interface
                     }
                 }
             }
-            return configuration_marker;
+            visualization_msgs::MarkerArray configuration_markers;
+            configuration_markers.markers = {configuration_marker};
+            return configuration_markers;
+        }
+
+        inline visualization_msgs::MarkerArray DrawRobotConfiguration(const Robot& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            bool points_only = true;
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = immutable_robot.GetRawLinksPoints();
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            {
+                const simple_robot_models::MODEL_GEOMETRY_TYPE link_geometry_type = robot_links_points[link_idx].first.second;
+                if (link_geometry_type != simple_robot_models::POINTS)
+                {
+                    points_only = false;
+                }
+            }
+            if (points_only)
+            {
+                return MakeConfigurationDisplayRepPoints(immutable_robot, robot_links_points, configuration, color, starting_index, config_marker_ns);
+            }
+            else
+            {
+                return MakeConfigurationDisplayRepMixed(immutable_robot, robot_links_points, configuration, color, starting_index, config_marker_ns);
+            }
         }
 
         inline visualization_msgs::Marker DrawRobotControlInput(const Robot& immutable_robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color) const
@@ -582,12 +654,12 @@ namespace simple_simulator_interface
             configuration_marker.color = real_color;
             // Make the indivudal points
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::pair<std::string, simple_robot_models::MODEL_GEOMETRY_TYPE>, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
             // Now, go through the links and points of the robot for collision checking
             for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
+                const std::string& link_name = robot_links_points[link_idx].first.first;
                 const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
                 // Get the current transform
                 // Update the position of the robot
