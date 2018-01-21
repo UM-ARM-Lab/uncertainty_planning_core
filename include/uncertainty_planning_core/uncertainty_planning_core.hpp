@@ -19,8 +19,6 @@
 #include <arc_utilities/simple_rrt_planner.hpp>
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <uncertainty_planning_core/simple_pid_controller.hpp>
-#include <uncertainty_planning_core/simple_uncertainty_models.hpp>
 #include <uncertainty_planning_core/uncertainty_planner_state.hpp>
 #include <uncertainty_planning_core/simple_simulator_interface.hpp>
 #include <uncertainty_planning_core/execution_policy.hpp>
@@ -28,8 +26,7 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/simple_robot_models.hpp>
-#include <uncertainty_planning_core/simple_samplers.hpp>
+#include <arc_utilities/simple_robot_models.hpp>
 
 #ifndef UNCERTAINTY_PLANNING_CORE_HPP
 #define UNCERTAINTY_PLANNING_CORE_HPP
@@ -42,8 +39,6 @@ namespace uncertainty_planning_core
 {
     struct PLANNING_AND_EXECUTION_OPTIONS
     {
-        uncertainty_contact_planning::SPATIAL_FEATURE_CLUSTERING_TYPE clustering_type;
-        uint64_t prng_seed;
         // Time limits
         double planner_time_limit;
         // Standard planner control params
@@ -54,8 +49,6 @@ namespace uncertainty_planning_core
         double goal_distance_threshold;
         double connect_after_first_solution;
         // Distance function control params/weights
-        double signature_matching_threshold;
-        double distance_clustering_threshold;
         double feasibility_alpha;
         double variance_alpha;
         // Reverse/repeat params
@@ -87,16 +80,6 @@ namespace uncertainty_planning_core
         PLANNING_AND_EXECUTION_OPTIONS options = initial_options;
         // Get options via ROS params
         ros::NodeHandle nhp("~");
-        const int32_t prng_seed_init = (int32_t)nhp.param(std::string("prng_seed_init"), -1);
-        if (prng_seed_init >= 0)
-        {
-            arc_helpers::SplitMix64PRNG seed_gen((uint64_t)prng_seed_init);
-            options.prng_seed = seed_gen();
-        }
-        else
-        {
-            options.prng_seed = (uint64_t)std::chrono::high_resolution_clock::now().time_since_epoch().count();
-        }
         options.planner_time_limit = nhp.param(std::string("planner_time_limit"), options.planner_time_limit);
         options.goal_bias = nhp.param(std::string("goal_bias"), options.goal_bias);
         options.step_size = nhp.param(std::string("step_size"), options.step_size);
@@ -109,9 +92,6 @@ namespace uncertainty_planning_core
         options.num_particles = (uint32_t)nhp.param(std::string("num_particles"), (int)options.num_particles);
         options.planner_log_file = nhp.param(std::string("planner_log_file"), options.planner_log_file);
         options.planned_policy_file = nhp.param(std::string("planned_policy_file"), options.planned_policy_file);
-        options.clustering_type = uncertainty_contact_planning::ParseSpatialFeatureClusteringType(nhp.param(std::string("clustering_type"), uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type)));
-        options.signature_matching_threshold = nhp.param(std::string("signature_matching_threshold"), options.signature_matching_threshold);
-        options.distance_clustering_threshold = nhp.param(std::string("distance_clustering_threshold"), options.distance_clustering_threshold);
         options.policy_action_attempt_count = (uint32_t)nhp.param(std::string("policy_action_attempt_count"), (int)options.policy_action_attempt_count);
         options.debug_level = nhp.param(std::string("debug_level"), options.debug_level);
         options.use_contact = nhp.param(std::string("use_contact"), options.use_contact);
@@ -127,45 +107,208 @@ namespace uncertainty_planning_core
     }
 
     // Typedefs to make things easier to read
+
     typedef PRNG_TYPE PRNG;
 
-    typedef Eigen::Matrix<double, 3, 1> SE2Config;
-    typedef std::allocator<Eigen::Matrix<double, 3, 1>> SE2ConfigAlloc;
-    typedef simple_robot_models::EigenMatrixD31Serializer SE2ConfigSerializer;
-    typedef execution_policy::ExecutionPolicy<SE2Config, SE2ConfigSerializer, SE2ConfigAlloc> SE2Policy;
-    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator SE2ActuatorModel;
-    typedef simple_robot_models::SimpleSE2Robot SE2Robot;
-    typedef simple_simulator_interface::SimulatorInterface<SE2Robot, SE2Config, PRNG, SE2ConfigAlloc> SE2Simulator;
-    typedef std::shared_ptr<SE2Simulator> SE2SimulatorPtr;
-    typedef simple_samplers::SimpleBaseSampler<SE2Config, PRNG> SE2Sampler;
-    typedef std::shared_ptr<SE2Sampler> SE2SamplerPtr;
-    typedef uncertainty_contact_planning::UncertaintyPlanningSpace<SE2Robot, SE2Config, SE2ConfigSerializer, SE2ConfigAlloc, PRNG> SE2PlanningSpace;
+    // SE(2)
 
-    typedef Eigen::Isometry3d SE3Config;
-    typedef Eigen::aligned_allocator<Eigen::Isometry3d> SE3ConfigAlloc;
-    typedef simple_robot_models::EigenIsometry3dSerializer SE3ConfigSerializer;
-    typedef execution_policy::ExecutionPolicy<SE3Config, SE3ConfigSerializer, SE3ConfigAlloc> SE3Policy;
-    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator SE3ActuatorModel;
-    typedef simple_robot_models::SimpleSE3Robot SE3Robot;
-    typedef simple_simulator_interface::SimulatorInterface<SE3Robot, SE3Config, PRNG, SE3ConfigAlloc> SE3Simulator;
-    typedef std::shared_ptr<SE3Simulator> SE3SimulatorPtr;
-    typedef simple_samplers::SimpleBaseSampler<SE3Config, PRNG> SE3Sampler;
-    typedef std::shared_ptr<SE3Sampler> SE3SamplerPtr;
-    typedef uncertainty_contact_planning::UncertaintyPlanningSpace<SE3Robot, SE3Config, SE3ConfigSerializer, SE3ConfigAlloc, PRNG> SE3PlanningSpace;
+    using SE2Config = simple_se2_robot_model::SimpleSE2Configuration;
+    using SE2ConfigAlloc = simple_se2_robot_model::SimpleSE2ConfigAlloc;
+    using SE2ConfigSerializer = simple_se2_robot_model::SimpleSE2ConfigSerializer;
+    using SE2Policy = execution_policy::ExecutionPolicy<SE2Config, SE2ConfigSerializer, SE2ConfigAlloc>;
+    using SE2Sampler = simple_sampler_interface::SimpleBaseSampler<SE2Config, PRNG>;
+    using SE2SamplerPtr = std::shared_ptr<SE2Sampler>;
+    using SE2Simulator = simple_simulator_interface::SimulatorInterface<SE2Config, PRNG, SE2ConfigAlloc>;
+    using SE2SimulatorPtr = std::shared_ptr<SE2Simulator>;
+    using SE2Clustering = simple_outcome_clustering_interface::OutcomeClusteringInterface<SE2Config, SE2ConfigAlloc>;
+    using SE2ClusteringPtr = std::shared_ptr<SE2Clustering>;
+    using SE2PlanningSpace = uncertainty_contact_planning::UncertaintyPlanningSpace<SE2Config, SE2ConfigSerializer, SE2ConfigAlloc, PRNG>;
+    using SE2Robot = simple_robot_model_interface::SimpleRobotModelInterface<SE2Config, SE2ConfigAlloc>;
+    using SE2RobotPtr = std::shared_ptr<SE2Robot>;
 
-    typedef simple_robot_models::SimpleLinkedConfiguration LinkedConfig;
-    typedef std::allocator<LinkedConfig> LinkedConfigAlloc;
-    typedef simple_robot_models::SimpleLinkedConfigurationSerializer LinkedConfigSerializer;
-    typedef execution_policy::ExecutionPolicy<LinkedConfig, LinkedConfigSerializer, LinkedConfigAlloc> LinkedPolicy;
-    typedef simple_uncertainty_models::TruncatedNormalUncertainVelocityActuator LinkedActuatorModel;
-    typedef simple_robot_models::SimpleLinkedRobot<LinkedActuatorModel> LinkedRobot;
-    typedef simple_simulator_interface::SimulatorInterface<LinkedRobot, LinkedConfig, PRNG, LinkedConfigAlloc> LinkedSimulator;
-    typedef std::shared_ptr<LinkedSimulator> LinkedSimulatorPtr;
-    typedef simple_samplers::SimpleBaseSampler<LinkedConfig, PRNG> LinkedSampler;
-    typedef std::shared_ptr<LinkedSampler> LinkedSamplerPtr;
-    typedef uncertainty_contact_planning::UncertaintyPlanningSpace<LinkedRobot, LinkedConfig, LinkedConfigSerializer, LinkedConfigAlloc, PRNG> LinkedPlanningSpace;
+    // SE(3)
+
+    using SE3Config = simple_se3_robot_model::SimpleSE3Configuration;
+    using SE3ConfigAlloc = simple_se3_robot_model::SimpleSE3ConfigAlloc;
+    using SE3ConfigSerializer = simple_se3_robot_model::SimpleSE3ConfigSerializer;
+    using SE3Policy = execution_policy::ExecutionPolicy<SE3Config, SE3ConfigSerializer, SE3ConfigAlloc>;
+    using SE3Sampler = simple_sampler_interface::SimpleBaseSampler<SE3Config, PRNG>;
+    using SE3SamplerPtr = std::shared_ptr<SE3Sampler>;
+    using SE3Robot = simple_robot_model_interface::SimpleRobotModelInterface<SE3Config, SE3ConfigAlloc>;
+    using SE3RobotPtr = std::shared_ptr<SE3Robot>;
+    using SE3Simulator = simple_simulator_interface::SimulatorInterface<SE3Config, PRNG, SE3ConfigAlloc>;
+    using SE3SimulatorPtr = std::shared_ptr<SE3Simulator>;
+    using SE3Clustering = simple_outcome_clustering_interface::OutcomeClusteringInterface<SE3Config, SE3ConfigAlloc>;
+    using SE3ClusteringPtr = std::shared_ptr<SE3Clustering>;
+    using SE3PlanningSpace = uncertainty_contact_planning::UncertaintyPlanningSpace<SE3Config, SE3ConfigSerializer, SE3ConfigAlloc, PRNG>;
+
+    // Linked
+
+    using LinkedConfig = simple_linked_robot_model::SimpleLinkedConfiguration;
+    using LinkedConfigAlloc = simple_linked_robot_model::SimpleLinkedConfigAlloc;
+    using LinkedConfigSerializer = simple_linked_robot_model::SimpleLinkedConfigSerializer;
+    using LinkedPolicy = execution_policy::ExecutionPolicy<LinkedConfig, LinkedConfigSerializer, LinkedConfigAlloc>;
+    using LinkedSampler = simple_sampler_interface::SimpleBaseSampler<LinkedConfig, PRNG>;
+    using LinkedSamplerPtr = std::shared_ptr<LinkedSampler>;
+    using LinkedRobot = simple_robot_model_interface::SimpleRobotModelInterface<LinkedConfig, LinkedConfigAlloc>;
+    using LinkedRobotPtr = std::shared_ptr<LinkedRobot>;
+    using LinkedSimulator = simple_simulator_interface::SimulatorInterface<LinkedConfig, PRNG, LinkedConfigAlloc>;
+    using LinkedSimulatorPtr = std::shared_ptr<LinkedSimulator>;
+    using LinkedClustering = simple_outcome_clustering_interface::OutcomeClusteringInterface<LinkedConfig, LinkedConfigAlloc>;
+    using LinkedClusteringPtr = std::shared_ptr<LinkedClustering>;
+    using LinkedPlanningSpace = uncertainty_contact_planning::UncertaintyPlanningSpace<LinkedConfig, LinkedConfigSerializer, LinkedConfigAlloc, PRNG>;
+
+    // Policy and tree type definitions
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    using UncertaintyPlanningState = uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>;
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    using UncertaintyPlanningPolicy = execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>;
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    using UncertaintyPlanningTreeState = simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>, std::allocator<UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>>>;
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    using UncertaintyPlanningTree = std::vector<UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>>;
 
     // Policy saving and loading
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    static inline uint64_t SerializePlannerTree(const UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc>& planner_tree, std::vector<uint8_t>& buffer)
+    {
+        std::cout << "Serializing planner tree..." << std::endl;
+        std::function<uint64_t(const UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn
+                = [] (const UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>& state, std::vector<uint8_t>& buffer)
+        { return UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>::Serialize(state,
+                                                                                                       buffer,
+                                                                                                       UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>::Serialize); };
+        arc_helpers::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
+        const uint64_t size = arc_helpers::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
+        std::cout << "...planner tree of " << planner_tree.size() << " states serialized into " << buffer.size() << " bytes" << std::endl;
+        return size;
+    }
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    static inline std::pair<UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t> DeserializePlannerTree(const std::vector<uint8_t>& buffer, const uint64_t current)
+    {
+        std::cout << "Deserializing planner tree..." << std::endl;
+        std::function<std::pair<UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn
+                = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        { return UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize(buffer,
+                                                                                                         current,
+                                                                                                         UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize); };
+        const std::pair<UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t> deserialized_tree
+                = arc_helpers::DeserializeVector<UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>>(buffer, current, planning_tree_state_deserializer_fn);
+        std::cout << "...planner tree of " << deserialized_tree.first.size() << " states deserialized from " << deserialized_tree.second << " bytes" << std::endl;
+        return deserialized_tree;
+    }
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    static inline bool SavePlannerTree(const UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc>& planner_tree, const std::string& filepath)
+    {
+        try
+        {
+            std::cout << "Attempting to serialize tree..." << std::endl;
+            std::vector<uint8_t> buffer;
+            SerializePlannerTree<Configuration, ConfigSerializer, ConfigAlloc>(planner_tree, buffer);
+            // Write a header to detect if compression is enabled (someday)
+            //std::cout << "Compressing for storage..." << std::endl;
+            //const std::vector<uint8_t> compressed_serialized_tree = ZlibHelpers::CompressBytes(buffer);
+            std::cout << " Compression disabled (no Zlib available)..." << std::endl;
+            const std::vector<uint8_t> compressed_serialized_tree = buffer;
+            std::cout << "Attempting to save to file..." << std::endl;
+            std::ofstream output_file(filepath, std::ios::out|std::ios::binary);
+            const size_t serialized_size = compressed_serialized_tree.size();
+            output_file.write(reinterpret_cast<const char*>(compressed_serialized_tree.data()), (std::streamsize)serialized_size);
+            output_file.close();
+            return true;
+        }
+        catch (...)
+        {
+            std::cerr << "Saving planner tree failed" << std::endl;
+            return false;
+        }
+    }
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    static inline UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc> LoadPlannerTree(const std::string& filepath)
+    {
+        std::cout << "Attempting to load from file..." << std::endl;
+        std::ifstream input_file(filepath, std::ios::in|std::ios::binary);
+        if (input_file.good() == false)
+        {
+            throw std::invalid_argument("Planner tree file does not exist");
+        }
+        input_file.seekg(0, std::ios::end);
+        std::streampos end = input_file.tellg();
+        input_file.seekg(0, std::ios::beg);
+        std::streampos begin = input_file.tellg();
+        const std::streamsize serialized_size = end - begin;
+        std::vector<uint8_t> file_buffer((size_t)serialized_size, 0x00);
+        input_file.read(reinterpret_cast<char*>(file_buffer.data()), serialized_size);
+        // Write a header to detect if compression is enabled (someday)
+        //std::cout << "Decompressing from storage..." << std::endl;
+        //const std::vector<uint8_t> decompressed_serialized_tree = ZlibHelpers::DecompressBytes(file_buffer);
+        std::cout << "Decompression disabled (no Zlib available)..." << std::endl;
+        const std::vector<uint8_t> decompressed_serialized_tree = file_buffer;
+        std::cout << "Attempting to deserialize tree..." << std::endl;
+        return DeserializePlannerTree<Configuration, ConfigSerializer, ConfigAlloc>(decompressed_serialized_tree, 0u).first;
+    }
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    static inline bool SavePolicy(const UncertaintyPlanningPolicy<Configuration, ConfigSerializer, ConfigAlloc>& policy, const std::string& filepath)
+    {
+        try
+        {
+            std::cout << "Attempting to serialize policy..." << std::endl;
+            std::vector<uint8_t> buffer;
+            UncertaintyPlanningPolicy<Configuration, ConfigSerializer, ConfigAlloc>::Serialize(policy, buffer);
+            // Write a header to detect if compression is enabled (someday)
+            //std::cout << "Compressing for storage..." << std::endl;
+            //const std::vector<uint8_t> compressed_serialized_policy = ZlibHelpers::CompressBytes(buffer);
+            std::cout << "Compression disabled (no Zlib available)..." << std::endl;
+            const std::vector<uint8_t> compressed_serialized_policy = buffer;
+            std::cout << "Attempting to save to file..." << std::endl;
+            std::ofstream output_file(filepath, std::ios::out|std::ios::binary);
+            const size_t serialized_size = compressed_serialized_policy.size();
+            output_file.write(reinterpret_cast<const char*>(compressed_serialized_policy.data()), (std::streamsize)serialized_size);
+            output_file.close();
+            return true;
+        }
+        catch (...)
+        {
+            std::cerr << "Saving policy failed" << std::endl;
+            return false;
+        }
+    }
+
+    template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
+    static inline UncertaintyPlanningPolicy<Configuration, ConfigSerializer, ConfigAlloc> LoadPolicy(const std::string& filepath)
+    {
+        std::cout << "Attempting to load from file..." << std::endl;
+        std::ifstream input_file(filepath, std::ios::in|std::ios::binary);
+        if (input_file.good() == false)
+        {
+            throw std::invalid_argument("Policy file does not exist");
+        }
+        input_file.seekg(0, std::ios::end);
+        std::streampos end = input_file.tellg();
+        input_file.seekg(0, std::ios::beg);
+        std::streampos begin = input_file.tellg();
+        const std::streamsize serialized_size = end - begin;
+        std::vector<uint8_t> file_buffer((size_t)serialized_size, 0x00);
+        input_file.read(reinterpret_cast<char*>(file_buffer.data()), serialized_size);
+        // Write a header to detect if compression is enabled (someday)
+        //std::cout << "Decompressing from storage..." << std::endl;
+        //const std::vector<uint8_t> decompressed_serialized_policy = ZlibHelpers::DecompressBytes(file_buffer);
+        std::cout << "Decompression disabled (no Zlib available)..." << std::endl;
+        const std::vector<uint8_t> decompressed_serialized_policy = file_buffer;
+        std::cout << "Attempting to deserialize policy..." << std::endl;
+        return UncertaintyPlanningPolicy<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize(decompressed_serialized_policy, 0u).first;
+    }
+
+    // Policy saving and loading concrete implementations
 
     bool SaveSE2Policy(const SE2Policy& policy, const std::string& filename);
 
@@ -181,39 +324,163 @@ namespace uncertainty_planning_core
 
     // SE2 Interface
 
-    std::vector<SE2Config, SE2ConfigAlloc> DemonstrateSE2Simulator(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Config& start, const SE2Config& goal, ros::Publisher& display_debug_publisher);
+    std::vector<SE2Config, SE2ConfigAlloc>
+    DemonstrateSE2Simulator(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                            const SE2RobotPtr& robot,
+                            const SE2SimulatorPtr& simulator,
+                            const SE2SamplerPtr& sampler,
+                            const SE2ClusteringPtr& clustering,
+                            const SE2Config& start,
+                            const SE2Config& goal,
+                            const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<SE2Policy, std::map<std::string, double>> PlanSE2Uncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Config& start, const SE2Config& goal, ros::Publisher& display_debug_publisher);
+    std::pair<SE2Policy, std::map<std::string, double>>
+    PlanSE2Uncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                       const SE2RobotPtr& robot,
+                       const SE2SimulatorPtr& simulator,
+                       const SE2SamplerPtr& sampler,
+                       const SE2ClusteringPtr& clustering,
+                       const SE2Config& start,
+                       const SE2Config& goal,
+                       const double policy_marker_size,
+                       const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE2UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Policy& policy, const SE2Config& start, const SE2Config& goal, ros::Publisher& display_debug_publisher);
+    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
+    SimulateSE2UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                                 const SE2RobotPtr& robot,
+                                 const SE2SimulatorPtr& simulator,
+                                 const SE2SamplerPtr& sampler,
+                                 const SE2ClusteringPtr& clustering,
+                                 const SE2Policy& policy,
+                                 const SE2Config& start,
+                                 const SE2Config& goal,
+                                 const double policy_marker_size,
+                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE2UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE2Robot& robot, const SE2SimulatorPtr& simulator, const SE2SamplerPtr& sampler, const SE2Policy& policy, const SE2Config& start, const SE2Config& goal, const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,  const SE2Config&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
+    std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
+    ExecuteSE2UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                                const SE2RobotPtr& robot,
+                                const SE2SimulatorPtr& simulator,
+                                const SE2SamplerPtr& sampler,
+                                const SE2ClusteringPtr& clustering,
+                                const SE2Policy& policy,
+                                const SE2Config& start,
+                                const SE2Config& goal,
+                                const double policy_marker_size,
+                                const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,
+                                                                                           const SE2Config&,
+                                                                                           const double,
+                                                                                           const double,
+                                                                                           const bool)>& robot_execution_fn,
+                                const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     // SE3 Interface
 
-    std::vector<SE3Config, SE3ConfigAlloc> DemonstrateSE3Simulator(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Config& start, const SE3Config& goal, ros::Publisher& display_debug_publisher);
+    std::vector<SE3Config, SE3ConfigAlloc>
+    DemonstrateSE3Simulator(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                            const SE3RobotPtr& robot,
+                            const SE3SimulatorPtr& simulator,
+                            const SE3SamplerPtr& sampler,
+                            const SE3ClusteringPtr& clustering,
+                            const SE3Config& start,
+                            const SE3Config& goal,
+                            const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<SE3Policy, std::map<std::string, double>> PlanSE3Uncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Config& start, const SE3Config& goal, ros::Publisher& display_debug_publisher);
+    std::pair<SE3Policy, std::map<std::string, double>>
+    PlanSE3Uncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                       const SE3RobotPtr& robot,
+                       const SE3SimulatorPtr& simulator,
+                       const SE3SamplerPtr& sampler,
+                       const SE3ClusteringPtr& clustering,
+                       const SE3Config& start,
+                       const SE3Config& goal,
+                       const double policy_marker_size,
+                       const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateSE3UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Policy& policy, const SE3Config& start, const SE3Config& goal, ros::Publisher& display_debug_publisher);
+    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
+    SimulateSE3UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                                 const SE3RobotPtr& robot,
+                                 const SE3SimulatorPtr& simulator,
+                                 const SE3SamplerPtr& sampler,
+                                 const SE3ClusteringPtr& clustering,
+                                 const SE3Policy& policy,
+                                 const SE3Config& start,
+                                 const SE3Config& goal,
+                                 const double policy_marker_size,
+                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteSE3UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const SE3Robot& robot, const SE3SimulatorPtr& simulator, const SE3SamplerPtr& sampler, const SE3Policy& policy, const SE3Config& start, const SE3Config& goal, const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,  const SE3Config&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
+    std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
+    ExecuteSE3UncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                                const SE3RobotPtr& robot,
+                                const SE3SimulatorPtr& simulator,
+                                const SE3SamplerPtr& sampler,
+                                const SE3ClusteringPtr& clustering,
+                                const SE3Policy& policy,
+                                const SE3Config& start,
+                                const SE3Config& goal,
+                                const double policy_marker_size,
+                                const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,
+                                                                                           const SE3Config&,
+                                                                                           const double,
+                                                                                           const double,
+                                                                                           const bool)>& robot_execution_fn,
+                                const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     // Linked Interface
 
-    std::vector<LinkedConfig, LinkedConfigAlloc> DemonstrateLinkedSimulator(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedConfig& start, const LinkedConfig& goal, ros::Publisher& display_debug_publisher);
+    std::vector<LinkedConfig, LinkedConfigAlloc>
+    DemonstrateLinkedSimulator(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                               const LinkedRobotPtr& robot,
+                               const LinkedSimulatorPtr& simulator,
+                               const LinkedSamplerPtr& sampler,
+                               const LinkedClusteringPtr& clustering,
+                               const LinkedConfig& start,
+                               const LinkedConfig& goal,
+                               const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<LinkedPolicy, std::map<std::string, double>> PlanLinkedUncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedConfig& start, const LinkedConfig& goal, ros::Publisher& display_debug_publisher);
+    std::pair<LinkedPolicy, std::map<std::string, double>>
+    PlanLinkedUncertainty(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                          const LinkedRobotPtr& robot,
+                          const LinkedSimulatorPtr& simulator,
+                          const LinkedSamplerPtr& sampler,
+                          const LinkedClusteringPtr& clustering,
+                          const LinkedConfig& start,
+                          const LinkedConfig& goal,
+                          const double policy_marker_size,
+                          const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateLinkedUncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedPolicy& policy, const LinkedConfig& start, const LinkedConfig& goal, ros::Publisher& display_debug_publisher);
+    std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
+    SimulateLinkedUncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                                    const LinkedRobotPtr& robot,
+                                    const LinkedSimulatorPtr& simulator,
+                                    const LinkedSamplerPtr& sampler,
+                                    const LinkedClusteringPtr& clustering,
+                                    const LinkedPolicy& policy,
+                                    const LinkedConfig& start,
+                                    const LinkedConfig& goal,
+                                    const double policy_marker_size,
+                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
-    std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteLinkedUncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options, const LinkedRobot& robot, const LinkedSimulatorPtr& simulator, const LinkedSamplerPtr& sampler, const LinkedPolicy& policy, const LinkedConfig& start, const LinkedConfig& goal, const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,  const LinkedConfig&, const double, const double, const bool)>& robot_execution_fn, ros::Publisher& display_debug_publisher);
+    std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
+    ExecuteLinkedUncertaintyPolicy(const PLANNING_AND_EXECUTION_OPTIONS& options,
+                                   const LinkedRobotPtr& robot,
+                                   const LinkedSimulatorPtr& simulator,
+                                   const LinkedSamplerPtr& sampler,
+                                   const LinkedClusteringPtr& clustering,
+                                   const LinkedPolicy& policy,
+                                   const LinkedConfig& start,
+                                   const LinkedConfig& goal,
+                                   const double policy_marker_size,
+                                   const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,
+                                                                                                    const LinkedConfig&,
+                                                                                                    const double,
+                                                                                                    const double,
+                                                                                                    const bool)>& robot_execution_fn,
+                                   const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     inline std::ostream& operator<<(std::ostream& strm, const PLANNING_AND_EXECUTION_OPTIONS& options)
     {
         strm << "OPTIONS:";
-        strm << "\nclustering_type: " << uncertainty_contact_planning::PrintSpatialFeatureClusteringType(options.clustering_type);
-        strm << "\nprng_seed: " << options.prng_seed;
         strm << "\nplanner_time_limit: " << options.planner_time_limit;
         strm << "\ngoal_bias: " << options.goal_bias;
         strm << "\nstep_size: " << options.step_size;
@@ -221,8 +488,6 @@ namespace uncertainty_planning_core
         strm << "\ngoal_probability_threshold: " << options.goal_probability_threshold;
         strm << "\ngoal_distance_threshold: " << options.goal_distance_threshold;
         strm << "\nconnect_after_first_solution: " << options.connect_after_first_solution;
-        strm << "\nsignature_matching_threshold: " << options.signature_matching_threshold;
-        strm << "\ndistance_clustering_threshold: " << options.distance_clustering_threshold;
         strm << "\nfeasibility_alpha: " << options.feasibility_alpha;
         strm << "\nvariance_alpha: " << options.variance_alpha;
         strm << "\nedge_attempt_count: " << options.edge_attempt_count;

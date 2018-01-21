@@ -89,11 +89,9 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINK
 #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 
 set(UNCERTAINTY_PLANNING_CORE_SOURCES
-    include/${PROJECT_NAME}/simple_pid_controller.hpp
-    include/${PROJECT_NAME}/simple_uncertainty_models.hpp
-    include/${PROJECT_NAME}/simple_robot_models.hpp
-    include/${PROJECT_NAME}/simple_samplers.hpp
+    include/${PROJECT_NAME}/simple_sampler_interface.hpp
     include/${PROJECT_NAME}/simple_simulator_interface.hpp
+    include/${PROJECT_NAME}/simple_outcome_clustering_interface.hpp
     include/${PROJECT_NAME}/uncertainty_planner_state.hpp
     include/${PROJECT_NAME}/uncertainty_contact_planning.hpp
     include/${PROJECT_NAME}/execution_policy.hpp

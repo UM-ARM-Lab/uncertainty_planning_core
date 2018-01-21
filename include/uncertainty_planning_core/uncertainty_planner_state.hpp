@@ -9,6 +9,7 @@
 #include <random>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/simple_robot_model_interface.hpp>
 
 #ifndef UNCERTAINTY_PLANNER_STATE_HPP
 #define UNCERTAINTY_PLANNER_STATE_HPP
@@ -19,6 +20,8 @@ namespace uncertainty_planning_tools
     class UncertaintyPlannerState
     {
     protected:
+
+        typedef simple_robot_model_interface::SimpleRobotModelInterface<Configuration, ConfigAlloc> Robot;
 
         Configuration expectation_;
         Configuration command_;
@@ -267,34 +270,6 @@ namespace uncertainty_planning_tools
             goal_Pfeasibility_ = 0.0;
         }
 
-        /*
-        template<typename ConfigurationType, typename ConfigSerializerType, typename Robot, typename ConfigAllocType=std::allocator<ConfigurationType>>
-        inline UncertaintyPlannerState(const uint64_t state_id, const std::vector<ConfigurationType, ConfigAllocType>& particles, const Robot& robot, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const ConfigurationType& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
-        {
-            state_id_ = state_id;
-            step_size_ = step_size;
-            particles_ = particles;
-            UpdateStatistics<ConfigurationType, ConfigSerializerType, ConfigAllocType, Robot>(robot);
-            attempt_count_ = attempt_count;
-            reached_count_ = reached_count;
-            reverse_attempt_count_ = reverse_attempt_count;
-            reverse_reached_count_ = reverse_reached_count;
-            parent_motion_Pfeasibility_ = parent_motion_Pfeasibility;
-            raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
-            effective_edge_Pfeasibility_ = effective_edge_Pfeasibility;
-            reverse_edge_Pfeasibility_ = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
-            motion_Pfeasibility_ = effective_edge_Pfeasibility_ * parent_motion_Pfeasibility_;
-            initialized_ = true;
-            has_particles_ = true;
-            use_for_nearest_neighbors_ = true;
-            command_ = command;
-            transition_id_ = transition_id;
-            reverse_transition_id_ = reverse_transition_id;
-            split_id_ = split_id;
-            goal_Pfeasibility_ = 0.0;
-        }
-        */
-
         inline UncertaintyPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
         {
             state_id_ = state_id;
@@ -319,28 +294,11 @@ namespace uncertainty_planning_tools
             goal_Pfeasibility_ = 0.0;
         }
 
-        /*
-        template<typename ConfigurationType, typename ConfigAllocType, typename Robot>
-        inline std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>> UpdateStatistics(const Robot& robot)
+        inline std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>> UpdateStatistics(const std::shared_ptr<Robot>& robot_ptr)
         {
-            std::function<ConfigurationType(const std::vector<ConfigurationType, ConfigAllocType>&)> average_fn = [&] (const std::vector<ConfigurationType, ConfigAllocType>& particles) { return robot.AverageConfigurations(particles); };
-            std::function<double(const ConfigurationType&, const ConfigurationType&)> distance_fn = [&] (const ConfigurationType& config1, const ConfigurationType& config2) { return robot.ComputeConfigurationDistance(config1, config2); };
-            std::function<Eigen::VectorXd(const ConfigurationType&, const ConfigurationType&)> dim_distance_fn = [&] (const ConfigurationType& config1, const ConfigurationType& config2) { return robot.ComputePerDimensionConfigurationDistance(config1, config2); };
-            expectation_ = ComputeExpectation(average_fn);
-            variance_ = ComputeVariance(expectation_, distance_fn);
-            variances_ = ComputeDirectionalVariance(expectation_, dim_distance_fn);
-            space_independent_variance_ = ComputeSpaceIndependentVariance(expectation_, distance_fn, step_size_);
-            space_independent_variances_ = ComputeSpaceIndependentDirectionalVariance(expectation_, dim_distance_fn, step_size_);
-            return std::pair<ConfigurationType, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>>(expectation_, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>(std::pair<double, Eigen::VectorXd>(variance_, variances_), std::pair<double, Eigen::VectorXd>(space_independent_variance_, space_independent_variances_)));
-        }
-        */
-
-        template <typename Robot>
-        inline std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>> UpdateStatistics(const Robot& robot)
-        {
-            std::function<Configuration(const std::vector<Configuration, ConfigAlloc>&)> average_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles) { return robot.AverageConfigurations(particles); };
-            std::function<double(const Configuration&, const Configuration&)> distance_fn = [&] (const Configuration& config1, const Configuration& config2) { return robot.ComputeConfigurationDistance(config1, config2); };
-            std::function<Eigen::VectorXd(const Configuration&, const Configuration&)> dim_distance_fn = [&] (const Configuration& config1, const Configuration& config2) { return robot.ComputePerDimensionConfigurationDistance(config1, config2); };
+            std::function<Configuration(const std::vector<Configuration, ConfigAlloc>&)> average_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles) { return robot_ptr->AverageConfigurations(particles); };
+            std::function<double(const Configuration&, const Configuration&)> distance_fn = [&] (const Configuration& config1, const Configuration& config2) { return robot_ptr->ComputeConfigurationDistance(config1, config2); };
+            std::function<Eigen::VectorXd(const Configuration&, const Configuration&)> dim_distance_fn = [&] (const Configuration& config1, const Configuration& config2) { return robot_ptr->ComputePerDimensionConfigurationDistance(config1, config2); };
             expectation_ = ComputeExpectation(average_fn);
             variance_ = ComputeVariance(expectation_, distance_fn);
             variances_ = ComputeDirectionalVariance(expectation_, dim_distance_fn);
