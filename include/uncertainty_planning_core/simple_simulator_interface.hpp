@@ -124,11 +124,11 @@ namespace simple_simulator_interface
 
         virtual bool CheckConfigCollision(const std::shared_ptr<Robot>& immutable_robot, const Configuration& config, const double inflation_ratio=0.0) const = 0;
 
-        virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(const std::shared_ptr<Robot>& mutable_robot, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const = 0;
+        virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(const std::shared_ptr<Robot>& mutable_robot, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const std::shared_ptr<Robot>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const = 0;
+        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const std::shared_ptr<Robot>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const std::shared_ptr<Robot>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const = 0;
+        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const std::shared_ptr<Robot>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
     };
 }
 

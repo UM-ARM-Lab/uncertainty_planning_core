@@ -9,13 +9,15 @@
 namespace simple_sampler_interface
 {
     template <typename Configuration, typename Generator>
-    class SimpleBaseSampler
+    class SamplerInterface
     {
     public:
 
-        SimpleBaseSampler() {}
+        SamplerInterface() {}
 
         virtual Configuration Sample(Generator& prng) = 0;
+
+        virtual Configuration SampleGoal(Generator& prng) = 0;
     };
 }
 

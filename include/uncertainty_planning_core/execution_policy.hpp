@@ -44,10 +44,11 @@ namespace execution_policy
                 const UncertaintyPlanningState& current_planner_state = current_tree_state.GetValueImmutable();
                 policy_graph.AddNode(PolicyGraphNode(current_planner_state));
             }
-            policy_graph.AddNode(PolicyGraphNode(goal_state));
+            const int64_t goal_idx = policy_graph.AddNode(PolicyGraphNode(goal_state));
             policy_graph.ShrinkToFit();
+            // OLD
             // We just added the goal as the last node, so we know it has the last index
-            const int64_t goal_idx = (int64_t)policy_graph.GetNodesImmutable().size() - 1;
+            //const int64_t goal_idx = (int64_t)policy_graph.GetNodesImmutable().size() - 1;
             // Second pass, add all the edges
             for (size_t idx = 0; idx < planner_tree.size(); idx++)
             {
@@ -477,27 +478,37 @@ namespace execution_policy
             {
                 throw std::invalid_argument("Policy no longer has a solution");
             }
-            const PolicyGraphNode& target_state_policy_node = policy_graph_.GetNodeImmutable(target_state_index);
-            const UncertaintyPlanningState& target_state = target_state_policy_node.GetValueImmutable();
-            // Figure out the correct action to take
-            const uint64_t result_state_id = result_state.GetStateId();
-            const uint64_t target_state_id = target_state.GetStateId();
-            //std::cout << "==========\nGenerating next action to go from current state " << result_state_id << " to target state " << target_state_id << std::endl;
-            // If the "previous" node that we want to go to is a downstream state, we get the action of the downstream state
-            if (result_state_id < target_state_id)
+            // If we are at a goal state, we do not command to the "virtual goal node" that links the graph together
+            // since this node has no meaningful value in cases of goal regions
+            else if (target_state_index == (int64_t)(previous_index_map_.size() - 1))
             {
-                std::cout << "Returning forward action for current state " << current_state_index << ", transition ID " << target_state.GetTransitionId() << std::endl;
-                return std::make_pair(std::make_pair(current_state_index, target_state.GetTransitionId()), std::make_pair(target_state.GetCommand(), target_state.GetExpectation()));
-            }
-            // If the "previous" node that we want to go to is an upstream state, we get the expectation of the upstream state
-            else if (target_state_id < result_state_id)
-            {
-                std::cout << "Returning reverse action for current state " << current_state_index << ", transition ID " << result_state.GetReverseTransitionId() << std::endl;
-                return std::make_pair(std::make_pair(current_state_index, result_state.GetReverseTransitionId()), std::make_pair(target_state.GetExpectation(), target_state.GetExpectation()));
+                std::cout << "Already at a goal state " << current_state_index << " - cannot proceed to virtual goal state - repeating transition " << result_state.GetTransitionId() << " to command to our expectation" << std::endl;
+                return std::make_pair(std::make_pair(current_state_index, result_state.GetTransitionId()), std::make_pair(result_state.GetExpectation(), result_state.GetExpectation()));
             }
             else
             {
-                assert(false);
+                const PolicyGraphNode& target_state_policy_node = policy_graph_.GetNodeImmutable(target_state_index);
+                const UncertaintyPlanningState& target_state = target_state_policy_node.GetValueImmutable();
+                // Figure out the correct action to take
+                const uint64_t result_state_id = result_state.GetStateId();
+                const uint64_t target_state_id = target_state.GetStateId();
+                //std::cout << "==========\nGenerating next action to go from current state " << result_state_id << " to target state " << target_state_id << std::endl;
+                // If the "previous" node that we want to go to is a downstream state, we get the action of the downstream state
+                if (result_state_id < target_state_id)
+                {
+                    std::cout << "Returning forward action for current state " << current_state_index << ", transition ID " << target_state.GetTransitionId() << std::endl;
+                    return std::make_pair(std::make_pair(current_state_index, target_state.GetTransitionId()), std::make_pair(target_state.GetCommand(), target_state.GetExpectation()));
+                }
+                // If the "previous" node that we want to go to is an upstream state, we get the expectation of the upstream state
+                else if (target_state_id < result_state_id)
+                {
+                    std::cout << "Returning reverse action for current state " << current_state_index << ", transition ID " << result_state.GetReverseTransitionId() << std::endl;
+                    return std::make_pair(std::make_pair(current_state_index, result_state.GetReverseTransitionId()), std::make_pair(target_state.GetExpectation(), target_state.GetExpectation()));
+                }
+                else
+                {
+                    assert(false);
+                }
             }
         }
 
