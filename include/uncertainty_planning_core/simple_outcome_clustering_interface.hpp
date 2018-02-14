@@ -25,31 +25,21 @@ namespace simple_outcome_clustering_interface
 
         typedef simple_robot_model_interface::SimpleRobotModelInterface<Configuration, ConfigAlloc> Robot;
 
-        int32_t debug_level_;
-
     public:
 
-        OutcomeClusteringInterface(const int32_t debug_level)
-        {
-            debug_level_ = debug_level;
-        }
+        OutcomeClusteringInterface() {}
 
-        inline int32_t GetDebugLevel() const
-        {
-            return debug_level_;
-        }
+        virtual int32_t GetDebugLevel() const = 0;
 
-        inline int32_t SetDebugLevel(const int32_t debug_level)
-        {
-            debug_level_ = debug_level;
-            return debug_level_;
-        }
+        virtual int32_t SetDebugLevel(const int32_t debug_level) = 0;
 
         virtual std::map<std::string, double> GetStatistics() const = 0;
 
         virtual void ResetStatistics() = 0;
 
-        virtual std::vector<std::vector<size_t>> ClusterParticles(const std::shared_ptr<Robot>& robot, const std::vector<std::pair<Configuration, bool>>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual std::vector<std::vector<size_t>> ClusterParticles(const std::shared_ptr<Robot>& robot, const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+
+        virtual std::vector<uint8_t> IdentifyClusterMembers(const std::shared_ptr<Robot>& robot, const std::vector<Configuration, ConfigAlloc>& cluster, const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
     };
 }
 

@@ -135,9 +135,12 @@ namespace execution_policy
                         const int64_t child_index = other_child_edge.GetToIndex();
                         const PolicyGraphNode& child_node = graph.GetNodeImmutable(child_index);
                         const UncertaintyPlanningState& child_node_value = child_node.GetValueImmutable();
-                        const double p_reached_other = percent_active * child_node_value.GetRawEdgePfeasibility();
-                        const double p_returned_to_parent = p_reached_other * child_node_value.GetReverseEdgePfeasibility();
-                        updated_percent_active += p_returned_to_parent;
+                        if (child_node_value.IsActionOutcomeNominallyIndependent())
+                        {
+                            const double p_reached_other = percent_active * child_node_value.GetRawEdgePfeasibility();
+                            const double p_returned_to_parent = p_reached_other * child_node_value.GetReverseEdgePfeasibility();
+                            updated_percent_active += p_returned_to_parent;
+                        }
                     }
                     percent_active = updated_percent_active;
                 }
@@ -411,12 +414,69 @@ namespace execution_policy
             return bytes_read;
         }
 
+        inline std::vector<std::string> PrintHumanReadablePolicyTreeNode(const int64_t node_index, const std::function<std::vector<std::string>(const UncertaintyPlanningState&)>& state_print_fn) const
+        {
+            if ((node_index >= 0) && (node_index < planner_tree_.size()))
+            {
+                const UncertaintyPlanningTreeState& policy_tree_state = planner_tree_[node_index];
+                std::vector<std::string> state_string_rep;
+                state_string_rep.push_back("<state id=\"" + std::to_string(policy_tree_state.GetValueImmutable().GetStateId()) + "\">");
+                state_string_rep.push_back("  <value>");
+                const std::vector<std::string> value_string_rep = state_print_fn(policy_tree_state.GetValueImmutable());
+                for (size_t ldx = 0; ldx < value_string_rep.size(); ldx++)
+                {
+                    state_string_rep.push_back("    " + value_string_rep[ldx]);
+                }
+                state_string_rep.push_back("  </value>");
+                state_string_rep.push_back("  <children>");
+                const std::vector<int64_t>& child_indices = policy_tree_state.GetChildIndices();
+                for (size_t cdx = 0; cdx < child_indices.size(); cdx++)
+                {
+                    const int64_t child_index = child_indices[cdx];
+                    const std::vector<std::string> child_string_rep = PrintHumanReadablePolicyTreeNode(child_index, state_print_fn);
+                    for (size_t ldx = 0; ldx < child_string_rep.size(); ldx++)
+                    {
+                        state_string_rep.push_back("    " + child_string_rep[ldx]);
+                    }
+                }
+                state_string_rep.push_back("  </children>");
+                state_string_rep.push_back("</state>");
+                return state_string_rep;
+            }
+            else
+            {
+                throw std::invalid_argument("Node index cannot be less than zero or greater than the size of the policy tree");
+            }
+        }
+
+        inline std::string PrintHumanReadablePolicyTree(const std::function<std::vector<std::string>(const UncertaintyPlanningState&)>& state_print_fn) const
+        {
+            std::vector<std::string> string_lines = PrintHumanReadablePolicyTreeNode(0, state_print_fn);
+            return PrettyPrint::PrettyPrint(string_lines, false, "\n");
+        }
+
+        inline std::string PrintHumanReadablePolicyTree() const
+        {
+            const std::function<std::vector<std::string>(const UncertaintyPlanningState&)> state_print_fn =
+                    [] (const UncertaintyPlanningState& state)
+            {
+                return std::vector<std::string>{state.Print()};
+            };
+            return PrintHumanReadablePolicyTree(state_print_fn);
+        }
+
         inline bool IsInitialized() const
         {
             return initialized_;
         }
 
-        inline const UncertaintyPlanningTree& GetRawPlannerTree() const
+        inline const UncertaintyPlanningTree& GetPlannerTreeImmutable() const
+        {
+            assert(initialized_);
+            return planner_tree_;
+        }
+
+        inline UncertaintyPlanningTree& GetPlannerTreeMutable()
         {
             assert(initialized_);
             return planner_tree_;
@@ -512,7 +572,7 @@ namespace execution_policy
             }
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             assert(initialized_);
             // If we're just starting out
@@ -526,7 +586,7 @@ namespace execution_policy
             }
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryStartBestAction(const Configuration& current_config, const std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             assert(initialized_);
             // Get the starting state
@@ -534,9 +594,9 @@ namespace execution_policy
             const UncertaintyPlanningState& first_node_state = first_node.GetValueImmutable();
             const Configuration first_node_config = first_node_state.GetExpectation();
             // Make sure we are close enough to the start state
-            const std::vector<std::vector<size_t>> start_check_clusters = particle_clustering_fn(first_node_state.GetParticlePositionsImmutable().first, current_config);
+            const bool is_start_cluster_member = particle_clustering_fn(first_node_state.GetParticlePositionsImmutable().first, current_config);
             // If we're close enough to the start
-            if (start_check_clusters.size() == 1)
+            if (is_start_cluster_member)
             {
                 return QueryNextAction(0);
             }
@@ -548,7 +608,7 @@ namespace execution_policy
             }
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             std::cout << "++++++++++\nQuerying the policy with performed transition ID " << performed_transition_id << "..." << std::endl;
             assert(performed_transition_id > 0);
@@ -599,9 +659,9 @@ namespace execution_policy
                 const UncertaintyPlanningTreeState& possible_match_tree_state = planner_tree_[(size_t)possible_match_state_idx];
                 const UncertaintyPlanningState& possible_match_state = possible_match_tree_state.GetValueImmutable();
                 const std::vector<Configuration, ConfigAlloc>& possible_match_node_particles = possible_match_state.GetParticlePositionsImmutable().first;
-                const std::vector<std::vector<size_t>> possible_match_check_clusters = particle_clustering_fn(possible_match_node_particles, current_config);
+                const bool is_cluster_member = particle_clustering_fn(possible_match_node_particles, current_config);
                 // If the current config is part of the cluster
-                if (possible_match_check_clusters.size() == 1)
+                if (is_cluster_member)
                 {
                     const Configuration possible_match_state_expectation = possible_match_state.GetExpectation();
                     std::cout << "Possible result state matches with expectation " << PrettyPrint::PrettyPrint(possible_match_state_expectation) << std::endl;
@@ -665,7 +725,8 @@ namespace execution_policy
                     split_id = child_state.GetSplitId();
                 }
                 // Put together the new state
-                const UncertaintyPlanningState new_child_state(new_child_state_id, current_config, attempt_count, reached_count, effective_edge_Pfeasibility, reverse_attempt_count, reverse_reached_count, parent_motion_Pfeasibility, step_size, command, transition_id, reverse_transition_id, split_id);
+                // For now, we're going to assume that action outcomes are nominally independent (this may be a terrible assumption, but we can change it later)
+                const UncertaintyPlanningState new_child_state(new_child_state_id, current_config, attempt_count, reached_count, effective_edge_Pfeasibility, reverse_attempt_count, reverse_reached_count, parent_motion_Pfeasibility, step_size, command, transition_id, reverse_transition_id, split_id, true);
                 // We add a new child state to the graph
                 const UncertaintyPlanningTreeState new_child_tree_state(new_child_state, previous_state_index);
                 planner_tree_.push_back(new_child_tree_state);
@@ -879,9 +940,14 @@ namespace execution_policy
                             const int64_t other_state_index = transition_child_states[other_idx];
                             const UncertaintyPlanningTreeState& other_tree_state = planner_tree_[(size_t)other_state_index];
                             const UncertaintyPlanningState& other_state = other_tree_state.GetValueImmutable();
-                            const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
-                            const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
-                            updated_percent_active += p_returned_to_parent;
+                            // Only if this state has nominally independent outcomes can we expect particles that
+                            // return to the parent to actually reach a different outcome in future repeats
+                            if (other_state.IsActionOutcomeNominallyIndependent())
+                            {
+                                const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
+                                const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
+                                updated_percent_active += p_returned_to_parent;
+                            }
                         }
                     }
                     percent_active = updated_percent_active;
@@ -984,7 +1050,8 @@ namespace execution_policy
             else
             {
                 // We do this the right way
-                std::vector<double> child_goal_reached_probabilities(child_nodes.size(), 0.0);
+                std::vector<double> action_outcomes_dependent_child_goal_reached_probabilities;
+                std::vector<double> action_outcomes_independent_child_goal_reached_probabilities(child_nodes.size(), 0.0);
                 // For each child state, we compute the probability that we'll end up at each of the result states, accounting for try/retry with reversibility
                 // This lets us compare child states as if they were separate actions, so the overall P(goal reached) = max(child) P(goal reached | child)
                 for (size_t idx = 0; idx < child_nodes.size(); idx++)
@@ -1018,24 +1085,25 @@ namespace execution_policy
                                 // Get the other child
                                 const UncertaintyPlanningState& other_child = child_nodes[other_idx];
                                 const double p_reached_other = percent_active * other_child.GetRawEdgePfeasibility();
-                                //std::cout << "P(reached) other child " << p_reached_other << std::endl;
-                                const double p_returned_to_parent = p_reached_other * other_child.GetReverseEdgePfeasibility();
                                 const double p_stuck_at_other = p_reached_other * (1.0 - other_child.GetReverseEdgePfeasibility());
                                 // Children with negative P(goal feasibility) cannot reach the goal directly, and thus get P(goal reached)=0 here
                                 const double raw_other_child_goal_Pfeasibility = other_child.GetGoalPfeasibility();
                                 const double other_child_goal_Pfeasibility = (raw_other_child_goal_Pfeasibility > 0.0) ? raw_other_child_goal_Pfeasibility : 0.0;
                                 const double p_reached_goal_from_other = p_stuck_at_other * other_child_goal_Pfeasibility;
                                 p_others_reached += p_reached_goal_from_other;
-                                updated_percent_active += p_returned_to_parent;
+                                // Only if this state has nominally independent outcomes can we expect particles that
+                                // return to the parent to actually reach a different outcome in future repeats
+                                if (other_child.IsActionOutcomeNominallyIndependent())
+                                {
+                                    const double p_returned_to_parent = p_reached_other * other_child.GetReverseEdgePfeasibility();
+                                    updated_percent_active += p_returned_to_parent;
+                                }
                             }
                         }
-                        //std::cout << "P(others reached goal) in this attempt " << p_others_reached << std::endl;
                         p_others_reached_goal += p_others_reached;
-                        //std::cout << "P(others reached goal) so far " << p_others_reached_goal << std::endl;
                         percent_active = updated_percent_active;
                     }
                     double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
-                    //std::cout << "Computed new P(goal reached) " << p_reached_goal << " for child " << idx + 1 << " of " << child_nodes.size() << std::endl;
                     assert(p_reached_goal >= 0.0);
                     if (p_reached_goal > 1.0)
                     {
@@ -1044,11 +1112,26 @@ namespace execution_policy
                         p_reached_goal = 1.0;
                     }
                     assert(p_reached_goal <= 1.0);
-                    child_goal_reached_probabilities[idx] = p_reached_goal;
+                    if (current_child.IsActionOutcomeNominallyIndependent())
+                    {
+                        action_outcomes_independent_child_goal_reached_probabilities.push_back(p_reached_goal);
+                    }
+                    else
+                    {
+                        action_outcomes_dependent_child_goal_reached_probabilities.push_back(p_reached_goal);
+                    }
                 }
-                const double max_child_transition_goal_reached_probability = *std::max_element(child_goal_reached_probabilities.begin(), child_goal_reached_probabilities.end());
-                //std::cout << "Computed new P(goal reached) " << max_child_transition_goal_reached_probability << " from " << child_nodes.size() << " child states " << std::endl;
-                return max_child_transition_goal_reached_probability;
+                const double dependent_child_goal_reached_probability = EigenHelpers::Sum(action_outcomes_dependent_child_goal_reached_probabilities);
+                const double independent_child_goal_reached_probability = (action_outcomes_independent_child_goal_reached_probabilities.size() > 0) ? *std::max_element(action_outcomes_independent_child_goal_reached_probabilities.begin(), action_outcomes_independent_child_goal_reached_probabilities.end()) : 0.0;
+                double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
+                assert(total_p_goal_reached >= 0.0);
+                if (total_p_goal_reached > 1.0)
+                {
+                    assert(total_p_goal_reached <= 1.001);
+                    total_p_goal_reached = 1.0;
+                }
+                assert(total_p_goal_reached <= 1.0);
+                return total_p_goal_reached;
             }
         }
     };

@@ -41,10 +41,11 @@ namespace uncertainty_planning_core
     {
         // Time limits
         double planner_time_limit;
+        // P(goal reached) termination threshold
+        double p_goal_reached_termination_threshold;
         // Standard planner control params
         double goal_bias;
         double step_size;
-        double step_duration;
         double goal_probability_threshold;
         double goal_distance_threshold;
         double connect_after_first_solution;
@@ -81,9 +82,9 @@ namespace uncertainty_planning_core
         // Get options via ROS params
         ros::NodeHandle nhp("~");
         options.planner_time_limit = nhp.param(std::string("planner_time_limit"), options.planner_time_limit);
+        options.p_goal_reached_termination_threshold = nhp.param(std::string("p_goal_reached_termination_threshold"), options.p_goal_reached_termination_threshold);
         options.goal_bias = nhp.param(std::string("goal_bias"), options.goal_bias);
         options.step_size = nhp.param(std::string("step_size"), options.step_size);
-        options.step_duration = nhp.param(std::string("step_duration"), options.step_duration);
         options.goal_probability_threshold = nhp.param(std::string("goal_probability_threshold"), options.goal_probability_threshold);
         options.goal_distance_threshold = nhp.param(std::string("goal_distance_threshold"), options.goal_distance_threshold);
         options.connect_after_first_solution = nhp.param(std::string("connect_after_first_solution"), options.connect_after_first_solution);
@@ -445,8 +446,7 @@ namespace uncertainty_planning_core
                                 const double policy_marker_size,
                                 const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,
                                                                                            const SE2Config&,
-                                                                                           const double,
-                                                                                           const double,
+                                                                                           const SE2Config&,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -474,8 +474,7 @@ namespace uncertainty_planning_core
                                 const double policy_marker_size,
                                 const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,
                                                                                            const SE2Config&,
-                                                                                           const double,
-                                                                                           const double,
+                                                                                           const SE2Config&,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -537,8 +536,7 @@ namespace uncertainty_planning_core
                                 const double policy_marker_size,
                                 const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,
                                                                                            const SE3Config&,
-                                                                                           const double,
-                                                                                           const double,
+                                                                                           const SE3Config&,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -566,8 +564,7 @@ namespace uncertainty_planning_core
                                 const double policy_marker_size,
                                 const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,
                                                                                            const SE3Config&,
-                                                                                           const double,
-                                                                                           const double,
+                                                                                           const SE3Config&,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -629,8 +626,7 @@ namespace uncertainty_planning_core
                                    const double policy_marker_size,
                                    const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,
                                                                                                     const LinkedConfig&,
-                                                                                                    const double,
-                                                                                                    const double,
+                                                                                                    const LinkedConfig&,
                                                                                                     const bool)>& robot_execution_fn,
                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -658,8 +654,7 @@ namespace uncertainty_planning_core
                                    const double policy_marker_size,
                                    const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,
                                                                                                     const LinkedConfig&,
-                                                                                                    const double,
-                                                                                                    const double,
+                                                                                                    const LinkedConfig&,
                                                                                                     const bool)>& robot_execution_fn,
                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -667,9 +662,9 @@ namespace uncertainty_planning_core
     {
         strm << "OPTIONS:";
         strm << "\nplanner_time_limit: " << options.planner_time_limit;
+        strm << "\np_goal_reached_termination_threshold: " << options.p_goal_reached_termination_threshold;
         strm << "\ngoal_bias: " << options.goal_bias;
         strm << "\nstep_size: " << options.step_size;
-        strm << "\nstep_duration: " << options.step_duration;
         strm << "\ngoal_probability_threshold: " << options.goal_probability_threshold;
         strm << "\ngoal_distance_threshold: " << options.goal_distance_threshold;
         strm << "\nconnect_after_first_solution: " << options.connect_after_first_solution;

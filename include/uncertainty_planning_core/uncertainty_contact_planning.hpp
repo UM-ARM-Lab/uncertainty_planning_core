@@ -132,7 +132,6 @@ namespace uncertainty_contact_planning
         inline UncertaintyPlanningSpace(const int32_t debug_level,
                                         const size_t num_particles,
                                         const double step_size,
-                                        const double simulation_step_duration,
                                         const double goal_distance_threshold,
                                         const double goal_probability_threshold,
                                         const double feasibility_alpha,
@@ -147,7 +146,6 @@ namespace uncertainty_contact_planning
             debug_level_ = debug_level;
             num_particles_ = num_particles;
             step_size_ = step_size;
-            step_duration_ = simulation_step_duration;
             goal_distance_threshold_ = goal_distance_threshold;
             goal_probability_threshold_ = goal_probability_threshold;
             feasibility_alpha_ = feasibility_alpha;
@@ -191,7 +189,7 @@ namespace uncertainty_contact_planning
             std::cout << "Press ENTER to solve..." << std::endl;
             std::cin.get();
             simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
-            simulator_ptr_->ForwardSimulateRobot(robot_ptr_, start, goal, step_duration_, (goal_distance_threshold_ * 0.5), true, trace, true, display_fn);
+            simulator_ptr_->ForwardSimulateRobot(robot_ptr_, start, goal, true, trace, true, display_fn);
             // Wait for input
             std::cout << "Press ENTER to draw..." << std::endl;
             std::cin.get();
@@ -246,11 +244,168 @@ namespace uncertainty_contact_planning
             return trace;
         }
 
-    public:
+        /*
+         * Nearest-neighbor state distance function
+         */
+        inline double StateDistance(const UncertaintyPlanningState& state1, const UncertaintyPlanningState& state2) const
+        {
+            // Get the "space independent" expectation distance
+            const double expectation_distance = robot_ptr_->ComputeConfigurationDistance(state1.GetExpectation(), state2.GetExpectation()) / step_size_;
+            // Get the Pfeasibility(start -> state1)
+            const double feasibility_weight = (1.0 - state1.GetMotionPfeasibility()) * feasibility_alpha_ + (1.0 - feasibility_alpha_);
+            // Get the "space independent" variance of state1
+            const Eigen::VectorXd raw_variances = state1.GetSpaceIndependentVariances();
+            const double raw_variance = raw_variances.lpNorm<1>();
+            // Turn the variance into a weight
+            const double variance_weight = erf(raw_variance) * variance_alpha_ + (1.0 - variance_alpha_);
+            // Compute the actual distance
+            const double distance = (feasibility_weight * expectation_distance * variance_weight);
+            return distance;
+        }
+
+        /*
+         * Helper for parallel-linear nearest-neighbors
+         */
+
+        static inline int64_t GetNearestNeighbor(const UncertaintyPlanningTree& planner_nodes,
+                                                 const UncertaintyPlanningState& random_state,
+                                                 const std::function<double(const UncertaintyPlanningState&, const UncertaintyPlanningState&)>& state_distance_fn,
+                                                 const int32_t debug_level)
+        {
+            // Get the nearest neighbor (ignoring the disabled states)
+            std::vector<std::pair<int64_t, double>> per_thread_bests(GetNumOMPThreads(), std::pair<int64_t, double>(-1, INFINITY));
+            #pragma omp parallel for
+            for (size_t idx = 0; idx < planner_nodes.size(); idx++)
+            {
+                const UncertaintyPlanningTreeState& current_state = planner_nodes[idx];
+                // Only check against states enabled for NN checks
+                if (current_state.GetValueImmutable().UseForNearestNeighbors())
+                {
+                    const double state_distance = state_distance_fn(current_state.GetValueImmutable(), random_state);
+#if defined(_OPENMP)
+                    const size_t current_thread_id = (size_t)omp_get_thread_num();
+#else
+                    const size_t current_thread_id = 0;
+#endif
+                    if (state_distance < per_thread_bests[current_thread_id].second)
+                    {
+                        per_thread_bests[current_thread_id].first = (int64_t)idx;
+                        per_thread_bests[current_thread_id].second = state_distance;
+                    }
+                }
+            }
+            int64_t best_index = -1;
+            double best_distance = INFINITY;
+            for (size_t idx = 0; idx < per_thread_bests.size(); idx++)
+            {
+                const double& thread_minimum_distance = per_thread_bests[idx].second;
+                if (thread_minimum_distance < best_distance)
+                {
+                    best_index = per_thread_bests[idx].first;
+                    best_distance = thread_minimum_distance;
+                }
+            }
+            arc_helpers::ConditionalPrint("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear)", 3, debug_level);
+            return best_index;
+        }
 
         /*
          * Planning functions
          */
+
+        inline std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>> PlanGoalSampling(const UncertaintyPlanningState& start_state,
+                                                                                                    const double goal_bias,
+                                                                                                    const std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)>& nearest_neighbor_fn,
+                                                                                                    const std::function<std::vector<std::pair<UncertaintyPlanningState, int64_t>>(const UncertaintyPlanningState&, const UncertaintyPlanningState&)>& forward_propagation_fn,
+                                                                                                    const std::function<double(const UncertaintyPlanningState&)>& user_goal_check_fn,
+                                                                                                    const std::chrono::duration<double>& time_limit,
+                                                                                                    const uint32_t edge_attempt_count,
+                                                                                                    const uint32_t policy_action_attempt_count,
+                                                                                                    const bool allow_contacts,
+                                                                                                    const bool include_spur_actions,
+                                                                                                    const double policy_marker_size,
+                                                                                                    const double p_goal_termination_threshold,
+                                                                                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        {
+            // Bind the helper functions
+            const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
+            std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalFunction(goal_candidate, user_goal_check_fn, edge_attempt_count, allow_contacts); };
+            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree[new_goal_state_idx], edge_attempt_count, start_time); };
+            std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
+            std::function<UncertaintyPlanningState(void)> complete_sampling_fn = [&] (void)
+            {
+                if (goal_bias_distribution(simulator_ptr_->GetRandomGenerator()) > goal_bias)
+                {
+                    arc_helpers::ConditionalPrint("Sampled state", 2, debug_level_);
+                    return SampleRandomTargetState();
+                }
+                else
+                {
+                    arc_helpers::ConditionalPrint("Sampled goal state", 2, debug_level_);
+                    return SampleRandomTargetGoalState();
+                }
+            };
+            //
+            std::function<bool(void)> termination_check_fn = [&] (void) { return PlannerTerminationCheck(start_time, time_limit, p_goal_termination_threshold); };
+            // Call the planner
+            // Call the planner
+            total_goal_reached_probability_ = 0.0;
+            time_to_first_solution_ = 0.0;
+            simulator_ptr_->ResetStatistics();
+            clustering_ptr_->ResetStatistics();
+            std::pair<std::vector<std::vector<UncertaintyPlanningState>>, std::map<std::string, double>> planning_results = simple_rrt_planner::SimpleHybridRRTPlanner::PlanMultiPath(nearest_neighbors_storage_, start_state, nearest_neighbor_fn, goal_reached_fn, goal_reached_callback, complete_sampling_fn, forward_propagation_fn, termination_check_fn);
+            // It "shouldn't" matter what the goal state actually is, since it's more of a virtual node to tie the policy graph together
+            // But it probably needs to be collision-free
+            auto valid_goal_sampling_fn = [&] ()
+            {
+                while (true)
+                {
+                    const Configuration goal_sample = sampler_ptr_->SampleGoal(simulator_ptr_->GetRandomGenerator());
+                    if (simulator_ptr_->CheckConfigCollision(robot_ptr_, goal_sample))
+                    {
+                        return goal_sample;
+                    }
+                }
+            };
+            const Configuration virtual_goal = valid_goal_sampling_fn();
+            return ProcessPlanningResults(planning_results, virtual_goal, edge_attempt_count, policy_action_attempt_count, include_spur_actions, policy_marker_size, display_fn);
+        }
+
+        inline std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>> PlanGoalSampling(const UncertaintyPlanningState& start_state,
+                                                                                                    const double goal_bias,
+                                                                                                    const std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)>& nearest_neighbor_fn,
+                                                                                                    const std::function<double(const UncertaintyPlanningState&)>& user_goal_check_fn,
+                                                                                                    const std::chrono::duration<double>& time_limit,
+                                                                                                    const uint32_t edge_attempt_count,
+                                                                                                    const uint32_t policy_action_attempt_count,
+                                                                                                    const bool allow_contacts,
+                                                                                                    const bool include_reverse_actions,
+                                                                                                    const bool include_spur_actions,
+                                                                                                    const double policy_marker_size,
+                                                                                                    const double p_goal_termination_threshold,
+                                                                                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        {
+            std::function<std::vector<std::pair<UncertaintyPlanningState, int64_t>>(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> forward_propagation_fn =
+                    [&] (const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target)
+            {
+                return PropagateForwardsAndDraw(nearest, target, edge_attempt_count, allow_contacts, include_reverse_actions, display_fn);
+            };
+            return PlanGoalSampling(start_state,
+                                    goal_bias,
+                                    nearest_neighbor_fn,
+                                    forward_propagation_fn,
+                                    user_goal_check_fn,
+                                    time_limit,
+                                    edge_attempt_count,
+                                    policy_action_attempt_count,
+                                    allow_contacts,
+                                    include_spur_actions,
+                                    policy_marker_size,
+                                    p_goal_termination_threshold,
+                                    display_fn);
+
+        }
+
         inline std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>> PlanGoalSampling(const Configuration& start,
                                                                                                     const double goal_bias,
                                                                                                     const std::function<double(const UncertaintyPlanningState&)>& user_goal_check_fn,
@@ -261,6 +416,7 @@ namespace uncertainty_contact_planning
                                                                                                     const bool include_reverse_actions,
                                                                                                     const bool include_spur_actions,
                                                                                                     const double policy_marker_size,
+                                                                                                    const double p_goal_termination_threshold,
                                                                                                     const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Draw the simulation environment
@@ -284,132 +440,25 @@ namespace uncertainty_contact_planning
                 std::cout << "Press ENTER to start planning..." << std::endl;
                 std::cin.get();
             }
-            UncertaintyPlanningState start_state(start);
-            // Bind the helper functions
-            const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
-            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state); };
-            std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalFunction(goal_candidate, user_goal_check_fn, edge_attempt_count, allow_contacts); };
-            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree[new_goal_state_idx], edge_attempt_count, start_time); };
-            std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
-            std::function<UncertaintyPlanningState(void)> complete_sampling_fn = [&] (void)
+            std::function<double(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> state_distance_fn = [&] (const UncertaintyPlanningState& state1, const UncertaintyPlanningState& state2)
             {
-                if (goal_bias_distribution(simulator_ptr_->GetRandomGenerator()) > goal_bias)
-                {
-                    arc_helpers::ConditionalPrint("Sampled state", 2, debug_level_);
-                    return SampleRandomTargetState();
-                }
-                else
-                {
-                    arc_helpers::ConditionalPrint("Sampled goal state", 2, debug_level_);
-                    return SampleRandomTargetGoalState();
-                }
+                return StateDistance(state1, state2);
             };
-            std::function<std::vector<std::pair<UncertaintyPlanningState, int64_t>>(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> forward_propagation_fn = [&] (const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target) { return PropagateForwardsAndDraw(nearest, target, edge_attempt_count, allow_contacts, include_reverse_actions, display_fn); };
-            std::function<bool(void)> termination_check_fn = [&] (void) { return PlannerTerminationCheck(start_time, time_limit); };
-            // Call the planner
-            // Call the planner
-            total_goal_reached_probability_ = 0.0;
-            time_to_first_solution_ = 0.0;
-            simulator_ptr_->ResetStatistics();
-            clustering_ptr_->ResetStatistics();
-            std::pair<std::vector<std::vector<UncertaintyPlanningState>>, std::map<std::string, double>> planning_results = simple_rrt_planner::SimpleHybridRRTPlanner::PlanMultiPath(nearest_neighbors_storage_, start_state, nearest_neighbor_fn, goal_reached_fn, goal_reached_callback, complete_sampling_fn, forward_propagation_fn, termination_check_fn);
-            // Make sure we got somewhere
-            std::cout << "Planner terminated with goal reached probability: " << total_goal_reached_probability_ << std::endl;
-            planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
-            planning_results.second["Time to first solution"] = time_to_first_solution_;
-            const std::map<std::string, double> simulator_resolve_statistics = simulator_ptr_->GetStatistics();
-            planning_results.second.insert(simulator_resolve_statistics.begin(), simulator_resolve_statistics.end());
-            const std::map<std::string, double> outcome_clustering_statistics = clustering_ptr_->GetStatistics();
-            planning_results.second.insert(outcome_clustering_statistics.begin(), outcome_clustering_statistics.end());
-            planning_results.second["elapsed_clustering_time"] = elapsed_clustering_time_;
-            planning_results.second["elapsed_simulation_time"] = elapsed_simulation_time_;
-            planning_results.second["Particles stored"] = (double)particles_stored_;
-            planning_results.second["Particles simulated"] = (double)particles_simulated_;
-            planning_results.second["Goal candidates evaluated"] = (double)goal_candidates_evaluated_;
-            planning_results.second["Goal reaching performed"] = (double)goal_reaching_performed_;
-            planning_results.second["Goal reaching successful"] = (double)goal_reaching_successful_;
-            if (total_goal_reached_probability_ >= goal_probability_threshold_)
-            {
-                const UncertaintyPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
-                const UncertaintyPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
-                // It "shouldn't" matter what the goal state actually is, since it's more of a virtual node to tie the policy graph together
-                // But it probably needs to be collision-free
-                auto valid_goal_sampling_fn = [&] ()
-                {
-                    while (true)
-                    {
-                        const Configuration goal_sample = sampler_ptr_->SampleGoal(simulator_ptr_->GetRandomGenerator());
-                        if (simulator_ptr_->CheckConfigCollision(robot_ptr_, goal_sample))
-                        {
-                            return goal_sample;
-                        }
-                    }
-                };
-                const Configuration virtual_goal = valid_goal_sampling_fn();
-                const UncertaintyPlanningPolicy policy = ExtractPolicy(pruned_tree, virtual_goal, edge_attempt_count, policy_action_attempt_count);
-                planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
-                if (debug_level_ >= 1)
-                {
-                    std::cout << "Press ENTER to draw planned paths..." << std::endl;
-                    std::cin.get();
-                }
-                // Draw the final path(s)
-                for (size_t pidx = 0; pidx < planning_results.first.size(); pidx++)
-                {
-                    const std::vector<UncertaintyPlanningState>& planned_path = planning_results.first[pidx];
-                    if (planned_path.size() >= 2)
-                    {
-                        double goal_reached_probability = planned_path[planned_path.size() - 1].GetGoalPfeasibility() * planned_path[planned_path.size() - 1].GetMotionPfeasibility();
-                        visualization_msgs::MarkerArray path_display_rep;
-                        const std::string forward_expectation_ns = "final_path_" + std::to_string(pidx + 1);
-                        const std::string reverse_expectation_ns = "final_path_reversible_" + std::to_string(pidx + 1);
-                        for (size_t idx = 0; idx < planned_path.size(); idx++)
-                        {
-                            const UncertaintyPlanningState& current_state = planned_path[idx];
-                            const Configuration current_configuration = current_state.GetExpectation();
-                            std_msgs::ColorRGBA forward_color;
-                            forward_color.r = (float)(1.0 - goal_reached_probability);
-                            forward_color.g = 0.0f;
-                            forward_color.b = 0.0f;
-                            forward_color.a = (float)current_state.GetMotionPfeasibility();
-                            const visualization_msgs::MarkerArray forward_expectation_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, current_configuration, forward_color, (int32_t)path_display_rep.markers.size() + 1, forward_expectation_ns);
-                            // Add the markers
-                            path_display_rep.markers.insert(path_display_rep.markers.end(), forward_expectation_markers.markers.begin(), forward_expectation_markers.markers.end());
-                            std_msgs::ColorRGBA reverse_color;
-                            reverse_color.r = (float)(1.0 - goal_reached_probability);
-                            reverse_color.g = 0.0f;
-                            reverse_color.b = 0.0f;
-                            reverse_color.a = (float)current_state.GetReverseEdgePfeasibility();
-                            const visualization_msgs::MarkerArray reverse_expectation_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, current_configuration, reverse_color, (int32_t)path_display_rep.markers.size() + 1, reverse_expectation_ns);
-                            // Add the markers
-                            path_display_rep.markers.insert(path_display_rep.markers.end(), reverse_expectation_markers.markers.begin(), reverse_expectation_markers.markers.end());
-                        }
-                        display_fn(path_display_rep);
-                    }
-                }
-                DrawPolicy(policy, policy_marker_size, "planned_policy", display_fn);
-                // Wait for input
-                if (debug_level_ >= 1)
-                {
-                    std::cout << "Press ENTER to export policy and print statistics..." << std::endl;
-                    std::cin.get();
-                    std::cout << "Planner statistics:\n" << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
-                }
-                return std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
-            }
-            else
-            {
-                const UncertaintyPlanningPolicy policy;
-                planning_results.second["Extracted policy size"] = 0.0;
-                // Wait for input
-                if (debug_level_ >= 1)
-                {
-                    std::cout << "Press ENTER to export policy and print statistics..." << std::endl;
-                    std::cin.get();
-                    std::cout << "Planner statistics:\n" << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
-                }
-                return std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
-            }
+            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, debug_level_); };
+            UncertaintyPlanningState start_state(start);
+            return PlanGoalSampling(start_state,
+                                    goal_bias,
+                                    nearest_neighbor_fn,
+                                    user_goal_check_fn,
+                                    time_limit,
+                                    edge_attempt_count,
+                                    policy_action_attempt_count,
+                                    allow_contacts,
+                                    include_reverse_actions,
+                                    include_spur_actions,
+                                    policy_marker_size,
+                                    p_goal_termination_threshold,
+                                    display_fn);
         }
 
         inline std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>> PlanGoalState(const Configuration& start,
@@ -422,6 +471,7 @@ namespace uncertainty_contact_planning
                                                                                                  const bool include_reverse_actions,
                                                                                                  const bool include_spur_actions,
                                                                                                  const double policy_marker_size,
+                                                                                                 const double p_goal_termination_threshold,
                                                                                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Draw the simulation environment
@@ -452,7 +502,11 @@ namespace uncertainty_contact_planning
             UncertaintyPlanningState goal_state(goal);
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
-            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state); };
+            std::function<double(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> state_distance_fn = [&] (const UncertaintyPlanningState& state1, const UncertaintyPlanningState& state2)
+            {
+                return StateDistance(state1, state2);
+            };
+            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, debug_level_); };
             std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalState(goal_candidate, goal_state, edge_attempt_count, allow_contacts); };
             std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree[new_goal_state_idx], edge_attempt_count, start_time); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
@@ -470,7 +524,7 @@ namespace uncertainty_contact_planning
                 }
             };
             std::function<std::vector<std::pair<UncertaintyPlanningState, int64_t>>(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> forward_propagation_fn = [&] (const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target) { return PropagateForwardsAndDraw(nearest, target, edge_attempt_count, allow_contacts, include_reverse_actions, display_fn); };
-            std::function<bool(void)> termination_check_fn = [&] (void) { return PlannerTerminationCheck(start_time, time_limit); };
+            std::function<bool(void)> termination_check_fn = [&] (void) { return PlannerTerminationCheck(start_time, time_limit, p_goal_termination_threshold); };
             // Call the planner
             // Call the planner
             total_goal_reached_probability_ = 0.0;
@@ -478,28 +532,42 @@ namespace uncertainty_contact_planning
             simulator_ptr_->ResetStatistics();
             clustering_ptr_->ResetStatistics();
             std::pair<std::vector<std::vector<UncertaintyPlanningState>>, std::map<std::string, double>> planning_results = simple_rrt_planner::SimpleHybridRRTPlanner::PlanMultiPath(nearest_neighbors_storage_, start_state, nearest_neighbor_fn, goal_reached_fn, goal_reached_callback, complete_sampling_fn, forward_propagation_fn, termination_check_fn);
+            return ProcessPlanningResults(planning_results, goal, edge_attempt_count, policy_action_attempt_count, include_spur_actions, policy_marker_size, display_fn);
+        }
+
+    protected:
+
+        inline std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>> ProcessPlanningResults(const std::pair<std::vector<std::vector<UncertaintyPlanningState>>, std::map<std::string, double>>& planning_results,
+                                                                                                          const Configuration& virtual_goal_config,
+                                                                                                          const uint32_t edge_attempt_count,
+                                                                                                          const uint32_t policy_action_attempt_count,
+                                                                                                          const bool include_spur_actions,
+                                                                                                          const double policy_marker_size,
+                                                                                                          const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        {
             // Make sure we got somewhere
+            std::map<std::string, double> planning_statistics = planning_results.second;
             std::cout << "Planner terminated with goal reached probability: " << total_goal_reached_probability_ << std::endl;
-            planning_results.second["P(goal reached)"] = total_goal_reached_probability_;
-            planning_results.second["Time to first solution"] = time_to_first_solution_;
+            planning_statistics["P(goal reached)"] = total_goal_reached_probability_;
+            planning_statistics["Time to first solution"] = time_to_first_solution_;
             const std::map<std::string, double> simulator_resolve_statistics = simulator_ptr_->GetStatistics();
-            planning_results.second.insert(simulator_resolve_statistics.begin(), simulator_resolve_statistics.end());
+            planning_statistics.insert(simulator_resolve_statistics.begin(), simulator_resolve_statistics.end());
             const std::map<std::string, double> outcome_clustering_statistics = clustering_ptr_->GetStatistics();
-            planning_results.second.insert(outcome_clustering_statistics.begin(), outcome_clustering_statistics.end());
-            planning_results.second["elapsed_clustering_time"] = elapsed_clustering_time_;
-            planning_results.second["elapsed_simulation_time"] = elapsed_simulation_time_;
-            planning_results.second["Particles stored"] = (double)particles_stored_;
-            planning_results.second["Particles simulated"] = (double)particles_simulated_;
-            planning_results.second["Goal candidates evaluated"] = (double)goal_candidates_evaluated_;
-            planning_results.second["Goal reaching performed"] = (double)goal_reaching_performed_;
-            planning_results.second["Goal reaching successful"] = (double)goal_reaching_successful_;
+            planning_statistics.insert(outcome_clustering_statistics.begin(), outcome_clustering_statistics.end());
+            planning_statistics["elapsed_clustering_time"] = elapsed_clustering_time_;
+            planning_statistics["elapsed_simulation_time"] = elapsed_simulation_time_;
+            planning_statistics["Particles stored"] = (double)particles_stored_;
+            planning_statistics["Particles simulated"] = (double)particles_simulated_;
+            planning_statistics["Goal candidates evaluated"] = (double)goal_candidates_evaluated_;
+            planning_statistics["Goal reaching performed"] = (double)goal_reaching_performed_;
+            planning_statistics["Goal reaching successful"] = (double)goal_reaching_successful_;
             if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
                 const UncertaintyPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
                 const UncertaintyPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
                 // Not sure hwat to do here with goal states
-                const UncertaintyPlanningPolicy policy = ExtractPolicy(pruned_tree, goal, edge_attempt_count, policy_action_attempt_count);
-                planning_results.second["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
+                const UncertaintyPlanningPolicy policy = ExtractPolicy(pruned_tree, virtual_goal_config, edge_attempt_count, policy_action_attempt_count);
+                planning_statistics["Extracted policy size"] = (double)policy.GetRawPolicy().GetNodesImmutable().size();
                 if (debug_level_ >= 1)
                 {
                     std::cout << "Press ENTER to draw planned paths..." << std::endl;
@@ -545,26 +613,24 @@ namespace uncertainty_contact_planning
                 {
                     std::cout << "Press ENTER to export policy and print statistics..." << std::endl;
                     std::cin.get();
-                    std::cout << "Planner statistics:\n" << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
+                    std::cout << "Planner statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics) << std::endl;
                 }
-                return std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
+                return std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>>(policy, planning_statistics);
             }
             else
             {
                 const UncertaintyPlanningPolicy policy;
-                planning_results.second["Extracted policy size"] = 0.0;
+                planning_statistics["Extracted policy size"] = 0.0;
                 // Wait for input
                 if (debug_level_ >= 1)
                 {
                     std::cout << "Press ENTER to export policy and print statistics..." << std::endl;
                     std::cin.get();
-                    std::cout << "Planner statistics:\n" << PrettyPrint::PrettyPrint(planning_results.second) << std::endl;
+                    std::cout << "Planner statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics) << std::endl;
                 }
-                return std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>>(policy, planning_results.second);
+                return std::pair<UncertaintyPlanningPolicy, std::map<std::string, double>>(policy, planning_statistics);
             }
         }
-
-    protected:
 
         /*
          * Solution tree post-processing functions
@@ -746,6 +812,13 @@ namespace uncertainty_contact_planning
 
         inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t num_executions, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
+            const std::vector<Configuration, ConfigAlloc> start_configs(num_executions, start);
+            return SimulateExectionPolicy(immutable_policy, true, start_configs, user_goal_check_fn, exec_step_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
+        }
+
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool enable_cumulative_learning, const std::vector<Configuration, ConfigAlloc>& start_configs, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        {
+            const uint32_t num_executions = (uint32_t)start_configs.size();
             UncertaintyPlanningPolicy policy = immutable_policy;
             simulator_ptr_->ResetStatistics();
             std::vector<std::vector<Configuration, ConfigAlloc>> particle_executions(num_executions);
@@ -755,13 +828,37 @@ namespace uncertainty_contact_planning
             for (size_t idx = 0; idx < num_executions; idx++)
             {
                 const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
-                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = SimulateSinglePolicyExecution(policy, start, user_goal_check_fn, exec_step_limit, display_fn, policy_marker_size, wait_for_user);
+                const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool)> simulator_move_fn =
+                        [&] (const Configuration& current, const Configuration& action, const Configuration& expected_result, const bool is_reset_motion)
+                {
+                    UNUSED(expected_result);
+                    UNUSED(is_reset_motion);
+                    return SimulatePolicyStep(current, action, display_fn);
+                };
+                int64_t policy_exec_steps = 0;
+                const std::function<bool(void)> policy_exec_termination_fn =
+                        [&] ()
+                {
+                    if (policy_exec_steps >= exec_step_limit)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        policy_exec_steps++;
+                        return false;
+                    }
+                };
+                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, start_configs[idx], simulator_move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
                 const std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
                 const std::chrono::duration<double> execution_time(end_time - start_time);
                 const double execution_seconds = execution_time.count();
                 policy_execution_times[idx] = execution_seconds;
                 particle_executions[idx] = particle_execution.first;
-                policy = particle_execution.second.first;
+                if (enable_cumulative_learning)
+                {
+                    policy = particle_execution.second.first;
+                }
                 const int64_t policy_execution_step_count = particle_execution.second.second;
                 policy_execution_step_counts[idx] = policy_execution_step_count;
                 if (policy_execution_step_count >= 0)
@@ -798,7 +895,7 @@ namespace uncertainty_contact_planning
             return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const double, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             std::function<bool(const Configuration&)> simple_goal_check_fn = [&] (const Configuration& current_config)
             {
@@ -814,8 +911,15 @@ namespace uncertainty_contact_planning
             return ExecuteExectionPolicy(immutable_policy, start, simple_goal_check_fn, move_fn, num_executions, exec_time_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const double, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
+            const std::vector<Configuration, ConfigAlloc> start_configs(num_executions, start);
+            return ExecuteExectionPolicy(immutable_policy, true, start_configs, user_goal_check_fn, move_fn, exec_time_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
+        }
+
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool enable_cumulative_learning, const std::vector<Configuration, ConfigAlloc>& start_configs, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool)>& move_fn, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        {
+            const uint32_t num_executions = (uint32_t)start_configs.size();
             UncertaintyPlanningPolicy policy = immutable_policy;
             // Buffer for a teensy bit of time
             for (size_t iter = 0; iter < 100; iter++)
@@ -831,13 +935,30 @@ namespace uncertainty_contact_planning
             {
                 std::cout << "Starting policy execution " << idx << "..." << std::endl;
                 const double start_time = ros::Time::now().toSec();
-                std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = ExecuteSinglePolicyExecution(policy, start, user_goal_check_fn, move_fn, exec_time_limit, display_fn, policy_marker_size, wait_for_user);
+                const std::function<bool(void)> policy_exec_termination_fn =
+                        [&] ()
+                {
+                    const double current_time = ros::Time::now().toSec();
+                    const double elapsed = current_time - start_time;
+                    if (elapsed >= exec_time_limit)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                };
+                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, start_configs[idx], move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
                 const double end_time = ros::Time::now().toSec();
                 std::cout << "Started policy exec @ " << start_time << " finished policy exec @ " << end_time << std::endl;
                 const double execution_seconds = end_time - start_time;
                 policy_execution_times[idx] = execution_seconds;
                 particle_executions[idx] = particle_execution.first;
-                policy = particle_execution.second.first;
+                if (enable_cumulative_learning)
+                {
+                    policy = particle_execution.second.first;
+                }
                 const int64_t policy_execution_step_count = particle_execution.second.second;
                 policy_execution_step_counts[idx] = policy_execution_step_count;
                 if (policy_execution_step_count >= 0)
@@ -873,14 +994,12 @@ namespace uncertainty_contact_planning
             return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 
-    protected:
-
         static inline std_msgs::ColorRGBA MakeColor(const float r, const float g, const float b, const float a)
         {
             return arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(r, g, b, a);
         }
 
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> SimulateSinglePolicyExecution(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> PerformSinglePolicyExecution(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool)>& move_fn, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<bool(void)>& policy_exec_termination_fn, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user) const
         {
             UncertaintyPlanningPolicy policy = immutable_policy;
             std::cout << "Drawing environment..." << std::endl;
@@ -908,123 +1027,16 @@ namespace uncertainty_contact_planning
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
             }
             // Let's do this
-            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, display_fn); };
-            std::vector<Configuration, ConfigAlloc> particle_trajectory;
-            particle_trajectory.push_back(start);
-            uint64_t desired_transition_id = 0;
-            uint32_t current_exec_step = 0u;
-            while (current_exec_step < exec_step_limit)
-            {
-                current_exec_step++;
-                // Get the current configuration
-                const Configuration& current_config = particle_trajectory.back();
-                // Get the next action
-                const std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> policy_query = policy.QueryBestAction(desired_transition_id, current_config, policy_particle_clustering_fn);
-                const int64_t previous_state_idx = policy_query.first.first;
-                desired_transition_id = policy_query.first.second;
-                const Configuration& action = policy_query.second.first;
-                //const Configuration& expected_result = policy_query.second.second;
-                //std::cout << "Queried policy, received action " << PrettyPrint::PrettyPrint(action) << " for current state " << PrettyPrint::PrettyPrint(current_config) << " and parent state index " << parent_state_idx << std::endl;
-                //std::cout << "----------\nReceived new action for best matching state index " << previous_state_idx << " with transition ID " << desired_transition_id << "\n==========" << std::endl;
-                //std::cout << "Drawing updated policy..." << std::endl;
-                ClearAndRedrawEnvironment(display_fn);
-                DrawPolicy(policy, policy_marker_size, "execution_policy", display_fn);
-                DrawLocalPolicy(policy, policy_marker_size, 0, MakeColor(0.0, 1.0, 1.0, 1.0), "policy_start_to_goal", display_fn);
-                DrawLocalPolicy(policy, policy_marker_size, previous_state_idx, MakeColor(0.0, 0.0, 1.0, 1.0), "policy_here_to_goal", display_fn);
-                //std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
-                const UncertaintyPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(previous_state_idx).GetValueImmutable();
-                const Configuration parent_state_config = parent_state.GetExpectation();
-                std_msgs::ColorRGBA parent_state_color;
-                parent_state_color.r = 0.0f;
-                parent_state_color.g = 0.5f;
-                parent_state_color.b = 1.0f;
-                parent_state_color.a = 0.5f;
-                const visualization_msgs::MarkerArray parent_state_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, parent_state_config, parent_state_color, 1, "parent_state_marker");
-                std_msgs::ColorRGBA current_config_color;
-                current_config_color.r = 0.0f;
-                current_config_color.g = 0.0f;
-                current_config_color.b = 1.0f;
-                current_config_color.a = 0.5f;
-                const visualization_msgs::MarkerArray current_config_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, current_config, current_config_color, 1, "current_config_marker");
-                std_msgs::ColorRGBA action_color;
-                action_color.r = 1.0f;
-                action_color.g = 0.0f;
-                action_color.b = 1.0f;
-                action_color.a = 0.5f;
-                const visualization_msgs::MarkerArray action_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, action, action_color, 1, "action_marker");
-                visualization_msgs::MarkerArray policy_query_markers;
-                policy_query_markers.markers.insert(policy_query_markers.markers.end(), parent_state_markers.markers.begin(), parent_state_markers.markers.end());
-                policy_query_markers.markers.insert(policy_query_markers.markers.end(), current_config_markers.markers.begin(), current_config_markers.markers.end());
-                policy_query_markers.markers.insert(policy_query_markers.markers.end(), action_markers.markers.begin(), action_markers.markers.end());
-                display_fn(policy_query_markers);
-                if (wait_for_user)
-                {
-                    std::cout << "Press ENTER to continue & execute..." << std::endl;
-                    std::cin.get();
-                }
-                else
-                {
-                    // Wait for a bit
-                    std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
-                }
-                // Simulate fowards
-                const std::vector<Configuration, ConfigAlloc> execution_states = SimulatePolicyStep(current_config, action, display_fn);
-                particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
-                const Configuration result_config = particle_trajectory.back();
-                // Check if we've reached the goal
-                if (user_goal_check_fn(result_config))
-                {
-                    // We've reached the goal!
-                    std::cout << "Policy simulation reached the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-                    return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
-                }
-            }
-            // If we get here, we haven't reached the goal!
-            std::cout << "Policy simulation failed to reach the goal in " << current_exec_step << " steps out of a maximum of " << exec_step_limit << " steps" << std::endl;
-            return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
-        }
-
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> ExecuteSinglePolicyExecution(const UncertaintyPlanningPolicy& immutable_policy, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const double, const double, const bool)>& move_fn, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user) const
-        {
-            UncertaintyPlanningPolicy policy = immutable_policy;
-            std::cout << "Drawing environment..." << std::endl;
-            ClearAndRedrawEnvironment(display_fn);
-            if (wait_for_user)
-            {
-                std::cout << "Press ENTER to continue..." << std::endl;
-                std::cin.get();
-            }
-            else
-            {
-                // Wait for a bit
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
-            }
-            std::cout << "Drawing initial policy..." << std::endl;
-            DrawPolicy(policy, policy_marker_size, "execution_policy", display_fn);
-            if (wait_for_user)
-            {
-                std::cout << "Press ENTER to continue..." << std::endl;
-                std::cin.get();
-            }
-            else
-            {
-                // Wait for a bit
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
-            }
-            // Let's do this
-            std::function<std::vector<std::vector<size_t>>(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, display_fn); };
-            const double step_shortcut_distance = (goal_distance_threshold_ * 0.5);
+            std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, display_fn); };
             // Reset the robot first
             std::cout << "Reseting before policy execution..." << std::endl;
-            move_fn(start, start, step_duration_, step_shortcut_distance, true);
+            move_fn(start, start, start, true);
             std::cout << "Executing policy..." << std::endl;
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
             uint64_t desired_transition_id = 0;
             uint32_t current_exec_step = 0u;
-            const double start_time = ros::Time::now().toSec();
-            double current_time = start_time;
-            while (((wait_for_user == false) && ((current_time - start_time) <= exec_time_limit)) || ((wait_for_user == true) && (current_exec_step < 1000u)))
+            while (policy_exec_termination_fn() == false)
             {
                 current_exec_step++;
                 // Get the current configuration
@@ -1078,31 +1090,28 @@ namespace uncertainty_contact_planning
                     std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
                 }
                 // Simulate fowards
-                const std::vector<Configuration, ConfigAlloc> execution_states = move_fn(action, expected_result, step_duration_, step_shortcut_distance, false);
+                const std::vector<Configuration, ConfigAlloc> execution_states = move_fn(current_config, action, expected_result, false);
                 particle_trajectory.insert(particle_trajectory.end(), execution_states.begin(), execution_states.end());
                 const Configuration result_config = particle_trajectory.back();
                 // Check if we've reached the goal
                 if (user_goal_check_fn(result_config))
                 {
-                    current_time = ros::Time::now().toSec();
                     // We've reached the goal!
-                    std::cout << "Policy execution reached the goal in " << (current_time - start_time) << " seconds out of a maximum of " << exec_time_limit << " seconds" << std::endl;
+                    std::cout << "Policy execution reached the goal in " << current_exec_step << " steps" << std::endl;
                     return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
-                }
-                else
-                {
-                    current_time = ros::Time::now().toSec();
                 }
             }
             // If we get here, we haven't reached the goal!
-            std::cout << "Policy execution failed to reach the goal in " << (current_time - start_time) << " seconds out of a maximum of " << exec_time_limit << " seconds" << std::endl;
+            std::cout << "Policy execution failed to reach the goal in " << current_exec_step << " steps" << std::endl;
             return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
+
+    protected:
 
         inline std::vector<Configuration, ConfigAlloc> SimulatePolicyStep(const Configuration& current_config, const Configuration& action, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
             simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
-            simulator_ptr_->ForwardSimulateRobot(robot_ptr_, current_config, action, step_duration_, (goal_distance_threshold_ * 0.5), true, trace, true, display_fn);
+            simulator_ptr_->ForwardSimulateRobot(robot_ptr_, current_config, action, true, trace, true, display_fn);
             std::vector<Configuration, ConfigAlloc> execution_trajectory = simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
             if (execution_trajectory.empty())
             {
@@ -1302,7 +1311,7 @@ namespace uncertainty_contact_planning
             return markers;
         }
 
-        inline visualization_msgs::MarkerArray MakeParticlesDisplayRep(const std::vector<std::pair<Configuration, bool>>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
+        inline visualization_msgs::MarkerArray MakeParticlesDisplayRep(const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
         {
             visualization_msgs::MarkerArray markers;
             int32_t starting_idx = 1;
@@ -1313,65 +1322,6 @@ namespace uncertainty_contact_planning
                 starting_idx = (int32_t)markers.markers.size() + 1;
             }
             return markers;
-        }
-
-        /*
-         * Nearest-neighbors functions
-         */
-        inline double StateDistance(const UncertaintyPlanningState& state1, const UncertaintyPlanningState& state2) const
-        {
-            // Get the "space independent" expectation distance
-            const double expectation_distance = robot_ptr_->ComputeConfigurationDistance(state1.GetExpectation(), state2.GetExpectation()) / step_size_;
-            // Get the Pfeasibility(start -> state1)
-            const double feasibility_weight = (1.0 - state1.GetMotionPfeasibility()) * feasibility_alpha_ + (1.0 - feasibility_alpha_);
-            // Get the "space independent" variance of state1
-            const Eigen::VectorXd raw_variances = state1.GetSpaceIndependentVariances();
-            const double raw_variance = raw_variances.lpNorm<1>();
-            // Turn the variance into a weight
-            const double variance_weight = erf(raw_variance) * variance_alpha_ + (1.0 - variance_alpha_);
-            // Compute the actual distance
-            const double distance = (feasibility_weight * expectation_distance * variance_weight);
-            return distance;
-        }
-
-        inline int64_t GetNearestNeighbor(const UncertaintyPlanningTree& planner_nodes, const UncertaintyPlanningState& random_state) const
-        {
-            UNUSED(planner_nodes);
-            // Get the nearest neighbor (ignoring the disabled states)
-            std::vector<std::pair<int64_t, double>> per_thread_bests(GetNumOMPThreads(), std::pair<int64_t, double>(-1, INFINITY));
-            #pragma omp parallel for
-            for (size_t idx = 0; idx < nearest_neighbors_storage_.size(); idx++)
-            {
-                const UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[idx];
-                // Only check against states enabled for NN checks
-                if (current_state.GetValueImmutable().UseForNearestNeighbors())
-                {
-                    const double state_distance = StateDistance(current_state.GetValueImmutable(), random_state);
-#if defined(_OPENMP)
-                    const size_t current_thread_id = (size_t)omp_get_thread_num();
-#else
-                    const size_t current_thread_id = 0;
-#endif
-                    if (state_distance < per_thread_bests[current_thread_id].second)
-                    {
-                        per_thread_bests[current_thread_id].first = (int64_t)idx;
-                        per_thread_bests[current_thread_id].second = state_distance;
-                    }
-                }
-            }
-            int64_t best_index = -1;
-            double best_distance = INFINITY;
-            for (size_t idx = 0; idx < per_thread_bests.size(); idx++)
-            {
-                const double& thread_minimum_distance = per_thread_bests[idx].second;
-                if (thread_minimum_distance < best_distance)
-                {
-                    best_index = per_thread_bests[idx].first;
-                    best_distance = thread_minimum_distance;
-                }
-            }
-            arc_helpers::ConditionalPrint("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear)", 3, debug_level_);
-            return best_index;
         }
 
         /*
@@ -1396,56 +1346,55 @@ namespace uncertainty_contact_planning
         /*
          * Particle clustering function used in policy execution
          */
-        inline std::vector<std::vector<size_t>> PolicyParticleClusteringFn(const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& current_config, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
+        inline bool PolicyParticleClusteringFn(const std::vector<Configuration, ConfigAlloc>& parent_particles, const Configuration& current_config, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
-            assert(particles.size() >= 1);
-            // Collect all the particles and our current config together
-            std::vector<std::pair<Configuration, bool>> all_particles;
-            all_particles.reserve(particles.size() + 1);
-            for (size_t idx = 0; idx < particles.size(); idx++)
+            assert(parent_particles.size() >= 1);
+            std::vector<std::pair<Configuration, std::pair<bool, bool>>> result_particles;
+            result_particles.push_back(std::make_pair(current_config, std::make_pair(false, false)));
+            const std::vector<uint8_t> cluster_membership = clustering_ptr_->IdentifyClusterMembers(robot_ptr_, parent_particles, result_particles, display_fn);
+            const uint8_t parent_cluster_membership = cluster_membership.at(0);
+            if (parent_cluster_membership > 0x00)
             {
-                const Configuration& current_particle = particles[idx];
-                //std::cout << "Particle configuration " << PrettyPrint::PrettyPrint(current_particle) << " with distance " << robot_ptr_->ComputeConfigurationDistance(current_particle, current_config) << std::endl;
-                all_particles.push_back(std::make_pair(current_particle, false));
+                return true;
             }
-            all_particles.push_back(std::make_pair(current_config, false));
-            all_particles.shrink_to_fit();
-            // Do clustering magic
-            return clustering_ptr_->ClusterParticles(robot_ptr_, all_particles, display_fn);
+            else
+            {
+                return false;
+            }
         }
 
         /*
          * Particle clustering function for planning
          */
-        inline std::vector<std::vector<std::pair<Configuration, bool>>> ClusterParticles(const std::vector<std::pair<Configuration, bool>>& particles, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>> ClusterParticles(const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Make sure there are particles to cluster
             if (particles.size() == 0)
             {
-                return std::vector<std::vector<std::pair<Configuration, bool>>>();
+                return std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>>();
             }
             else if (particles.size() == 1)
             {
-                return std::vector<std::vector<std::pair<Configuration, bool>>>{particles};
+                return std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>>{particles};
             }
             const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             const std::vector<std::vector<size_t>> final_index_clusters = clustering_ptr_->ClusterParticles(robot_ptr_, particles, display_fn);
             // Before we return, we need to convert the index clusters to configuration clusters
-            std::vector<std::vector<std::pair<Configuration, bool>>> final_clusters;
+            std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>> final_clusters;
             final_clusters.reserve(final_index_clusters.size());
             size_t total_particles = 0;
             for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
             {
                 const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
-                std::vector<std::pair<Configuration, bool>> final_cluster;
+                std::vector<std::pair<Configuration, std::pair<bool, bool>>> final_cluster;
                 final_cluster.reserve(cluster.size());
                 for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
                 {
                     total_particles++;
                     const size_t particle_idx = cluster[element_idx];
                     assert(particle_idx < particles.size());
-                    const std::pair<Configuration, bool>& particle = particles[particle_idx];
-                    if ((particle.second == false) || allow_contacts)
+                    const std::pair<Configuration, std::pair<bool, bool>>& particle = particles[particle_idx];
+                    if ((particle.second.first == false) || allow_contacts)
                     {
                         final_cluster.push_back(particle);
                     }
@@ -1465,7 +1414,7 @@ namespace uncertainty_contact_planning
         /*
          * Forward propagation functions
          */
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> ForwardSimulateParticles(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const double step_duration, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>> SimulateParticles(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const bool allow_contacts, const bool simulate_reverse, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             // First, compute a target state
@@ -1476,6 +1425,11 @@ namespace uncertainty_contact_planning
             if (nearest.GetNumParticles() == num_particles_)
             {
                 initial_particles = nearest.CollectParticles(num_particles_);
+            }
+            // If the number of particles is dynamic based on the simulator
+            else if (num_particles_ == 0u)
+            {
+                initial_particles = nearest.CollectParticles(nearest.GetNumParticles());
             }
             // Otherwise, we resample from the parent
             else
@@ -1491,45 +1445,58 @@ namespace uncertainty_contact_planning
             target_position.reserve(1);
             target_position.push_back(target_point);
             target_position.shrink_to_fit();
-            const std::vector<std::pair<Configuration, bool>> propagated_points = simulator_ptr_->ForwardSimulateRobots(robot_ptr_, initial_particles, target_position, step_duration, (goal_distance_threshold_ * 0.5), allow_contacts, display_fn);
-            particles_simulated_ += num_particles_;
+            std::vector<std::pair<Configuration, std::pair<bool, bool>>> propagated_points;
+            if (simulate_reverse == false)
+            {
+                propagated_points = simulator_ptr_->ForwardSimulateRobots(robot_ptr_, initial_particles, target_position, allow_contacts, display_fn);
+            }
+            else
+            {
+                propagated_points = simulator_ptr_->ReverseSimulateRobots(robot_ptr_, initial_particles, target_position, allow_contacts, display_fn);
+            }
+            particles_simulated_ += propagated_points.size();
             const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             const std::chrono::duration<double> elapsed = end - start;
             elapsed_simulation_time_ += elapsed.count();
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points);
+            return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>(initial_particles, propagated_points);
         }
 
         inline std::pair<uint32_t, uint32_t> ComputeReverseEdgeProbability(const UncertaintyPlanningState& parent, const UncertaintyPlanningState& child, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
-            std::vector<std::pair<Configuration, bool>> simulation_result = ForwardSimulateParticles(child, parent, step_duration_, true, display_fn).second;
-            uint32_t reached_parent = 0u;
-            // Get the target position
-            const Configuration target_position = parent.GetExpectation();
-            for (size_t ndx = 0; ndx < simulation_result.size(); ndx++)
+            const std::vector<std::pair<Configuration, std::pair<bool, bool>>> simulation_result = SimulateParticles(child, parent, true, true, display_fn).second;
+            std::vector<uint8_t> parent_cluster_membership;
+            if (parent.HasParticles())
             {
-                const Configuration& current_particle = simulation_result[ndx].first;
-                // Check if the particle got close enough
-                const double particle_distance = robot_ptr_->ComputeConfigurationDistance(current_particle, target_position);
-                if (particle_distance <= goal_distance_threshold_)
+                parent_cluster_membership = clustering_ptr_->IdentifyClusterMembers(robot_ptr_, parent.GetParticlePositionsImmutable().first, simulation_result, display_fn);
+            }
+            else
+            {
+                const std::vector<Configuration, ConfigAlloc> parent_cluster(1, parent.GetExpectation());
+                parent_cluster_membership = clustering_ptr_->IdentifyClusterMembers(robot_ptr_, parent_cluster, simulation_result, display_fn);
+            }
+            uint32_t reached_parent = 0u;
+            // Get the target position;
+            for (size_t ndx = 0; ndx < parent_cluster_membership.size(); ndx++)
+            {
+                if (parent_cluster_membership[ndx] > 0)
                 {
                     reached_parent++;
                 }
             }
-            return std::make_pair(num_particles_, reached_parent);
+            return std::make_pair((uint32_t)parent_cluster_membership.size(), reached_parent);
         }
 
-        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> ForwardSimulateStates(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const double step_duration, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> ForwardSimulateStates(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Increment the transition ID
             transition_id_++;
             const uint64_t current_forward_transition_id = transition_id_;
-            const Configuration control_input = target.GetExpectation();
             // Forward propagate each of the particles
-            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>> simulation_result = ForwardSimulateParticles(nearest, target, step_duration, allow_contacts, display_fn);
+            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>> simulation_result = SimulateParticles(nearest, target, allow_contacts, false, display_fn);
             std::vector<Configuration, ConfigAlloc>& initial_particles = simulation_result.first;
-            std::vector<std::pair<Configuration, bool>>& propagated_points = simulation_result.second;
+            std::vector<std::pair<Configuration, std::pair<bool, bool>>>& propagated_points = simulation_result.second;
             // Cluster the live particles into (potentially) multiple states
-            const std::vector<std::vector<std::pair<Configuration, bool>>>& particle_clusters = ClusterParticles(propagated_points, allow_contacts, display_fn);
+            const std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>>& particle_clusters = ClusterParticles(propagated_points, allow_contacts, display_fn);
             bool is_split_child = false;
             if (particle_clusters.size() > 1)
             {
@@ -1538,10 +1505,11 @@ namespace uncertainty_contact_planning
                 split_id_++;
             }
             // Build the forward-propagated states
+            const Configuration control_target = target.GetExpectation();
             std::vector<std::pair<UncertaintyPlanningState, int64_t>> result_states(particle_clusters.size());
             for (size_t idx = 0; idx < particle_clusters.size(); idx++)
             {
-                const std::vector<std::pair<Configuration, bool>>& current_cluster = particle_clusters[idx];
+                const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& current_cluster = particle_clusters[idx];
                 if (debug_level_ >= 15)
                 {
                     display_fn(MakeParticlesDisplayRep(current_cluster, arc_helpers::GenerateUniqueColor<std_msgs::ColorRGBA>((uint32_t)(idx + 1), 1.0f), "result_cluster_" + std::to_string(idx + 1)));
@@ -1549,41 +1517,45 @@ namespace uncertainty_contact_planning
                 if (particle_clusters[idx].size() > 0)
                 {
                     state_counter_++;
-                    const uint32_t attempt_count = (uint32_t)num_particles_;
+                    const uint32_t attempt_count = (uint32_t)propagated_points.size();
                     const uint32_t reached_count = (uint32_t)current_cluster.size();
                     // Check if any of the particles in the current cluster collided with the environment during simulation.
                     // If all are collision-free, we can safely assume the edge is trivially reversible
                     std::vector<Configuration, ConfigAlloc> particle_locations(current_cluster.size());
                     bool did_collide = false;
+                    bool action_is_nominally_independent = true;
                     for (size_t pdx = 0; pdx < current_cluster.size(); pdx++)
                     {
                         particle_locations[pdx] = current_cluster[pdx].first;
-                        if (current_cluster[pdx].second)
+                        if (current_cluster[pdx].second.first)
                         {
                             did_collide = true;
                         }
+                        if (current_cluster[pdx].second.second == false)
+                        {
+                            action_is_nominally_independent = false;
+                        }
                     }
                     particles_stored_ += particle_locations.size();
-                    uint32_t reverse_attempt_count = (uint32_t)num_particles_;
-                    uint32_t reverse_reached_count = (uint32_t)num_particles_;
+                    uint32_t reverse_attempt_count = (uint32_t)current_cluster.size();
+                    uint32_t reverse_reached_count = (uint32_t)current_cluster.size();
                     // Don't do extra work with one particle
-                    if (did_collide && (num_particles_ > 1))
+                    if (did_collide && (propagated_points.size() > 1))
                     {
                         //std::cout << "Simulation resulted in collision, defering reversibility check to post-processing" << std::endl;
-                        reverse_attempt_count = (uint32_t)num_particles_;
+                        reverse_attempt_count = (uint32_t)current_cluster.size();
                         reverse_reached_count = 0u;
                     }
                     else if (is_split_child)
                     {
                         //std::cout << "Simulation resulted in split, defering reversibility check to post-processing" << std::endl;
-                        reverse_attempt_count = (uint32_t)num_particles_;
+                        reverse_attempt_count = (uint32_t)current_cluster.size();
                         reverse_reached_count = 0u;
                     }
                     const double effective_edge_feasibility = (double)reached_count / (double)attempt_count;
                     transition_id_++;
                     const uint64_t new_state_reverse_transtion_id = transition_id_;
-                    //uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, Robot, ConfigAlloc> propagated_state(state_counter_, particle_locations, robot_, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_input, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u));
-                    UncertaintyPlanningState propagated_state(state_counter_, particle_locations, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_input, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u));
+                    UncertaintyPlanningState propagated_state(state_counter_, particle_locations, attempt_count, reached_count, effective_edge_feasibility, reverse_attempt_count, reverse_reached_count, nearest.GetMotionPfeasibility(), step_size_, control_target, current_forward_transition_id, new_state_reverse_transtion_id, ((is_split_child) ? split_id_ : 0u), action_is_nominally_independent);
                     propagated_state.UpdateStatistics(robot_ptr_);
                     // Store the state
                     result_states[idx].first = propagated_state;
@@ -1607,7 +1579,7 @@ namespace uncertainty_contact_planning
                 }
                 else
                 {
-                    current_state.UpdateReverseAttemptAndReachedCounts((uint32_t)num_particles_, 0u);
+                    current_state.UpdateReverseAttemptAndReachedCounts((uint32_t)current_state.GetNumParticles(), 0u);
                 }
             }
             arc_helpers::ConditionalPrint("Forward simultation produced " + std::to_string(result_states.size()) + " states, needed to compute reversibility for " + std::to_string(computed_reversibility) + " of them", 3, debug_level_);
@@ -1631,9 +1603,14 @@ namespace uncertainty_contact_planning
                             if (other_idx != idx)
                             {
                                 const UncertaintyPlanningState& other_state = result_states[other_idx].first;
-                                const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
-                                const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
-                                updated_percent_active += p_returned_to_parent;
+                                // Only if this state has nominally independent outcomes can we expect particles that
+                                // return to the parent to actually reach a different outcome in future repeats
+                                if (other_state.IsActionOutcomeNominallyIndependent())
+                                {
+                                    const double p_reached_other = percent_active * other_state.GetRawEdgePfeasibility();
+                                    const double p_returned_to_parent = p_reached_other * other_state.GetReverseEdgePfeasibility();
+                                    updated_percent_active += p_returned_to_parent;
+                                }
                             }
                         }
                         percent_active = updated_percent_active;
@@ -1654,13 +1631,13 @@ namespace uncertainty_contact_planning
                 std::cout << "Press ENTER to add new states..." << std::endl;
                 std::cin.get();
             }
-            return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>(result_states, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>(initial_particles, propagated_points));
+            return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>(result_states, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>(initial_particles, propagated_points));
         }
 
         inline std::vector<std::pair<UncertaintyPlanningState, int64_t>> PropagateForwardsAndDraw(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // First, perform the forwards propagation
-            const std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>> propagated_state = PerformForwardPropagation(nearest, random, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
+            const std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>> propagated_state = PerformForwardPropagation(nearest, random, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
             if (debug_level_ >= 1)
             {
                 // Draw the expansion
@@ -1711,7 +1688,7 @@ namespace uncertainty_contact_planning
             return propagated_state.first;
         }
 
-        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>> PerformForwardPropagation(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>> PerformForwardPropagation(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             const bool solution_already_found = (total_goal_reached_probability_ >= goal_probability_threshold_);
             bool use_extend = false;
@@ -1747,19 +1724,20 @@ namespace uncertainty_contact_planning
                     arc_helpers::ConditionalPrint("Forward simulating, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
                 }
                 UncertaintyPlanningState target_state(target_point);
-                std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> propagation_results = ForwardSimulateStates(nearest, target_state, step_duration_, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
-                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> raw_particle_propagations = {propagation_results.second};
-                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>>(propagation_results.first, raw_particle_propagations);
+                std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
+                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> raw_particle_propagations = {propagation_results.second};
+                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>>(propagation_results.first, raw_particle_propagations);
             }
             // If we haven't found a solution yet, we use RRT-Connect
             else
             {
                 std::vector<std::pair<UncertaintyPlanningState, int64_t>> propagated_states;
-                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> raw_particle_propagations;
+                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> raw_particle_propagations;
                 int64_t parent_offset = -1;
                 // Compute a maximum number of steps to take
                 const Configuration target_point = random.GetExpectation();
-                const uint32_t total_steps = (uint32_t)ceil(robot_ptr_->ComputeConfigurationDistance(nearest.GetExpectation(), target_point) / step_size_);
+                // We have to take at least one step
+                const uint32_t total_steps = std::max((uint32_t)ceil(robot_ptr_->ComputeConfigurationDistance(nearest.GetExpectation(), target_point) / step_size_), 1u);
                 UncertaintyPlanningState current = nearest;
                 uint32_t steps = 0;
                 bool completed = false;
@@ -1775,12 +1753,13 @@ namespace uncertainty_contact_planning
                         current_target_point = interpolated_target_point;
                         arc_helpers::ConditionalPrint("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
                     }
-                    // If we've reached the target state, stop
-                    else if (std::abs(target_distance) < std::numeric_limits<double>::epsilon())
-                    {
-                        completed = true;
-                        break;
-                    }
+                    // TODO: NOT SURE WHY THIS WAS EVER HERE
+//                    // If we've reached the target state, stop
+//                    else if (std::abs(target_distance) < std::numeric_limits<double>::epsilon())
+//                    {
+//                        completed = true;
+//                        break;
+//                    }
                     // If we're less than step size away, this is our last step
                     else
                     {
@@ -1789,7 +1768,7 @@ namespace uncertainty_contact_planning
                     }
                     // Take a step forwards
                     UncertaintyPlanningState target_state(current_target_point);
-                    std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>> propagation_results = ForwardSimulateStates(nearest, target_state, step_duration_, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
+                    std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
                     raw_particle_propagations.push_back(propagation_results.second);
                     const std::vector<std::pair<UncertaintyPlanningState, int64_t>>& simulation_results = propagation_results.first;
                     // If simulation results in a single new state, we keep going
@@ -1817,7 +1796,7 @@ namespace uncertainty_contact_planning
                         completed = true;
                     }
                 }
-                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, bool>>>>>(propagated_states, raw_particle_propagations);
+                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>>(propagated_states, raw_particle_propagations);
             }
         }
 
@@ -1970,7 +1949,6 @@ namespace uncertainty_contact_planning
                 simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState>& current_state = nearest_neighbors_storage_[(size_t)goal_branch_root_index];
                 // Recursively blacklist it
                 current_state.GetValueMutable().DisableForNearestNeighbors();
-                assert(current_state.GetValueImmutable().UseForNearestNeighbors() == false);
                 // Blacklist each child
                 const std::vector<int64_t>& child_indices = current_state.GetChildIndices();
                 for (size_t idx = 0; idx < child_indices.size(); idx++)
@@ -2062,8 +2040,8 @@ namespace uncertainty_contact_planning
             std::vector<double> effective_child_branch_probabilities;
             for (auto itr = effective_child_branches.begin(); itr != effective_child_branches.end(); ++itr)
             {
-                double transtion_goal_probability = ComputeTransitionGoalProbability(itr->second, planner_action_try_attempts);
-                effective_child_branch_probabilities.push_back(transtion_goal_probability);
+                const double transition_goal_probability = ComputeTransitionGoalProbability(itr->second, planner_action_try_attempts);
+                effective_child_branch_probabilities.push_back(transition_goal_probability);
             }
             // Now, get the highest transtion probability
             double max_transition_probability = 0.0;
@@ -2108,7 +2086,8 @@ namespace uncertainty_contact_planning
             else
             {
                 // We do this the right way
-                std::vector<double> child_goal_reached_probabilities(child_nodes.size(), 0.0);
+                std::vector<double> action_outcomes_dependent_child_goal_reached_probabilities;
+                std::vector<double> action_outcomes_independent_child_goal_reached_probabilities(child_nodes.size(), 0.0);
                 // For each child state, we compute the probability that we'll end up at each of the result states, accounting for try/retry with reversibility
                 // This lets us compare child states as if they were separate actions, so the overall P(goal reached) = max(child) P(goal reached | child)
                 for (size_t idx = 0; idx < child_nodes.size(); idx++)
@@ -2134,11 +2113,16 @@ namespace uncertainty_contact_planning
                                 // Get the other child
                                 const UncertaintyPlanningState& other_child = child_nodes[other_idx];
                                 const double p_reached_other = percent_active * other_child.GetRawEdgePfeasibility();
-                                const double p_returned_to_parent = p_reached_other * other_child.GetReverseEdgePfeasibility();
                                 const double p_stuck_at_other = p_reached_other * (1.0 - other_child.GetReverseEdgePfeasibility());
                                 const double p_reached_goal_from_other = p_stuck_at_other * other_child.GetGoalPfeasibility();
                                 p_others_reached_goal += p_reached_goal_from_other;
-                                updated_percent_active += p_returned_to_parent;
+                                // Only if this state has nominally independent outcomes can we expect particles that
+                                // return to the parent to actually reach a different outcome in future repeats
+                                if (other_child.IsActionOutcomeNominallyIndependent())
+                                {
+                                    const double p_returned_to_parent = p_reached_other * other_child.GetReverseEdgePfeasibility();
+                                    updated_percent_active += p_returned_to_parent;
+                                }
                             }
                         }
                         percent_active = updated_percent_active;
@@ -2151,20 +2135,37 @@ namespace uncertainty_contact_planning
                         p_reached_goal = 1.0;
                     }
                     assert(p_reached_goal <= 1.0);
-                    child_goal_reached_probabilities[idx] = p_reached_goal;
+                    if (current_child.IsActionOutcomeNominallyIndependent())
+                    {
+                        action_outcomes_independent_child_goal_reached_probabilities.push_back(p_reached_goal);
+                    }
+                    else
+                    {
+                        action_outcomes_dependent_child_goal_reached_probabilities.push_back(p_reached_goal);
+                    }
                 }
-                const double max_child_transition_goal_reached_probability = *std::max_element(child_goal_reached_probabilities.begin(), child_goal_reached_probabilities.end());
-                return max_child_transition_goal_reached_probability;
+                const double dependent_child_goal_reached_probability = EigenHelpers::Sum(action_outcomes_dependent_child_goal_reached_probabilities);
+                const double independent_child_goal_reached_probability = (action_outcomes_independent_child_goal_reached_probabilities.size() > 0) ? *std::max_element(action_outcomes_independent_child_goal_reached_probabilities.begin(), action_outcomes_independent_child_goal_reached_probabilities.end()) : 0.0;
+                double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
+                assert(total_p_goal_reached >= 0.0);
+                if (total_p_goal_reached > 1.0)
+                {
+                    assert(total_p_goal_reached <= 1.001);
+                    total_p_goal_reached = 1.0;
+                }
+                assert(total_p_goal_reached <= 1.0);
+                return total_p_goal_reached;
             }
         }
 
         /*
          * Check if we should stop planning (have we reached the time limit?)
          */
-        inline bool PlannerTerminationCheck(const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time, const std::chrono::duration<double>& time_limit) const
+        inline bool PlannerTerminationCheck(const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time, const std::chrono::duration<double>& time_limit, const double p_goal_termination_threshold) const
         {
-            const bool planner_termination_reached = (debug_level_ >= 20) ? (total_goal_reached_probability_ > goal_probability_threshold_) : (((std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now() - start_time) > time_limit);
-            if (planner_termination_reached)
+            const bool time_limit_reached = (((std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now() - start_time) > time_limit);
+            const bool p_goal_threshold_reached = (p_goal_termination_threshold > 0.0) ? (total_goal_reached_probability_ >= p_goal_termination_threshold) : false;
+            if (time_limit_reached || p_goal_threshold_reached)
             {
                 return true;
             }

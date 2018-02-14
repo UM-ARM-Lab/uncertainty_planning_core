@@ -48,6 +48,7 @@ namespace uncertainty_planning_tools
         bool initialized_;
         bool has_particles_;
         bool use_for_nearest_neighbors_;
+        bool action_outcome_is_nominally_independent_;
 
     public:
 
@@ -74,6 +75,7 @@ namespace uncertainty_planning_tools
             arc_helpers::SerializeString<char>(GetConfigurationType(), buffer);
             arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)has_particles_, buffer);
             arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)use_for_nearest_neighbors_, buffer);
+            arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)action_outcome_is_nominally_independent_, buffer);
             arc_helpers::SerializeFixedSizePOD<uint32_t>(attempt_count_, buffer);
             arc_helpers::SerializeFixedSizePOD<uint32_t>(reached_count_, buffer);
             arc_helpers::SerializeFixedSizePOD<uint32_t>(reverse_attempt_count_, buffer);
@@ -141,6 +143,9 @@ namespace uncertainty_planning_tools
             const std::pair<uint8_t, uint64_t> deserialized_use_for_nearest_neighbors = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
             use_for_nearest_neighbors_ = (bool)deserialized_use_for_nearest_neighbors.first;
             current_position += deserialized_use_for_nearest_neighbors.second;
+            const std::pair<uint8_t, uint64_t> deserialized_action_outcome_is_nominally_independent = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+            action_outcome_is_nominally_independent_ = (bool)deserialized_action_outcome_is_nominally_independent.first;
+            current_position += deserialized_action_outcome_is_nominally_independent.second;
             const std::pair<uint32_t, uint64_t> deserialized_attempt_count = arc_helpers::DeserializeFixedSizePOD<uint32_t>(buffer, current_position);
             attempt_count_ = deserialized_attempt_count.first;
             current_position += deserialized_attempt_count.second;
@@ -225,14 +230,17 @@ namespace uncertainty_planning_tools
             space_independent_variances_ = Eigen::VectorXd();
             attempt_count_ = 1u;
             reached_count_ = 1u;
+            reverse_attempt_count_ = 1u;
+            reverse_reached_count_ = 1u;
             parent_motion_Pfeasibility_ = 1.0;
             raw_edge_Pfeasibility_ = 1.0;
             effective_edge_Pfeasibility_ = 1.0;
             reverse_edge_Pfeasibility_ = 1.0;
             motion_Pfeasibility_ = 1.0;
             initialized_ = true;
-            has_particles_ = false;
+            has_particles_ = true;
             use_for_nearest_neighbors_ = true;
+            action_outcome_is_nominally_independent_ = true;
             command_ = expectation_;
             split_id_ = 0u;
             transition_id_ = 0;
@@ -240,7 +248,7 @@ namespace uncertainty_planning_tools
             goal_Pfeasibility_ = 0.0;
         }
 
-        inline UncertaintyPlannerState(const uint64_t state_id, const Configuration& particle, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
+        inline UncertaintyPlannerState(const uint64_t state_id, const Configuration& particle, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id, const bool action_outcome_is_nominally_independent)
         {
             state_id_ = state_id;
             step_size_ = step_size;
@@ -263,6 +271,7 @@ namespace uncertainty_planning_tools
             initialized_ = true;
             has_particles_ = true;
             use_for_nearest_neighbors_ = true;
+            action_outcome_is_nominally_independent_ = action_outcome_is_nominally_independent;
             command_ = command;
             transition_id_ = transition_id;
             reverse_transition_id_ = reverse_transition_id;
@@ -270,7 +279,7 @@ namespace uncertainty_planning_tools
             goal_Pfeasibility_ = 0.0;
         }
 
-        inline UncertaintyPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id)
+        inline UncertaintyPlannerState(const uint64_t state_id, const std::vector<Configuration, ConfigAlloc>& particles, const uint32_t attempt_count, const uint32_t reached_count, const double effective_edge_Pfeasibility, const uint32_t reverse_attempt_count, const uint32_t reverse_reached_count, const double parent_motion_Pfeasibility, const double step_size, const Configuration& command, const uint64_t transition_id, const uint64_t reverse_transition_id, const uint64_t split_id, const bool action_outcome_is_nominally_independent)
         {
             state_id_ = state_id;
             step_size_ = step_size;
@@ -287,6 +296,7 @@ namespace uncertainty_planning_tools
             initialized_ = true;
             has_particles_ = true;
             use_for_nearest_neighbors_ = true;
+            action_outcome_is_nominally_independent_ = action_outcome_is_nominally_independent;
             command_ = command;
             transition_id_ = transition_id;
             reverse_transition_id_ = reverse_transition_id;
@@ -307,7 +317,7 @@ namespace uncertainty_planning_tools
             return std::pair<Configuration, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>>(expectation_, std::pair<std::pair<double, Eigen::VectorXd>, std::pair<double, Eigen::VectorXd>>(std::pair<double, Eigen::VectorXd>(variance_, variances_), std::pair<double, Eigen::VectorXd>(space_independent_variance_, space_independent_variances_)));
         }
 
-        inline UncertaintyPlannerState() : goal_Pfeasibility_(0.0), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false) {}
+        inline UncertaintyPlannerState() : goal_Pfeasibility_(0.0), state_id_(0), transition_id_(0), reverse_transition_id_(0), split_id_(0u), initialized_(false), has_particles_(false), use_for_nearest_neighbors_(false), action_outcome_is_nominally_independent_(false) {}
 
         inline bool IsInitialized() const
         {
@@ -322,6 +332,11 @@ namespace uncertainty_planning_tools
         inline bool UseForNearestNeighbors() const
         {
             return use_for_nearest_neighbors_;
+        }
+
+        inline bool IsActionOutcomeNominallyIndependent() const
+        {
+            return action_outcome_is_nominally_independent_;
         }
 
         inline void EnableForNearestNeighbors()
