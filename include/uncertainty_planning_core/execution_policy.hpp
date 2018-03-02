@@ -238,6 +238,45 @@ namespace execution_policy
         }
     };
 
+    template<typename Configuration>
+    class PolicyQueryResult
+    {
+    protected:
+
+        int64_t previous_state_index_;
+        uint64_t desired_transition_id_;
+        Configuration action_;
+        Configuration expected_result_;
+        bool is_reverse_action_;
+
+    public:
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        PolicyQueryResult() = delete;
+
+        PolicyQueryResult(const int64_t previous_state_index,
+                          const uint64_t desired_transition_id,
+                          const Configuration& action,
+                          const Configuration& expected_result,
+                          const bool is_reverse_action)
+            : previous_state_index_(previous_state_index),
+              desired_transition_id_(desired_transition_id),
+              action_(action),
+              expected_result_(expected_result),
+              is_reverse_action_(is_reverse_action) {}
+
+        int64_t PreviousStateIndex() const { return previous_state_index_; }
+
+        uint64_t DesiredTransitionId() const { return desired_transition_id_; }
+
+        const Configuration& Action() const { return action_; }
+
+        const Configuration& ExpectedResult() const { return expected_result_; }
+
+        bool IsReverseAction() const { return is_reverse_action_; }
+    };
+
     template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>>
     class ExecutionPolicy
     {
@@ -525,7 +564,7 @@ namespace execution_policy
             policy_action_attempt_count_ = new_count;
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryNextAction(const int64_t current_state_index) const
+        inline PolicyQueryResult<Configuration> QueryNextAction(const int64_t current_state_index) const
         {
             assert(current_state_index >= 0);
             assert(current_state_index < (int64_t)previous_index_map_.size());
@@ -543,7 +582,7 @@ namespace execution_policy
             else if (target_state_index == (int64_t)(previous_index_map_.size() - 1))
             {
                 std::cout << "Already at a goal state " << current_state_index << " - cannot proceed to virtual goal state - repeating transition " << result_state.GetTransitionId() << " to command to our expectation" << std::endl;
-                return std::make_pair(std::make_pair(current_state_index, result_state.GetTransitionId()), std::make_pair(result_state.GetExpectation(), result_state.GetExpectation()));
+                return PolicyQueryResult<Configuration>(current_state_index, result_state.GetTransitionId(), result_state.GetExpectation(), result_state.GetExpectation(), false);
             }
             else
             {
@@ -557,13 +596,13 @@ namespace execution_policy
                 if (result_state_id < target_state_id)
                 {
                     std::cout << "Returning forward action for current state " << current_state_index << ", transition ID " << target_state.GetTransitionId() << std::endl;
-                    return std::make_pair(std::make_pair(current_state_index, target_state.GetTransitionId()), std::make_pair(target_state.GetCommand(), target_state.GetExpectation()));
+                    return PolicyQueryResult<Configuration>(current_state_index, target_state.GetTransitionId(), target_state.GetCommand(), target_state.GetExpectation(), false);
                 }
                 // If the "previous" node that we want to go to is an upstream state, we get the expectation of the upstream state
                 else if (target_state_id < result_state_id)
                 {
                     std::cout << "Returning reverse action for current state " << current_state_index << ", transition ID " << result_state.GetReverseTransitionId() << std::endl;
-                    return std::make_pair(std::make_pair(current_state_index, result_state.GetReverseTransitionId()), std::make_pair(target_state.GetExpectation(), target_state.GetExpectation()));
+                    return PolicyQueryResult<Configuration>(current_state_index, result_state.GetReverseTransitionId(), target_state.GetExpectation(), target_state.GetExpectation(), true);
                 }
                 else
                 {
@@ -572,7 +611,7 @@ namespace execution_policy
             }
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline PolicyQueryResult<Configuration> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             assert(initialized_);
             // If we're just starting out
@@ -586,13 +625,13 @@ namespace execution_policy
             }
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline PolicyQueryResult<Configuration> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             assert(initialized_);
             // Get the starting state
             const PolicyGraphNode& first_node = policy_graph_.GetNodeImmutable(0);
             const UncertaintyPlanningState& first_node_state = first_node.GetValueImmutable();
-            const Configuration first_node_config = first_node_state.GetExpectation();
+            const Configuration first_node_expectation = first_node_state.GetExpectation();
             // Make sure we are close enough to the start state
             const bool is_start_cluster_member = particle_clustering_fn(first_node_state.GetParticlePositionsImmutable().first, current_config);
             // If we're close enough to the start
@@ -604,11 +643,11 @@ namespace execution_policy
             else
             {
                 // Return the start state
-                return std::make_pair(std::make_pair(-1, 0), std::make_pair(first_node_config, first_node_config));
+                return PolicyQueryResult<Configuration>(-1, 0, first_node_expectation, first_node_expectation, false);
             }
         }
 
-        inline std::pair<std::pair<int64_t, uint64_t>, std::pair<Configuration, Configuration>> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline PolicyQueryResult<Configuration> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             std::cout << "++++++++++\nQuerying the policy with performed transition ID " << performed_transition_id << "..." << std::endl;
             assert(performed_transition_id > 0);
@@ -703,6 +742,7 @@ namespace execution_policy
                 uint32_t attempt_count = 0u;
                 uint64_t split_id = 0;
                 // If the action was a reversal, then grab the expectation of the previous state's parent
+                // TODO: I don't know what the right way to handle multiple reversals is. This approach worked when used for motion-level planning, but it may not work for task-level planning
                 if (desired_transition_is_reversal)
                 {
                     const int64_t parent_index = planner_tree_[(size_t)previous_state_index].GetParentIndex();
@@ -1051,7 +1091,7 @@ namespace execution_policy
             {
                 // We do this the right way
                 std::vector<double> action_outcomes_dependent_child_goal_reached_probabilities;
-                std::vector<double> action_outcomes_independent_child_goal_reached_probabilities(child_nodes.size(), 0.0);
+                std::vector<double> action_outcomes_independent_child_goal_reached_probabilities;
                 // For each child state, we compute the probability that we'll end up at each of the result states, accounting for try/retry with reversibility
                 // This lets us compare child states as if they were separate actions, so the overall P(goal reached) = max(child) P(goal reached | child)
                 for (size_t idx = 0; idx < child_nodes.size(); idx++)
@@ -1084,17 +1124,18 @@ namespace execution_policy
                             {
                                 // Get the other child
                                 const UncertaintyPlanningState& other_child = child_nodes[other_idx];
-                                const double p_reached_other = percent_active * other_child.GetRawEdgePfeasibility();
-                                const double p_stuck_at_other = p_reached_other * (1.0 - other_child.GetReverseEdgePfeasibility());
-                                // Children with negative P(goal feasibility) cannot reach the goal directly, and thus get P(goal reached)=0 here
-                                const double raw_other_child_goal_Pfeasibility = other_child.GetGoalPfeasibility();
-                                const double other_child_goal_Pfeasibility = (raw_other_child_goal_Pfeasibility > 0.0) ? raw_other_child_goal_Pfeasibility : 0.0;
-                                const double p_reached_goal_from_other = p_stuck_at_other * other_child_goal_Pfeasibility;
-                                p_others_reached += p_reached_goal_from_other;
+                                // CORRECTION (TODO: is this right?) If it its not independent, we cannot reach it if we are not there!
                                 // Only if this state has nominally independent outcomes can we expect particles that
                                 // return to the parent to actually reach a different outcome in future repeats
                                 if (other_child.IsActionOutcomeNominallyIndependent())
                                 {
+                                    const double p_reached_other = percent_active * other_child.GetRawEdgePfeasibility();
+                                    const double p_stuck_at_other = p_reached_other * (1.0 - other_child.GetReverseEdgePfeasibility());
+                                    // Children with negative P(goal feasibility) cannot reach the goal directly, and thus get P(goal reached)=0 here
+                                    const double raw_other_child_goal_Pfeasibility = other_child.GetGoalPfeasibility();
+                                    const double other_child_goal_Pfeasibility = (raw_other_child_goal_Pfeasibility > 0.0) ? raw_other_child_goal_Pfeasibility : 0.0;
+                                    const double p_reached_goal_from_other = p_stuck_at_other * other_child_goal_Pfeasibility;
+                                    p_others_reached += p_reached_goal_from_other;
                                     const double p_returned_to_parent = p_reached_other * other_child.GetReverseEdgePfeasibility();
                                     updated_percent_active += p_returned_to_parent;
                                 }

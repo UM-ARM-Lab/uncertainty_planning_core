@@ -447,6 +447,7 @@ namespace uncertainty_planning_core
                                 const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,
                                                                                            const SE2Config&,
                                                                                            const SE2Config&,
+                                                                                           const bool,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -475,6 +476,7 @@ namespace uncertainty_planning_core
                                 const std::function<std::vector<SE2Config, SE2ConfigAlloc>(const SE2Config&,
                                                                                            const SE2Config&,
                                                                                            const SE2Config&,
+                                                                                           const bool,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -537,6 +539,7 @@ namespace uncertainty_planning_core
                                 const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,
                                                                                            const SE3Config&,
                                                                                            const SE3Config&,
+                                                                                           const bool,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -565,6 +568,7 @@ namespace uncertainty_planning_core
                                 const std::function<std::vector<SE3Config, SE3ConfigAlloc>(const SE3Config&,
                                                                                            const SE3Config&,
                                                                                            const SE3Config&,
+                                                                                           const bool,
                                                                                            const bool)>& robot_execution_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -627,6 +631,7 @@ namespace uncertainty_planning_core
                                    const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,
                                                                                                     const LinkedConfig&,
                                                                                                     const LinkedConfig&,
+                                                                                                    const bool,
                                                                                                     const bool)>& robot_execution_fn,
                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
@@ -655,6 +660,7 @@ namespace uncertainty_planning_core
                                    const std::function<std::vector<LinkedConfig, LinkedConfigAlloc>(const LinkedConfig&,
                                                                                                     const LinkedConfig&,
                                                                                                     const LinkedConfig&,
+                                                                                                    const bool,
                                                                                                     const bool)>& robot_execution_fn,
                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
