@@ -239,9 +239,9 @@ namespace uncertainty_planning_core
     {
         std::cout << "Serializing planner tree..." << std::endl;
         std::function<uint64_t(const UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn
-                = [] (const UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>& state, std::vector<uint8_t>& buffer)
+                = [] (const UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>& state, std::vector<uint8_t>& ser_buffer)
         { return UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>::Serialize(state,
-                                                                                                       buffer,
+                                                                                                       ser_buffer,
                                                                                                        UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>::Serialize); };
         arc_helpers::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
         const uint64_t size = arc_helpers::SerializeVector(planner_tree, buffer, planning_tree_state_serializer_fn);
@@ -254,9 +254,9 @@ namespace uncertainty_planning_core
     {
         std::cout << "Deserializing planner tree..." << std::endl;
         std::function<std::pair<UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn
-                = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
-        { return UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize(buffer,
-                                                                                                         current,
+                = [] (const std::vector<uint8_t>& deser_buffer, const uint64_t deser_current)
+        { return UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize(deser_buffer,
+                                                                                                         deser_current,
                                                                                                          UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize); };
         const std::pair<UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t> deserialized_tree
                 = arc_helpers::DeserializeVector<UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>>(buffer, current, planning_tree_state_deserializer_fn);

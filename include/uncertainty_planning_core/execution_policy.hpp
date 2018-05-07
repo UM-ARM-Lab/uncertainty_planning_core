@@ -414,7 +414,7 @@ namespace execution_policy
             // Serialize the initialized
             arc_helpers::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
             // Serialize the planner tree
-            std::function<uint64_t(const UncertaintyPlanningTreeState&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn = [] (const UncertaintyPlanningTreeState& state, std::vector<uint8_t>& buffer) { return UncertaintyPlanningTreeState::Serialize(state, buffer, UncertaintyPlanningState::Serialize); };
+            std::function<uint64_t(const UncertaintyPlanningTreeState&, std::vector<uint8_t>&)> planning_tree_state_serializer_fn = [] (const UncertaintyPlanningTreeState& state, std::vector<uint8_t>& ser_buffer) { return UncertaintyPlanningTreeState::Serialize(state, ser_buffer, UncertaintyPlanningState::Serialize); };
             arc_helpers::SerializeVector(planner_tree_, buffer, planning_tree_state_serializer_fn);
             // Serialize the goal
             ConfigSerializer::Serialize(goal_, buffer);
@@ -440,7 +440,7 @@ namespace execution_policy
             initialized_ = (bool)initialized_deserialized.first;
             current_position += initialized_deserialized.second;
             // Deserialize the planner tree
-            std::function<std::pair<UncertaintyPlanningTreeState, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return UncertaintyPlanningTreeState::Deserialize(buffer, current, UncertaintyPlanningState::Deserialize); };
+            std::function<std::pair<UncertaintyPlanningTreeState, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> planning_tree_state_deserializer_fn = [] (const std::vector<uint8_t>& deser_buffer, const uint64_t deser_current) { return UncertaintyPlanningTreeState::Deserialize(deser_buffer, deser_current, UncertaintyPlanningState::Deserialize); };
             const std::pair<UncertaintyPlanningTree, uint64_t> planner_tree_deserialized = arc_helpers::DeserializeVector<UncertaintyPlanningTreeState>(buffer, current_position, planning_tree_state_deserializer_fn);
             planner_tree_ = planner_tree_deserialized.first;
             current_position += planner_tree_deserialized.second;

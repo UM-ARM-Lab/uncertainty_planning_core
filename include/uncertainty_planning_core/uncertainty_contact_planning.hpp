@@ -179,10 +179,10 @@ namespace uncertainty_contact_planning
             const std_msgs::ColorRGBA goal_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(1.0, 0.0, 1.0, 1.0);
             const visualization_msgs::MarkerArray start_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, start, start_color, 1, "start_state");
             const visualization_msgs::MarkerArray goal_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, goal, goal_color, 1, "goal_state");
-            visualization_msgs::MarkerArray simulator_step_display_rep;
-            simulator_step_display_rep.markers.insert(simulator_step_display_rep.markers.end(), start_markers.markers.begin(), start_markers.markers.end());
-            simulator_step_display_rep.markers.insert(simulator_step_display_rep.markers.end(), goal_markers.markers.begin(), goal_markers.markers.end());
-            display_fn(simulator_step_display_rep);
+            visualization_msgs::MarkerArray simulator_start_goal_display_rep;
+            simulator_start_goal_display_rep.markers.insert(simulator_start_goal_display_rep.markers.end(), start_markers.markers.begin(), start_markers.markers.end());
+            simulator_start_goal_display_rep.markers.insert(simulator_start_goal_display_rep.markers.end(), goal_markers.markers.begin(), goal_markers.markers.end());
+            display_fn(simulator_start_goal_display_rep);
             // Wait for input
             std::cout << "Press ENTER to solve..." << std::endl;
             std::cin.get();
