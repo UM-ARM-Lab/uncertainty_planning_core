@@ -12,21 +12,14 @@
 #include <thread>
 #include <atomic>
 #include <arc_utilities/arc_helpers.hpp>
-#include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
-#include <arc_utilities/simple_hierarchical_clustering.hpp>
-#include <arc_utilities/simple_hausdorff_distance.hpp>
-#include <arc_utilities/simple_rrt_planner.hpp>
-#include <sdf_tools/tagged_object_collision_map.hpp>
-#include <sdf_tools/sdf.hpp>
-#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
-#include <uncertainty_planning_core/simple_simulator_interface.hpp>
 #include <uncertainty_planning_core/execution_policy.hpp>
+#include <uncertainty_planning_core/simple_simulator_interface.hpp>
+#include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
+#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
+#include <uncertainty_planning_core/uncertainty_planning_core.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <uncertainty_planning_core/uncertainty_planning_core.hpp>
 
 using namespace uncertainty_planning_core;
 

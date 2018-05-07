@@ -12,21 +12,15 @@
 #include <thread>
 #include <atomic>
 #include <arc_utilities/arc_helpers.hpp>
-#include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
-#include <arc_utilities/simple_hierarchical_clustering.hpp>
-#include <arc_utilities/simple_hausdorff_distance.hpp>
-#include <arc_utilities/simple_rrt_planner.hpp>
-#include <sdf_tools/tagged_object_collision_map.hpp>
-#include <sdf_tools/sdf.hpp>
-#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
-#include <uncertainty_planning_core/simple_simulator_interface.hpp>
+#include <arc_utilities/simple_robot_models.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
 #include <uncertainty_planning_core/execution_policy.hpp>
+#include <uncertainty_planning_core/simple_simulator_interface.hpp>
+#include <uncertainty_planning_core/uncertainty_planner_state.hpp>
+#include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
-#include <arc_utilities/simple_robot_models.hpp>
 
 #ifndef UNCERTAINTY_PLANNING_CORE_HPP
 #define UNCERTAINTY_PLANNING_CORE_HPP
@@ -279,10 +273,8 @@ namespace uncertainty_planning_core
             std::vector<uint8_t> buffer;
             SerializePlannerTree<Configuration, ConfigSerializer, ConfigAlloc>(planner_tree, buffer);
             // Write a header to detect if compression is enabled (someday)
-            //std::cout << "Compressing for storage..." << std::endl;
-            //const std::vector<uint8_t> compressed_serialized_tree = ZlibHelpers::CompressBytes(buffer);
-            std::cout << " Compression disabled (no Zlib available)..." << std::endl;
-            const std::vector<uint8_t> compressed_serialized_tree = buffer;
+            std::cout << "Compressing for storage..." << std::endl;
+            const std::vector<uint8_t> compressed_serialized_tree = ZlibHelpers::CompressBytes(buffer);
             std::cout << "Attempting to save to file..." << std::endl;
             std::ofstream output_file(filepath, std::ios::out|std::ios::binary);
             const size_t serialized_size = compressed_serialized_tree.size();
@@ -314,10 +306,8 @@ namespace uncertainty_planning_core
         std::vector<uint8_t> file_buffer((size_t)serialized_size, 0x00);
         input_file.read(reinterpret_cast<char*>(file_buffer.data()), serialized_size);
         // Write a header to detect if compression is enabled (someday)
-        //std::cout << "Decompressing from storage..." << std::endl;
-        //const std::vector<uint8_t> decompressed_serialized_tree = ZlibHelpers::DecompressBytes(file_buffer);
-        std::cout << "Decompression disabled (no Zlib available)..." << std::endl;
-        const std::vector<uint8_t> decompressed_serialized_tree = file_buffer;
+        std::cout << "Decompressing from storage..." << std::endl;
+        const std::vector<uint8_t> decompressed_serialized_tree = ZlibHelpers::DecompressBytes(file_buffer);
         std::cout << "Attempting to deserialize tree..." << std::endl;
         return DeserializePlannerTree<Configuration, ConfigSerializer, ConfigAlloc>(decompressed_serialized_tree, 0u).first;
     }

@@ -4,7 +4,7 @@ project(uncertainty_planning_core)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp visualization_msgs sdf_tools arc_utilities)
+find_package(catkin REQUIRED COMPONENTS roscpp visualization_msgs arc_utilities)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -67,7 +67,7 @@ find_package(OpenMP)
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp visualization_msgs sdf_tools arc_utilities DEPENDS system_lib rt Eigen3 OpenMP)
+catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} CATKIN_DEPENDS roscpp visualization_msgs arc_utilities DEPENDS system_lib rt Eigen3 OpenMP)
 
 ###########
 ## Build ##

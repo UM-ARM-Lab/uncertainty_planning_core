@@ -17,8 +17,6 @@
 #include <arc_utilities/simple_hierarchical_clustering.hpp>
 #include <arc_utilities/simple_hausdorff_distance.hpp>
 #include <arc_utilities/simple_rrt_planner.hpp>
-#include <sdf_tools/tagged_object_collision_map.hpp>
-#include <sdf_tools/sdf.hpp>
 #include <arc_utilities/simple_robot_model_interface.hpp>
 #include <uncertainty_planning_core/simple_sampler_interface.hpp>
 #include <uncertainty_planning_core/simple_outcome_clustering_interface.hpp>

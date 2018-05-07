@@ -20,10 +20,6 @@ While the planner and execution policy are themselves template-based, this packa
  
 Provides a range of utility and math functions, as well as templated implementations of kinodynamic RRT, Dijkstra's algorithm, and hierarchical clustering.
 
-- [sdf_tools](https://github.com/UM-ARM-LAB/sdf_tools)
-
-Tools for modeling environments using voxel grids, including several types of collision maps, signed distance fields, and optional integration with MoveIt!
-
 - [ROS Kinetic](http://ros.org)
 
 ROS is required for the build system, Catkin, and for RViz, which the planner uses as an optional visualization interface.
