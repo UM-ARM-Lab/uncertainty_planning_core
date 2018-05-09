@@ -6,11 +6,8 @@ This package is the core of our framework for motion planning and execution with
 
 - The core templated motion planner
 - Templated execution policy that updates during execution
-- Lightweight models of SE(2), SE(3), and linked robots
-- Models of uncertain sensors and actuators
-- Simple samplers for SE(2), SE(3), and linked problems
-- Interface for robot simulators to integrate with the planner
-- Concrete instantiations of the planner and execution policy for SE(2), SE(3), and linked robots
+- Interfaces for robot models, samplers, outcome clustering, and robot simulators to integrate with the planner
+- Concrete instantiations of the planner and execution policy for SE(2), SE(3), and linked robots (multiple configuration representations)
 
 While the planner and execution policy are themselves template-based, this package provides a library containing concrete instantiations of the planner for different types of robot. When possible, you should use these rather than interfacing with the planner directly.
 
@@ -26,4 +23,4 @@ ROS is required for the build system, Catkin, and for RViz, which the planner us
 
 ## Examples
 
-To see several examples of using the planner and execution policy, see [uncertainty_planning_examples](https://github.com/UM-ARM-LAB/uncertainty_planning_examples)
+To see several examples of using the planner and execution policy, see [uncertainty_planning_examples](https://github.com/UM-ARM-LAB/uncertainty_planning_examples) *Note - these examples are not up-to-date*
