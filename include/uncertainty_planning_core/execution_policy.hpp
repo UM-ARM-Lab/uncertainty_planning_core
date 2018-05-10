@@ -49,7 +49,10 @@ namespace execution_policy
 
         inline static PolicyGraph BuildPolicyGraphFromPlannerTree(const UncertaintyPlanningTree& planner_tree, const UncertaintyPlanningState& goal_state)
         {
-            assert(simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(planner_tree));
+            if (simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(planner_tree) == false)
+            {
+                throw std::invalid_argument("Provided planner tree has invalid linkage");
+            }
             PolicyGraph policy_graph(planner_tree.size() + 1);
             // First pass, add all the nodes to the graph
             for (size_t idx = 0; idx < planner_tree.size(); idx++)
@@ -88,7 +91,10 @@ namespace execution_policy
                     policy_graph.AddEdgesBetweenNodes((int64_t)idx, goal_idx, edge_weight);
                 }
             }
-            assert(policy_graph.CheckGraphLinkage());
+            if (policy_graph.CheckGraphLinkage() == false)
+            {
+                throw std::runtime_error("Generated policy graph has invalid linkage");
+            }
             return policy_graph;
         }
 
@@ -97,9 +103,18 @@ namespace execution_policy
             // First, safety checks to make sure the graph + edge are valid
             const int64_t from_index = current_edge.GetFromIndex();
             const int64_t to_index = current_edge.GetToIndex();
-            assert(from_index >= 0 && from_index < (int64_t)graph.GetNodesImmutable().size());
-            assert(to_index >= 0 && to_index < (int64_t)graph.GetNodesImmutable().size());
-            assert(from_index != to_index);
+            if (graph.IndexInRange(from_index) == false)
+            {
+                throw std::invalid_argument("from_index out of range");
+            }
+            if (graph.IndexInRange(to_index) == false)
+            {
+                throw std::invalid_argument("to_index out of range");
+            }
+            if (from_index == to_index)
+            {
+                throw std::invalid_argument("from_index and to_index cannot be the same");
+            }
             // Now, we estimate the number of executions of the edge necessary to reach (1) the conformant planning threshold or (2) we reach the edge repeat threshold
             // If we're going forwards
             if (from_index < to_index)
@@ -169,7 +184,7 @@ namespace execution_policy
             // Can't happen
             else
             {
-                assert(false);
+                throw std::runtime_error("from_index cannot equal to_index");
             }
         }
 
@@ -239,14 +254,19 @@ namespace execution_policy
 
         inline static std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> ComputeNodeDistances(const PolicyGraph& initial_graph, const int64_t start_index)
         {
-            assert(start_index >= 0);
-            assert(start_index < (int64_t)initial_graph.GetNodesImmutable().size());
+            if (initial_graph.IndexInRange(start_index) == false)
+            {
+                throw std::invalid_argument("start_index out of range");
+            }
             const std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> complete_search_results = arc_dijkstras::SimpleDijkstrasAlgorithm<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>>::PerformDijkstrasAlgorithm(initial_graph, start_index);
             //std::cout << "Previous index map: " << PrettyPrint::PrettyPrint(search_results.second) << std::endl;
             for (size_t idx = 0; idx < complete_search_results.second.first.size(); idx++)
             {
                 const int64_t previous_index = complete_search_results.second.first[idx];
-                assert(previous_index >= 0 && previous_index < (int64_t)complete_search_results.second.first.size());
+                if (initial_graph.IndexInRange(previous_index) == false)
+                {
+                    throw std::runtime_error("previous_index out of range, graph is no longer connected");
+                }
             }
             return complete_search_results;
         }
@@ -373,10 +393,9 @@ namespace execution_policy
 
         inline std::string PrintTree(const UncertaintyPlanningTree& planning_tree, const std::vector<int64_t>& previous_index_map, const std::vector<double>& dijkstras_distances) const
         {
-            assert(planning_tree.size() > 1);
             std::ostringstream strm;
             strm << "Planning tree with " << planning_tree.size() << " states:";
-            for (size_t idx = 1; idx < planning_tree.size(); idx++)
+            for (size_t idx = 0; idx < planning_tree.size(); idx++)
             {
                 const int64_t previous_index = previous_index_map[idx];
                 const double distance = dijkstras_distances[idx];
@@ -529,20 +548,38 @@ namespace execution_policy
 
         inline const UncertaintyPlanningTree& GetPlannerTreeImmutable() const
         {
-            assert(initialized_);
-            return planner_tree_;
+            if (initialized_)
+            {
+                return planner_tree_;
+            }
+            else
+            {
+                throw std::runtime_error("PolicyGraph is not initialized");
+            }
         }
 
         inline UncertaintyPlanningTree& GetPlannerTreeMutable()
         {
-            assert(initialized_);
-            return planner_tree_;
+            if (initialized_)
+            {
+                return planner_tree_;
+            }
+            else
+            {
+                throw std::runtime_error("PolicyGraph is not initialized");
+            }
         }
 
         inline const Configuration& GetRawGoalConfiguration() const
         {
-            assert(initialized_);
-            return goal_;
+            if (initialized_)
+            {
+                return goal_;
+            }
+            else
+            {
+                throw std::runtime_error("PolicyGraph is not initialized");
+            }
         }
 
         inline double GetMarginalEdgeWeight() const
@@ -562,14 +599,26 @@ namespace execution_policy
 
         inline const PolicyGraph& GetRawPolicy() const
         {
-            assert(initialized_);
-            return policy_graph_;
+            if (initialized_)
+            {
+                return policy_graph_;
+            }
+            else
+            {
+                throw std::runtime_error("PolicyGraph is not initialized");
+            }
         }
 
         inline const std::vector<int64_t>& GetRawPreviousIndexMap() const
         {
-            assert(initialized_);
-            return previous_index_map_;
+            if (initialized_)
+            {
+                return previous_index_map_;
+            }
+            else
+            {
+                throw std::runtime_error("PolicyGraph is not initialized");
+            }
         }
 
         inline uint32_t GetPolicyActionAttemptCount() const
@@ -582,10 +631,14 @@ namespace execution_policy
             policy_action_attempt_count_ = new_count;
         }
 
+    private:
+
         inline PolicyQueryResult<Configuration> QueryNextAction(const int64_t current_state_index) const
         {
-            assert(current_state_index >= 0);
-            assert(current_state_index < (int64_t)previous_index_map_.size());
+            if ((current_state_index < 0) || (current_state_index >= (int64_t)previous_index_map_.size()))
+            {
+                throw std::invalid_argument("current_state_index is out of range");
+            }
             const PolicyGraphNode& result_state_policy_node = policy_graph_.GetNodeImmutable(current_state_index);
             const UncertaintyPlanningState& result_state = result_state_policy_node.GetValueImmutable();
             // Get the action to take
@@ -625,31 +678,40 @@ namespace execution_policy
                 }
                 else
                 {
-                    assert(false);
+                    throw std::runtime_error("target_state_id cannot equal result_state_id");
                 }
             }
         }
+
+    public:
 
         /*
          * If your particle clustering function is not thread safe, you will have a bad time!
          */
         inline PolicyQueryResult<Configuration> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
-            assert(initialized_);
-            // If we're just starting out
-            if (performed_transition_id == 0)
+            if (initialized_)
             {
-                return QueryStartBestAction(current_config, particle_clustering_fn);
+                // If we're just starting out
+                if (performed_transition_id == 0)
+                {
+                    return QueryStartBestAction(current_config, particle_clustering_fn);
+                }
+                else
+                {
+                    return QueryNormalBestAction(performed_transition_id, current_config, link_runtime_states_to_planned_parent, particle_clustering_fn);
+                }
             }
             else
             {
-                return QueryNormalBestAction(performed_transition_id, current_config, link_runtime_states_to_planned_parent, particle_clustering_fn);
+                throw std::runtime_error("PolicyGraph is not initialized");
             }
         }
 
+    private:
+
         inline PolicyQueryResult<Configuration> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
-            assert(initialized_);
             // Get the starting state
             // TODO find the best matching node in the tree to start from
             std::vector<std::pair<int64_t, double>> per_thread_best_node(GetNumOMPThreads(), std::make_pair(-1, std::numeric_limits<double>::infinity()));
@@ -701,7 +763,10 @@ namespace execution_policy
         inline PolicyQueryResult<Configuration> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             std::cout << "++++++++++\nQuerying the policy with performed transition ID " << performed_transition_id << "..." << std::endl;
-            assert(performed_transition_id > 0);
+            if (performed_transition_id <= 0)
+            {
+                throw std::invalid_argument("performed_transition_id must be greater than zero");
+            }
             // Collect the possible states that could have resulted from the transition we just performed
             std::map<int64_t, std::vector<std::pair<int64_t, bool>>> expected_possibility_result_states;
             std::map<int64_t, uint64_t> previous_state_index_possibilities;
@@ -748,7 +813,10 @@ namespace execution_policy
                 arc_helpers::ConditionalPrint("Selected " + std::to_string(previous_state_index) + " as previous state index", 1, 1);
             }
             const std::vector<std::pair<int64_t, bool>>& expected_possible_result_states = expected_possibility_result_states[previous_state_index];
-            assert(expected_possible_result_states.size() > 0);
+            if (expected_possible_result_states.empty())
+            {
+                throw std::runtime_error("expected_possible_result_states cannot be empty");
+            }
             std::cout << "Result state could match " << expected_possible_result_states.size() << " states" << std::endl;
             //std::cout << "Expected possible result states: " << PrettyPrint::PrettyPrint(expected_possible_result_states) << std::endl;
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -837,7 +905,10 @@ namespace execution_policy
                             best_distance = result_match_distance;
                         }
                     }
-                    assert(best_result_state.first >= 0);
+                    if (best_result_state.first < 0)
+                    {
+                        throw std::runtime_error("Could not identify best result state");
+                    }
                     const int64_t result_state_index = (best_result_state.second) ? planner_tree_[(size_t)best_result_state.first].GetParentIndex() : best_result_state.first;
                     if (best_result_state.second == false)
                     {
@@ -930,7 +1001,10 @@ namespace execution_policy
                     else
                     {
                         const std::pair<int64_t, bool>& first_possible_match = expected_possible_result_states.front();
-                        assert(first_possible_match.second == false); // Reversals will not result in a parent index lookup
+                        if (first_possible_match.second)
+                        {
+                            throw std::runtime_error("Reversals cannot result in a parent index lookup");
+                        }
                         const int64_t child_state_idx = first_possible_match.first;
                         const UncertaintyPlanningTreeState& child_tree_state = planner_tree_[(size_t)child_state_idx];
                         const UncertaintyPlanningState& child_state = child_tree_state.GetValueImmutable();
@@ -1011,7 +1085,10 @@ namespace execution_policy
                         best_distance = result_match_distance;
                     }
                 }
-                assert(best_result_state.first >= 0);
+                if (best_result_state.first < 0)
+                {
+                    throw std::runtime_error("Could not identify best result state");
+                }
                 const int64_t result_state_index = (best_result_state.second) ? planner_tree_[(size_t)best_result_state.first].GetParentIndex() : best_result_state.first;
                 if (best_result_state.second == false)
                 {
@@ -1168,16 +1245,20 @@ namespace execution_policy
                     }
                     percent_active = updated_percent_active;
                 }
-                assert(p_reached >= 0.0);
-                if (p_reached > 1.0)
+                if ((p_reached >= 0.0) && (p_reached <= 1.0))
+                {
+                    current_state.SetEffectiveEdgePfeasibility(p_reached);
+                }
+                else if ((p_reached >= 0.0) && (p_reached <= 1.001))
                 {
                     std::cout << "WARNING - P(reached) = " << p_reached << " > 1.0 (probably numerical error)" << std::endl;
-                    assert(p_reached <= 1.001);
                     p_reached = 1.0;
+                    current_state.SetEffectiveEdgePfeasibility(p_reached);
                 }
-                assert(p_reached <= 1.0);
-                //std::cout << "Computed effective edge P(feasibility) of " << p_reached << " for " << edge_attempt_threshold_ << " try/retry attempts" << std::endl;
-                current_state.SetEffectiveEdgePfeasibility(p_reached);
+                else
+                {
+                    throw std::runtime_error("p_reached out of range [0, 1]");
+                }
             }
         }
 
@@ -1216,8 +1297,10 @@ namespace execution_policy
             if (effective_child_branch_probabilities.size() > 0)
             {
                 const double max_transition_probability = *std::max_element(effective_child_branch_probabilities.begin(), effective_child_branch_probabilities.end());
-                assert(max_transition_probability >= 0.0);
-                assert(max_transition_probability <= 1.0);
+                if ((max_transition_probability < 0.0) || (max_transition_probability > 1.0))
+                {
+                    throw std::runtime_error("max_transition_probability out of range [0, 1]");
+                }
                 // Update the current state
                 //std::cout << "Updating P(goal reached) to " << max_transition_probability << std::endl;
                 current_tree_state.GetValueMutable().SetGoalPfeasibility(max_transition_probability);
@@ -1321,14 +1404,18 @@ namespace execution_policy
                         percent_active = updated_percent_active;
                     }
                     double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
-                    assert(p_reached_goal >= 0.0);
-                    if (p_reached_goal > 1.0)
+                    if ((p_reached_goal < 0.0) || (p_reached_goal > 1.0))
                     {
-                        std::cout << "WARNING - P(reached) = " << p_reached_goal << " > 1.0 (probably numerical error)" << std::endl;
-                        assert(p_reached_goal <= 1.001);
-                        p_reached_goal = 1.0;
+                        if ((p_reached_goal >= 0.0) && (p_reached_goal <= 1.001))
+                        {
+                            std::cout << "WARNING - P(reached goal) = " << p_reached_goal << " > 1.0 (probably numerical error)" << std::endl;
+                            p_reached_goal = 1.0;
+                        }
+                        else
+                        {
+                            throw std::runtime_error("p_reached_goal out of range [0, 1]");
+                        }
                     }
-                    assert(p_reached_goal <= 1.0);
                     if (current_child.IsActionOutcomeNominallyIndependent())
                     {
                         action_outcomes_independent_child_goal_reached_probabilities.push_back(p_reached_goal);
@@ -1340,15 +1427,20 @@ namespace execution_policy
                 }
                 const double dependent_child_goal_reached_probability = EigenHelpers::Sum(action_outcomes_dependent_child_goal_reached_probabilities);
                 const double independent_child_goal_reached_probability = (action_outcomes_independent_child_goal_reached_probabilities.size() > 0) ? *std::max_element(action_outcomes_independent_child_goal_reached_probabilities.begin(), action_outcomes_independent_child_goal_reached_probabilities.end()) : 0.0;
-                double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
-                assert(total_p_goal_reached >= 0.0);
-                if (total_p_goal_reached > 1.0)
+                const double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
+                if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.0))
                 {
-                    assert(total_p_goal_reached <= 1.001);
-                    total_p_goal_reached = 1.0;
+                    return total_p_goal_reached;
                 }
-                assert(total_p_goal_reached <= 1.0);
-                return total_p_goal_reached;
+                else if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.001))
+                {
+                    std::cout << "WARNING - total P(goal reached) = " << total_p_goal_reached << " > 1.0 (probably numerical error)" << std::endl;
+                    return 1.0;
+                }
+                else
+                {
+                    throw std::runtime_error("total_p_goal_reached out of range [0, 1]");
+                }
             }
         }
     };

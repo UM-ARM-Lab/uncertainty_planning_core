@@ -68,7 +68,10 @@ namespace uncertainty_planning_tools
         {
             // Takes a state to serialize and a buffer to serialize into
             // Return number of bytes written to buffer
-            assert(initialized_);
+            if (initialized_ == false)
+            {
+                throw std::runtime_error("Cannot serialize an unitialized state");
+            }
             const uint64_t start_buffer_size = buffer.size();
             // First thing we save is the qualified type id
             arc_helpers::SerializeFixedSizePOD<uint64_t>(std::numeric_limits<uint64_t>::max(), buffer);
@@ -419,16 +422,27 @@ namespace uncertainty_planning_tools
 
         inline void SetGoalPfeasibility(const double goal_Pfeasibility)
         {
-            assert(goal_Pfeasibility >= -1.0); // We allow negative values to signifiy reverse edges!
-            assert(goal_Pfeasibility <= 1.0);
-            goal_Pfeasibility_ = goal_Pfeasibility;
+            // We allow negative values to signify reverse edges!
+            if ((goal_Pfeasibility <= 1.0) && (goal_Pfeasibility >= -1.0))
+            {
+                goal_Pfeasibility_ = goal_Pfeasibility;
+            }
+            else
+            {
+                throw std::invalid_argument("goal_Pfeasibility out of range [-1, 1]");
+            }
         }
 
         inline void SetReverseEdgePfeasibility(const double reverse_edge_Pfeasibility)
         {
-            assert(reverse_edge_Pfeasibility >= 0.0);
-            assert(reverse_edge_Pfeasibility <= 1.0);
-            reverse_edge_Pfeasibility_ = reverse_edge_Pfeasibility;
+            if ((reverse_edge_Pfeasibility <= 1.0) && (reverse_edge_Pfeasibility >= 0.0))
+            {
+                reverse_edge_Pfeasibility_ = reverse_edge_Pfeasibility;
+            }
+            else
+            {
+                throw std::invalid_argument("reverse_edge_Pfeasibility out of range [0, 1]");
+            }
         }
 
         inline uint64_t GetStateId() const
@@ -502,9 +516,15 @@ namespace uncertainty_planning_tools
             }
             else
             {
-                assert(num_particles == particles_.size());
-                std::vector<Configuration, ConfigAlloc> resampled_particles = particles_;
-                return resampled_particles;
+                if (num_particles == particles_.size())
+                {
+                    std::vector<Configuration, ConfigAlloc> resampled_particles = particles_;
+                    return resampled_particles;
+                }
+                else
+                {
+                    throw std::invalid_argument("CollectParticles() called with particles_.size() > 1, and num_particles != particles_.size(). You must use ResampleParticles() instead.");
+                }
             }
         }
 
@@ -564,7 +584,6 @@ namespace uncertainty_planning_tools
         {
             if (particles_.size() == 0)
             {
-                assert(!has_particles_);
                 return expectation_;
             }
             else if (particles_.size() == 1)

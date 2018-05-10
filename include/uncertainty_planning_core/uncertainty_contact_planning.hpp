@@ -92,18 +92,21 @@ namespace uncertainty_contact_planning
          */
         inline static void ExtractChildStates(const UncertaintyPlanningTree& raw_planner_tree, const int64_t raw_parent_index, const int64_t pruned_parent_index, UncertaintyPlanningTree& pruned_planner_tree)
         {
-            assert((raw_parent_index >= 0) && (raw_parent_index < (int64_t)raw_planner_tree.size()));
-            assert((pruned_parent_index >= 0) && (pruned_parent_index < (int64_t)pruned_planner_tree.size()));
-            assert(raw_planner_tree[(size_t)raw_parent_index].IsInitialized());
-            assert(pruned_planner_tree[(size_t)pruned_parent_index].IsInitialized());
+            if (raw_planner_tree.at((size_t)raw_parent_index).IsInitialized() == false)
+            {
+                throw std::invalid_argument("raw_parent_state is uninitialized");
+            }
+            if (pruned_planner_tree.at((size_t)pruned_parent_index).IsInitialized() == false)
+            {
+                throw std::invalid_argument("pruned_parent_state is uninitialized");
+            }
             // Clear the child indices, so we can update them with new values later
             pruned_planner_tree[(size_t)pruned_parent_index].ClearChildIndicies();
             const std::vector<int64_t>& current_child_indices = raw_planner_tree[(size_t)raw_parent_index].GetChildIndices();
             for (size_t idx = 0; idx < current_child_indices.size(); idx++)
             {
                 const int64_t raw_child_index = current_child_indices[idx];
-                assert((raw_child_index > 0) && (raw_child_index < (int64_t)raw_planner_tree.size()));
-                const UncertaintyPlanningTreeState& current_child_state = raw_planner_tree[(size_t)raw_child_index];
+                const UncertaintyPlanningTreeState& current_child_state = raw_planner_tree.at((size_t)raw_child_index);
                 if (current_child_state.GetParentIndex() >= 0)
                 {
                     // Get the new child index
@@ -703,7 +706,10 @@ namespace uncertainty_contact_planning
                 return planner_tree;
             }
             // Test to make sure the tree linkage is intact
-            assert(simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(planner_tree));
+            if (simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(planner_tree) == false)
+            {
+                throw std::runtime_error("planner_tree has invalid linkage");
+            }
             std::cout << "Pruning planner tree in preparation for policy extraction..." << std::endl;
             std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             // Let's do some post-processing to the planner tree - we don't want to mess with the original tree, so we copy it
@@ -712,7 +718,10 @@ namespace uncertainty_contact_planning
             for (size_t idx = 0; idx < intermediate_planner_tree.size(); idx++)
             {
                 UncertaintyPlanningTreeState& current_state = intermediate_planner_tree[idx];
-                assert(current_state.IsInitialized());
+                if (current_state.IsInitialized() == false)
+                {
+                    throw std::runtime_error("current_state is uninitialized");
+                }
                 // If we're on a path to the goal, we always keep it
                 if (current_state.GetValueImmutable().GetGoalPfeasibility() > 0.0)
                 {
@@ -744,12 +753,18 @@ namespace uncertainty_contact_planning
             UncertaintyPlanningTree pruned_planner_tree;
             // Add root state
             UncertaintyPlanningTreeState root_state = intermediate_planner_tree[0];
-            assert(root_state.IsInitialized());
+            if (root_state.IsInitialized() == false)
+            {
+                throw std::runtime_error("root_state is uninitialized");
+            }
             pruned_planner_tree.push_back(root_state);
             // Recursive call to extract live branches
             ExtractChildStates(intermediate_planner_tree, 0, 0, pruned_planner_tree);
             // Test to make sure the tree linkage is intact
-            assert(simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(pruned_planner_tree));
+            if (simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(pruned_planner_tree) == false)
+            {
+                throw std::runtime_error("pruned_planner_tree has invalid linkage");
+            }
             std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> pruning_time(end_time - start_time);
             std::cout << "...pruning complete, pruned to " << pruned_planner_tree.size() << " states, took " << pruning_time.count() << " seconds" << std::endl;
@@ -1205,7 +1220,10 @@ namespace uncertainty_contact_planning
         {
             const ExecutionPolicyGraph& policy_graph = policy.GetRawPolicy();
             const std::vector<int64_t>& previous_index_map = policy.GetRawPreviousIndexMap();
-            assert(policy_graph.GetNodesImmutable().size() == previous_index_map.size());
+            if (policy_graph.GetNodesImmutable().size() != previous_index_map.size())
+            {
+                throw std::runtime_error("PolicyGraph and previous_index_map are different sizes");
+            }
             visualization_msgs::MarkerArray policy_markers;
             const std_msgs::ColorRGBA forward_color = MakeColor(0.0f, 0.0f, 0.0f, 1.0f);
             const std_msgs::ColorRGBA backward_color = forward_color;
@@ -1214,7 +1232,10 @@ namespace uncertainty_contact_planning
             {
                 const int64_t current_index = (int64_t)idx;
                 const int64_t previous_index = previous_index_map[idx];
-                assert(previous_index >= 0);
+                if (previous_index < 0)
+                {
+                    throw std::runtime_error("previous_index < 0");
+                }
                 if (current_index == previous_index)
                 {
                     const Configuration current_config = policy_graph.GetNodeImmutable(current_index).GetValueImmutable().GetExpectation();
@@ -1263,9 +1284,14 @@ namespace uncertainty_contact_planning
         {
             const ExecutionPolicyGraph& policy_graph = policy.GetRawPolicy();
             const std::vector<int64_t>& previous_index_map = policy.GetRawPreviousIndexMap();
-            assert(policy_graph.GetNodesImmutable().size() == previous_index_map.size());
-            assert(current_state_idx >= 0);
-            assert(current_state_idx < (int64_t)previous_index_map.size());
+            if (policy_graph.GetNodesImmutable().size() != previous_index_map.size())
+            {
+                throw std::runtime_error("PolicyGraph and previous_index_map are different sizes");
+            }
+            if ((current_state_idx < 0) || (current_state_idx >= (int64_t)previous_index_map.size()))
+            {
+                throw std::runtime_error("current_state_idx is out of range");
+            }
             visualization_msgs::MarkerArray policy_markers;
             const Configuration previous_config = policy_graph.GetNodeImmutable(current_state_idx).GetValueImmutable().GetExpectation();
             Eigen::Vector4d previous_point = simulator_ptr_->Get3dPointForConfig(robot_ptr_, previous_config);
@@ -1354,7 +1380,10 @@ namespace uncertainty_contact_planning
          */
         inline bool PolicyParticleClusteringFn(const std::vector<Configuration, ConfigAlloc>& parent_particles, const Configuration& current_config, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
-            assert(parent_particles.size() >= 1);
+            if (parent_particles.empty())
+            {
+                throw std::invalid_argument("parent_particles cannot be empty");
+            }
             std::vector<std::pair<Configuration, std::pair<bool, bool>>> result_particles;
             result_particles.push_back(std::make_pair(current_config, std::make_pair(false, false)));
             const std::vector<uint8_t> cluster_membership = clustering_ptr_->IdentifyClusterMembers(robot_ptr_, parent_particles, result_particles, display_fn);
@@ -1398,8 +1427,7 @@ namespace uncertainty_contact_planning
                 {
                     total_particles++;
                     const size_t particle_idx = cluster[element_idx];
-                    assert(particle_idx < particles.size());
-                    const std::pair<Configuration, std::pair<bool, bool>>& particle = particles[particle_idx];
+                    const std::pair<Configuration, std::pair<bool, bool>>& particle = particles.at(particle_idx);
                     if ((particle.second.first == false) || allow_contacts)
                     {
                         final_cluster.push_back(particle);
@@ -1409,7 +1437,10 @@ namespace uncertainty_contact_planning
                 final_clusters.push_back(final_cluster);
             }
             final_clusters.shrink_to_fit();
-            assert(total_particles == particles.size());
+            if (total_particles != particles.size())
+            {
+                throw std::runtime_error("total_particles != particles.size()");
+            }
             // Now, return the clusters and probability table
             const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             const std::chrono::duration<double> elapsed = end - start;
@@ -1621,15 +1652,21 @@ namespace uncertainty_contact_planning
                         }
                         percent_active = updated_percent_active;
                     }
-                    assert(p_reached > 0.0);
-                    if (p_reached > 1.0)
+                    if ((p_reached >= 0.0) && (p_reached <= 1.0))
                     {
-                        assert(p_reached <= 1.001);
-                        p_reached = 1.0;
+                        current_state.SetEffectiveEdgePfeasibility(p_reached);
                     }
-                    assert(p_reached <= 1.0);
+                    else if ((p_reached >= 0.0) && (p_reached <= 1.001))
+                    {
+                        std::cout << "WARNING - P(reached) = " << p_reached << " > 1.0 (probably numerical error)" << std::endl;
+                        p_reached = 1.0;
+                        current_state.SetEffectiveEdgePfeasibility(p_reached);
+                    }
+                    else
+                    {
+                        throw std::runtime_error("p_reached out of range [0, 1]");
+                    }
                     arc_helpers::ConditionalPrint("Computed effective edge P(feasibility) of " + std::to_string(p_reached) + " for " + std::to_string(planner_action_try_attempts) + " try/retry attempts", 4, debug_level_);
-                    current_state.SetEffectiveEdgePfeasibility(p_reached);
                 }
             }
             if (debug_level_ >= 30)
@@ -1922,7 +1959,10 @@ namespace uncertainty_contact_planning
             // Update the goal reached probability
             // Backtrack all the way to the goal, updating each state's goal_Pfeasbility
             // Make sure something hasn't gone wrong
-            assert(new_goal.GetValueImmutable().GetGoalPfeasibility() > 0.0);
+            if (new_goal.GetValueImmutable().GetGoalPfeasibility() == 0.0)
+            {
+                throw std::runtime_error("new_goal cannot reach the goal (GoalPfeasibility() == 0)");
+            }
             // Backtrack up the tree, updating states as we go
             int64_t current_index = new_goal.GetParentIndex();
             while (current_index >= 0)
@@ -2055,8 +2095,10 @@ namespace uncertainty_contact_planning
             {
                 max_transition_probability = *std::max_element(effective_child_branch_probabilities.begin(), effective_child_branch_probabilities.end());
             }
-            assert(max_transition_probability > 0.0);
-            assert(max_transition_probability <= 1.0);
+            if ((max_transition_probability < 0.0) || (max_transition_probability > 1.0))
+            {
+                throw std::runtime_error("max_transition_probability out of range [0, 1]");
+            }
             // Update the current state
             current_node.GetValueMutable().SetGoalPfeasibility(max_transition_probability);
         }
@@ -2139,13 +2181,18 @@ namespace uncertainty_contact_planning
                     arc_helpers::ConditionalPrint("P(child->goal) via ourself " + std::to_string(p_we_reached_goal), 1, debug_level_);
                     arc_helpers::ConditionalPrint("P(child->goal) via others " + std::to_string(p_others_reached_goal), 1, debug_level_);
                     double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
-                    assert(p_reached_goal >= 0.0);
-                    if (p_reached_goal > 1.0)
+                    if ((p_reached_goal < 0.0) || (p_reached_goal > 1.0))
                     {
-                        assert(p_reached_goal <= 1.001);
-                        p_reached_goal = 1.0;
+                        if ((p_reached_goal >= 0.0) && (p_reached_goal <= 1.001))
+                        {
+                            std::cout << "WARNING - P(reached goal) = " << p_reached_goal << " > 1.0 (probably numerical error)" << std::endl;
+                            p_reached_goal = 1.0;
+                        }
+                        else
+                        {
+                            throw std::runtime_error("p_reached_goal out of range [0, 1]");
+                        }
                     }
-                    assert(p_reached_goal <= 1.0);
                     arc_helpers::ConditionalPrint("P(child->goal) " + std::to_string(p_reached_goal), 1, debug_level_);
                     if (current_child.IsActionOutcomeNominallyIndependent())
                     {
@@ -2160,16 +2207,21 @@ namespace uncertainty_contact_planning
                 arc_helpers::ConditionalPrint("action_outcomes_independent_child_goal_reached_probabilities: " + PrettyPrint::PrettyPrint(action_outcomes_independent_child_goal_reached_probabilities), 1, debug_level_);
                 const double dependent_child_goal_reached_probability = EigenHelpers::Sum(action_outcomes_dependent_child_goal_reached_probabilities);
                 const double independent_child_goal_reached_probability = (action_outcomes_independent_child_goal_reached_probabilities.size() > 0) ? *std::max_element(action_outcomes_independent_child_goal_reached_probabilities.begin(), action_outcomes_independent_child_goal_reached_probabilities.end()) : 0.0;
-                double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
+                const double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
                 arc_helpers::ConditionalPrint("dependent_child_goal_reached_probability " + std::to_string(dependent_child_goal_reached_probability) + " independent_child_goal_reached_probability " + std::to_string(independent_child_goal_reached_probability) + " total_p_goal_reached " + std::to_string(total_p_goal_reached), 1, debug_level_);
-                assert(total_p_goal_reached >= 0.0);
-                if (total_p_goal_reached > 1.0)
+                if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.0))
                 {
-                    assert(total_p_goal_reached <= 1.001);
-                    total_p_goal_reached = 1.0;
+                    return total_p_goal_reached;
                 }
-                assert(total_p_goal_reached <= 1.0);
-                return total_p_goal_reached;
+                else if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.001))
+                {
+                    std::cout << "WARNING - total P(goal reached) = " << total_p_goal_reached << " > 1.0 (probably numerical error)" << std::endl;
+                    return 1.0;
+                }
+                else
+                {
+                    throw std::runtime_error("total_p_goal_reached out of range [0, 1]");
+                }
             }
         }
 

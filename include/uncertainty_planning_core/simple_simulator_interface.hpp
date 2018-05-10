@@ -57,11 +57,17 @@ namespace simple_simulator_interface
             // Each step trace is the entire resolver history of the motion
             const ForwardSimulationResolverTrace<Configuration, ConfigAlloc>& step_trace = trace.resolver_steps[step_idx];
             // Get the current trace segment
-            assert(step_trace.contact_resolver_steps.size() > 0);
+            if (step_trace.contact_resolver_steps.empty())
+            {
+                throw std::runtime_error("step_trace.contact_resolver_steps is empty");
+            }
             // The last contact resolution step is the final result of resolving the timestep
             const ForwardSimulationContactResolverStepTrace<Configuration, ConfigAlloc>& contact_resolution_trace = step_trace.contact_resolver_steps.back();
             // Get the last (collision-free resolved) config of the last resolution step
-            assert(contact_resolution_trace.contact_resolution_steps.size() > 0);
+            if (contact_resolution_trace.contact_resolution_steps.empty())
+            {
+                throw std::runtime_error("contact_resolution_trace.contact_resolution_steps is empty");
+            }
             const Configuration& resolved_config = contact_resolution_trace.contact_resolution_steps.back();
             execution_trajectory.push_back(resolved_config);
         }
