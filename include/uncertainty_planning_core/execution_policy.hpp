@@ -49,6 +49,10 @@ namespace execution_policy
 
         inline static PolicyGraph BuildPolicyGraphFromPlannerTree(const UncertaintyPlanningTree& planner_tree, const UncertaintyPlanningState& goal_state)
         {
+            if (planner_tree.empty())
+            {
+                throw std::invalid_argument("Cannot build policy graph from empty planner tree");
+            }
             if (simple_rrt_planner::SimpleHybridRRTPlanner::CheckTreeLinkage(planner_tree) == false)
             {
                 throw std::invalid_argument("Provided planner tree has invalid linkage");
@@ -712,11 +716,10 @@ namespace execution_policy
 
         inline PolicyQueryResult<Configuration> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
-            // Get the starting state
-            // TODO find the best matching node in the tree to start from
+            // Get the starting state - NOTE, we ignore the last node in the policy graph, which is the virtual goal node
             std::vector<std::pair<int64_t, double>> per_thread_best_node(GetNumOMPThreads(), std::make_pair(-1, std::numeric_limits<double>::infinity()));
             #pragma omp parallel for
-            for (int64_t node_idx = 0; node_idx < (int64_t)policy_graph_.GetNodesImmutable().size(); node_idx++)
+            for (int64_t node_idx = 0; node_idx < (int64_t)policy_graph_.GetNodesImmutable().size() - 1; node_idx++)
             {
                 const PolicyGraphNode& current_node = policy_graph_.GetNodeImmutable(node_idx);
                 const UncertaintyPlanningState& current_node_state = current_node.GetValueImmutable();
