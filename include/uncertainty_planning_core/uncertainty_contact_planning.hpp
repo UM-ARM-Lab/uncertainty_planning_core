@@ -331,7 +331,7 @@ namespace uncertainty_contact_planning
             // Bind the helper functions
             const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalFunction(goal_candidate, user_goal_check_fn, edge_attempt_count, allow_contacts); };
-            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree[new_goal_state_idx], edge_attempt_count, start_time); };
+            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree, new_goal_state_idx, edge_attempt_count, start_time); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<UncertaintyPlanningState(void)> complete_sampling_fn = [&] (void)
             {
@@ -509,7 +509,7 @@ namespace uncertainty_contact_planning
             };
             std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, debug_level_); };
             std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalState(goal_candidate, goal_state, edge_attempt_count, allow_contacts); };
-            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree[new_goal_state_idx], edge_attempt_count, start_time); };
+            std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree, new_goal_state_idx, edge_attempt_count, start_time); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
             std::function<UncertaintyPlanningState(void)> complete_sampling_fn = [&](void)
             {
@@ -1915,8 +1915,9 @@ namespace uncertainty_contact_planning
             return false;
         }
 
-        inline void GoalReachedCallback(UncertaintyPlanningTreeState& new_goal, const uint32_t planner_action_try_attempts, const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time)
+        inline void GoalReachedCallback(UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx, const uint32_t planner_action_try_attempts, const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time)
         {
+            UncertaintyPlanningTreeState& new_goal = tree[new_goal_state_idx];
             // Update the time-to-first-solution if need be
             if (time_to_first_solution_ == 0.0)
             {
@@ -1926,36 +1927,28 @@ namespace uncertainty_contact_planning
             }
             // Backtrack through the solution path until we reach the root of the current "goal branch"
             // A goal branch is the entire branch leading to the goal
-            // Make sure the goal state isn't a branch root itself
-            if (CheckIfGoalBranchRoot(new_goal))
+            int64_t current_index = new_goal_state_idx;
+            int64_t goal_branch_root_index = -1; // Initialize to an invalid index so we can detect later if it isn't valid
+            while (current_index > 0)
             {
-                ;//std::cout << "Goal state is the root of its own goal branch, no need to blacklist" << std::endl;
-            }
-            else
-            {
-                int64_t current_index = new_goal.GetParentIndex();
-                int64_t goal_branch_root_index = -1; // Initialize to an invalid index so we can detect later if it isn't valid
-                while (current_index > 0)
+                // Get the current state that we're looking at
+                UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[(size_t)current_index];
+                // Check if we've reached the root of the goal branch
+                bool is_branch_root = CheckIfGoalBranchRoot(current_state);
+                // If we haven't reached the root of goal branch
+                if (!is_branch_root)
                 {
-                    // Get the current state that we're looking at
-                    UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[(size_t)current_index];
-                    // Check if we've reached the root of the goal branch
-                    bool is_branch_root = CheckIfGoalBranchRoot(current_state);
-                    // If we haven't reached the root of goal branch
-                    if (!is_branch_root)
-                    {
-                        current_index = current_state.GetParentIndex();
-                    }
-                    else
-                    {
-                        goal_branch_root_index = current_index;
-                        break;
-                    }
+                    current_index = current_state.GetParentIndex();
                 }
-                //std::cout << "Backtracked to state " << current_index << " for goal branch blacklisting" << std::endl;
-                BlacklistGoalBranch(goal_branch_root_index);
-                //std::cout << "Goal branch blacklisting complete" << std::endl;
+                else
+                {
+                    goal_branch_root_index = current_index;
+                    break;
+                }
             }
+            //std::cout << "Backtracked to state " << current_index << " for goal branch blacklisting" << std::endl;
+            BlacklistGoalBranch(goal_branch_root_index);
+            //std::cout << "Goal branch blacklisting complete" << std::endl;
             // Update the goal reached probability
             // Backtrack all the way to the goal, updating each state's goal_Pfeasbility
             // Make sure something hasn't gone wrong
@@ -1964,14 +1957,14 @@ namespace uncertainty_contact_planning
                 throw std::runtime_error("new_goal cannot reach the goal (GoalPfeasibility() == 0)");
             }
             // Backtrack up the tree, updating states as we go
-            int64_t current_index = new_goal.GetParentIndex();
-            while (current_index >= 0)
+            int64_t probability_update_index = new_goal.GetParentIndex();
+            while (probability_update_index >= 0)
             {
                 // Get the current state that we're looking at
-                UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[(size_t)current_index];
+                UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[(size_t)probability_update_index];
                 // Update the state
                 UpdateNodeGoalReachedProbability(current_state, planner_action_try_attempts);
-                current_index = current_state.GetParentIndex();
+                probability_update_index = current_state.GetParentIndex();
             }
             // Get the goal reached probability that we use to decide when we're done
             total_goal_reached_probability_ = nearest_neighbors_storage_[0].GetValueImmutable().GetGoalPfeasibility();
