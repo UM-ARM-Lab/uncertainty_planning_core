@@ -13,7 +13,7 @@ namespace simple_sampler_interface
     {
     public:
 
-        SamplerInterface() {}
+        virtual ~SamplerInterface() {}
 
         virtual Configuration Sample(Generator& prng) = 0;
 

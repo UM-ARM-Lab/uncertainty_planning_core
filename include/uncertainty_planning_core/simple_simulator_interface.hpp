@@ -84,7 +84,7 @@ namespace simple_simulator_interface
 
     public:
 
-        SimulatorInterface() {}
+        virtual ~SimulatorInterface() {}
 
         virtual int32_t GetDebugLevel() const = 0;
 

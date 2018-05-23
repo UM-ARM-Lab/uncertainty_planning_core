@@ -27,7 +27,7 @@ namespace simple_outcome_clustering_interface
 
     public:
 
-        OutcomeClusteringInterface() {}
+        virtual ~OutcomeClusteringInterface() {}
 
         virtual int32_t GetDebugLevel() const = 0;
 

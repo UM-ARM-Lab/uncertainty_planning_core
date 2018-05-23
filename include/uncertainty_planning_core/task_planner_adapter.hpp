@@ -30,6 +30,9 @@ template<typename State, typename StateAlloc=std::allocator<State>>
 class ActionPrimitiveInterface
 {
 public:
+
+  virtual ~ActionPrimitiveInterface() {}
+
   /// Returns true if the provided state is a candidare for the primitive
   virtual bool IsCandidate(const State& state) const = 0;
 
