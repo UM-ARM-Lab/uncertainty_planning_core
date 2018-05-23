@@ -61,6 +61,10 @@ public:
   Execute(const State& state) = 0;
 
   /// Returns the ranking of the primitive
+  /// When multiple primitives can be applied to a given state, the planner
+  /// will select the highest-ranked primitive. If multiple primitives with
+  /// the same ranking are available, the planner will select the most
+  /// recently added primitive.
   virtual double Ranking() const = 0;
 
   /// Returns the name of the primitive
@@ -967,6 +971,21 @@ private:
 
 public:
 
+  /// Constructs are task planning adapter for the given task
+  /// Parameters:
+  /// - state_readiness_fn: function to compute resdiness of a given state
+  ///   Readiness is roughly equivalent to progress, with higher-readiness
+  ///   state corresponding to more progress through the task. The planner will
+  ///   always explore the highest-readiness state that is available to expand.
+  /// - single_execution_completed_fn: function to determine if a single
+  ///   execution through the policy has been completed.
+  /// - task_completed_fn: function to determine if the entire task has been
+  ///   completed.
+  /// - logging_fn: function for text logging.
+  /// - display_fn: function to display visualization_msgs::MarkerArray
+  ///   visualizations.
+  /// - prng_seed: seed value to random number generators.
+  /// - debug_level: internal level to control logging verbosity.
   TaskPlannerAdapter(
       const std::function<uint32_t(const State&)>& state_readiness_fn,
       const std::function<bool(const State&)>& single_execution_completed_fn,
