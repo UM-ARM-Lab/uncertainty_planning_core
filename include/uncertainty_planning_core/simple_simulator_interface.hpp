@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <functional>
+#include <memory>
 #include <chrono>
 #include <random>
 #include <arc_utilities/eigen_helpers.hpp>

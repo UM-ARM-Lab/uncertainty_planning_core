@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <functional>
 #include <random>
+#include <memory>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/simple_robot_model_interface.hpp>
@@ -713,7 +714,7 @@ namespace uncertainty_planning_tools
     };
 }
 
-template<typename Robot, typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>>
+template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc=std::allocator<Configuration>>
 std::ostream& operator<<(std::ostream& strm, const uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>& state)
 {
     strm << state.Print();

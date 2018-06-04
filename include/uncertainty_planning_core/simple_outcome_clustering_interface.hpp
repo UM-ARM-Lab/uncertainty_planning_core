@@ -9,6 +9,7 @@
 #include <functional>
 #include <chrono>
 #include <random>
+#include <memory>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/simple_robot_model_interface.hpp>
 #include <visualization_msgs/MarkerArray.h>
