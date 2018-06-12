@@ -313,7 +313,7 @@ private:
   std::function<bool(const State&)> single_execution_completed_fn_;
   std::function<bool(const State&)> task_completed_fn_;
 
-  std::function<void(const std::string&)> logging_fn_;
+  std::function<void(const std::string&, const int32_t)> logging_fn_;
   DisplayFn drawing_fn_;
   int32_t debug_level_;
 
@@ -424,7 +424,7 @@ private:
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions)
   {
-    Log("Starting primitive forward simulation...");
+    Log("Starting primitive forward simulation...", 1);
     if (start_positions.size() > 0)
     {
       if ((target_positions.size() != 1)
@@ -447,7 +447,7 @@ private:
                                results.end());
     }
     propagated_points.shrink_to_fit();
-    Log("...finished primitive forward simulation");
+    Log("...finished primitive forward simulation", 1);
     return propagated_points;
   }
 
@@ -456,7 +456,7 @@ private:
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions)
   {
-    Log("Starting primitive reverse simulation...");
+    Log("Starting primitive reverse simulation...", 1);
     if (start_positions.size() > 0)
     {
       if ((target_positions.size() != 1)
@@ -483,7 +483,7 @@ private:
                                results.end());
     }
     propagated_points.shrink_to_fit();
-    Log("...finished particle reverse simulation");
+    Log("...finished particle reverse simulation", 1);
     return propagated_points;
   }
 
@@ -519,7 +519,7 @@ private:
         const double primitive_ranking = primitive->Ranking();
         Log("Considering available primitive ["
             + primitive->Name() + "] with ranking "
-            + std::to_string(primitive_ranking));
+            + std::to_string(primitive_ranking), 1);
         if (primitive_ranking >= best_primitive_ranking)
         {
           best_primitive_ranking = primitive_ranking;
@@ -533,7 +533,7 @@ private:
           = primitives_[static_cast<size_t>(best_primitive_idx)];
       Log("Performing best available primitive ["
           + best_primitive->Name() + "] with ranking "
-          + std::to_string(best_primitive_ranking));
+          + std::to_string(best_primitive_ranking), 2);
       const std::vector<std::pair<State, bool>> primitive_results
           = best_primitive->GetOutcomes(start);
       // Package the results
@@ -572,7 +572,7 @@ private:
         const double primitive_ranking = primitive->Ranking();
         Log("Considering available primitive ["
             + primitive->Name() + "] with ranking "
-            + std::to_string(primitive_ranking));
+            + std::to_string(primitive_ranking), 1);
         if (primitive_ranking >= best_primitive_ranking)
         {
           best_primitive_ranking = primitive_ranking;
@@ -586,7 +586,7 @@ private:
           = primitives_[static_cast<size_t>(best_primitive_idx)];
       Log("Executing best available primitive ["
           + best_primitive->Name() + "] with ranking "
-          + std::to_string(best_primitive_ranking));
+          + std::to_string(best_primitive_ranking), 2);
       return best_primitive->Execute(start);
     }
     else
@@ -602,18 +602,18 @@ private:
     const uint32_t target_readiness = ComputeStateReadiness(target);
     if (start_readiness < target_readiness)
     {
-      Log("We are less ready than our parent");
+      Log("We are less ready than our parent", 2);
       return PerformBestAvailablePrimitive(start);
     }
     else if (start_readiness > target_readiness)
     {
-      Log("We are more ready than our parent");
+      Log("We are more ready than our parent", 2);
       const std::vector<State, StateAlloc> outcome_configs(1, start);
       return MakePrimitiveResults(outcome_configs, true);
     }
     else
     {
-      Log("Performed no-op reverse");
+      Log("Performed no-op reverse", 2);
       const std::vector<State, StateAlloc> outcome_configs(1, start);
       return MakePrimitiveResults(outcome_configs, true);
     }
@@ -677,10 +677,8 @@ private:
         }
       }
     }
-    arc_helpers::ConditionalPrint("Selected node "
-                                  + std::to_string(best_index)
-                                  + " as best neighbor (Qnear)",
-                                  1, debug_level_);
+    Log("Selected node " + std::to_string(best_index)
+        + " as best neighbor (Qnear)", 2);
     if (best_index >= 0)
     {
       return best_index;
@@ -871,9 +869,8 @@ private:
         result_states[idx].second = -1;
       }
     }
-    arc_helpers::ConditionalPrint("Forward simultation produced "
-                                  + std::to_string(result_states.size())
-                                  + " states", 3, debug_level_);
+    Log("Forward simultation produced " + std::to_string(result_states.size())
+        + " states", 1);
     // We only do further processing if a split happened
     if (result_states.size() > 1)
     {
@@ -923,10 +920,8 @@ private:
         }
         else if ((p_reached >= 0.0) && (p_reached <= 1.001))
         {
-          arc_helpers::ConditionalError("WARNING - P(reached) = "
-                                        + std::to_string(p_reached)
-                                        + " > 1.0 (probably numerical error)",
-                                        0, debug_level_);
+          Log("WARNING - P(reached) = " + std::to_string(p_reached)
+              + " > 1.0 (probably numerical error)", 3);
           p_reached = 1.0;
           current_state.SetEffectiveEdgePfeasibility(p_reached);
         }
@@ -934,11 +929,10 @@ private:
         {
           throw std::runtime_error("p_reached out of range [0, 1]");
         }
-        arc_helpers::ConditionalPrint(
-              "Computed effective edge P(feasibility) of "
-              + std::to_string(p_reached) + " for "
-              + std::to_string(planner_action_try_attempts)
-              + " try/retry attempts", 4, debug_level_);
+        Log("Computed effective edge P(feasibility) of "
+            + std::to_string(p_reached) + " for "
+            + std::to_string(planner_action_try_attempts)
+            + " try/retry attempts", 1);
       }
     }
     return result_states;
@@ -954,9 +948,9 @@ private:
     return task_completed_fn_(state);
   }
 
-  void Log(const std::string& message)
+  void Log(const std::string& message, const int32_t level) const
   {
-    logging_fn_(message);
+    logging_fn_(message, level);
   }
 
   void Draw(const visualization_msgs::MarkerArray& markers)
@@ -990,7 +984,7 @@ public:
       const std::function<uint32_t(const State&)>& state_readiness_fn,
       const std::function<bool(const State&)>& single_execution_completed_fn,
       const std::function<bool(const State&)>& task_completed_fn,
-      const std::function<void(const std::string&)>& logging_fn,
+      const std::function<void(const std::string&, const int32_t)>& logging_fn,
       const DisplayFn& drawing_fn,
       const int64_t prng_seed,
       const int32_t debug_level)
@@ -1046,7 +1040,8 @@ public:
                                      robot_ptr,
                                      sampling_ptr,
                                      simulator_ptr,
-                                     clustering_ptr);
+                                     clustering_ptr,
+                                     logging_fn_);
     const std::chrono::duration<double> planner_time_limit(time_limit);
     const std::function<int64_t(const TaskPlanningTree&,
                                 const TaskPlanningState&)> nearest_neighbor_fn
@@ -1108,6 +1103,9 @@ public:
                 const bool enable_cumulative_learning)
   {
     TaskPlanningPolicy policy = starting_policy;
+    // We don't know what logging function the policy has, but we want it to use
+    // ours for consistency
+    policy.RegisterLoggingFunction(logging_fn_);
     int64_t num_executions = 0;
     int64_t successful_executions = 0;
     bool task_execution_successful = false;
@@ -1146,14 +1144,14 @@ public:
       if (IsTaskCompleted(starting_state))
       {
         Log("Initial state for execution " + std::to_string(num_executions + 1)
-            + " meets task completion conditions");
+            + " meets task completion conditions", 3);
         task_execution_successful = true;
         policy_execution_successful = true;
       }
       else if (IsSingleExecutionCompleted(starting_state))
       {
         Log("Initial state for execution " + std::to_string(num_executions + 1)
-            + " meets execution completion conditions");
+            + " meets execution completion conditions", 3);
         policy_execution_successful = true;
       }
       std::vector<State, StateAlloc> execution_trace;
@@ -1181,29 +1179,29 @@ public:
           const uint32_t target_readiness = ComputeStateReadiness(action);
           if (start_readiness < target_readiness)
           {
-            Log("Less ready than parent, ExecuteBestAvailablePrimitive");
+            Log("Less ready than parent, ExecuteBestAvailablePrimitive", 2);
             action_results = ExecuteBestAvailablePrimitive(current_state);
           }
           else if (start_readiness > target_readiness)
           {
-            Log("More ready than our parent, not even trying to reverse");
+            Log("More ready than our parent, not even trying to reverse", 2);
             action_results.push_back(current_state);
           }
           else
           {
-            Log("Performed no-op reverse");
+            Log("Performed no-op reverse", 2);
             action_results.push_back(current_state);
           }
         }
         else
         {
-          Log("Moving forwards, ExecuteBestAvailablePrimitive");
+          Log("Moving forwards, ExecuteBestAvailablePrimitive", 2);
           action_results = ExecuteBestAvailablePrimitive(current_state);
         }
         // Identify the "ideal" outcome
         // Because we want purely speculative queries, we disable learning
         Log("Speculatively querying the policy to identify best outcome of "
-            + std::to_string(action_results.size()) + " outcomes...");
+            + std::to_string(action_results.size()) + " outcomes...", 1);
         const uint32_t policy_action_attempt_count
             = working_policy.GetPolicyActionAttemptCount();
         working_policy.SetPolicyActionAttemptCount(0u);
@@ -1231,7 +1229,7 @@ public:
           Log("Out of " + std::to_string(action_results.size())
               + " results selected best outcome "
               + std::to_string(best_outcome_idx) + " with expected cost "
-              + std::to_string(best_outcome_cost));
+              + std::to_string(best_outcome_cost), 2);
           const State& best_outcome = action_results[best_outcome_idx];
           execution_trace.push_back(best_outcome);
         }
@@ -1246,7 +1244,7 @@ public:
         {
           Log("Outcome state for execution " + std::to_string(num_executions)
               + " at policy step " + std::to_string(policy_exec_steps)
-              + " meets task completion conditions");
+              + " meets task completion conditions", 2);
           task_execution_successful = true;
           policy_execution_successful = true;
         }
@@ -1254,7 +1252,7 @@ public:
         {
           Log("Outcome state for execution " + std::to_string(num_executions)
               + " at policy step " + std::to_string(policy_exec_steps)
-              + " meets single execution completion conditions");
+              + " meets single execution completion conditions", 2);
           policy_execution_successful = true;
         }
       }
@@ -1264,20 +1262,20 @@ public:
         successful_executions++;
         Log("Finished policy execution " + std::to_string(num_executions)
             + " successfully, " + std::to_string(successful_executions)
-            + " successful so far");
+            + " successful so far", 2);
       }
       else
       {
         Log("Finished policy execution " + std::to_string(num_executions)
             + " unsuccessfully, " + std::to_string(successful_executions)
-            + " successful so far");
+            + " successful so far", 3);
       }
       // Check the final state to see  if we're done the task
       if (IsTaskCompleted(execution_trace.back()))
       {
         Log("Finished task execution in " + std::to_string(num_executions)
             + " policy executions, of which "
-            + std::to_string(successful_executions) + " were successful");
+            + std::to_string(successful_executions) + " were successful", 2);
         task_execution_successful = true;
       }
       // Update the policy (if enabled)
@@ -1290,7 +1288,7 @@ public:
     {
       Log("Failed to complete task execution in "
           + std::to_string(num_executions) + " policy executions, of which "
-          + std::to_string(successful_executions) + " were successful");
+          + std::to_string(successful_executions) + " were successful", 4);
     }
     const double policy_success
         = (double)successful_executions / (double)num_executions;
@@ -1330,7 +1328,7 @@ public:
             + "] as existing primitive ["
             + primitive->Name() + "] with ranking ["
             + std::to_string(primitive->Ranking())
-            + "] - This may be OK, but it can cause unexpected behavior");
+            + "] - This may be OK, but it can cause unexpected behavior", 3);
       }
     }
     primitives_.push_back(new_primitive);

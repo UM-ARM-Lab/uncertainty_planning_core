@@ -209,12 +209,9 @@ namespace execution_policy
                     if (current_edge_weight > 0.0)
                     {
                         const uint32_t estimated_attempt_count = ComputeEstimatedEdgeAttemptCount(updated_graph, current_out_edge, conformant_planning_threshold, edge_attempt_threshold);
-                        //std::cout << "Estimated attempt count at " << estimated_attempt_count << " out of " << edge_attempt_threshold << " possible attempts" << std::endl;
-                        //std::cout << "Current edge probability " << current_edge_weight << std::endl;
                         const double edge_probability_weight = (current_edge_weight >= std::numeric_limits<double>::epsilon()) ? 1.0 / current_edge_weight : INFINITY;
                         const double edge_attempt_weight = marginal_edge_weight * (double)estimated_attempt_count;
                         const double new_edge_weight = edge_probability_weight * edge_attempt_weight;
-                        //std::cout << "Assigned new edge weight " << new_edge_weight << " from 1/P(edge) " << edge_probability_weight << " and edge attempt weight " << edge_attempt_weight << std::endl;
                         current_out_edge.SetWeight(new_edge_weight);
                     }
                     // If the edge is zero probability (here for linkage only)
@@ -236,12 +233,9 @@ namespace execution_policy
                     if (current_edge_weight > 0.0)
                     {
                         const uint32_t estimated_attempt_count = ComputeEstimatedEdgeAttemptCount(updated_graph, current_in_edge, conformant_planning_threshold, edge_attempt_threshold);
-                        //std::cout << "Estimated attempt count at " << estimated_attempt_count << " out of " << edge_attempt_threshold << " possible attempts" << std::endl;
-                        //std::cout << "Current edge probability " << current_edge_weight << std::endl;
                         const double edge_probability_weight = (current_edge_weight >= std::numeric_limits<double>::epsilon()) ? 1.0 / current_edge_weight : INFINITY;
                         const double edge_attempt_weight = marginal_edge_weight * (double)estimated_attempt_count;
                         const double new_edge_weight = edge_probability_weight * edge_attempt_weight;
-                        //std::cout << "Assigned new edge weight " << new_edge_weight << " from 1/P(edge) " << edge_probability_weight << " and edge attempt weight " << edge_attempt_weight << std::endl;
                         current_in_edge.SetWeight(new_edge_weight);
                     }
                     // If the edge is zero probability (here for linkage only)
@@ -263,7 +257,6 @@ namespace execution_policy
                 throw std::invalid_argument("start_index out of range");
             }
             const std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> complete_search_results = arc_dijkstras::SimpleDijkstrasAlgorithm<UncertaintyPlanningState, std::allocator<UncertaintyPlanningState>>::PerformDijkstrasAlgorithm(initial_graph, start_index);
-            //std::cout << "Previous index map: " << PrettyPrint::PrettyPrint(search_results.second) << std::endl;
             for (size_t idx = 0; idx < complete_search_results.second.first.size(); idx++)
             {
                 const int64_t previous_index = complete_search_results.second.first[idx];
@@ -345,6 +338,8 @@ namespace execution_policy
         PolicyGraph policy_graph_;
         std::vector<double> index_cost_to_goal_map_;
         std::vector<int64_t> previous_index_map_;
+        // Logging function
+        std::function<void(const std::string&, const int32_t)> logging_fn_;
 
     public:
 
@@ -356,7 +351,7 @@ namespace execution_policy
             }
             if ((original + additional) <= original)
             {
-                std::cout << "@@@ WARNING - CLAMPING ON OVERFLOW OF UINT32_T @@@" << std::endl;
+                std::cerr << "@@@ WARNING - CLAMPING ON OVERFLOW OF UINT32_T @@@" << std::endl;
                 return std::numeric_limits<uint32_t>::max();
             }
             else
@@ -377,21 +372,27 @@ namespace execution_policy
             return std::make_pair(temp_policy, bytes_read);
         }
 
-        inline ExecutionPolicy(const UncertaintyPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold, const uint32_t policy_action_attempt_count) : initialized_(true), planner_tree_(planner_tree), goal_(goal), marginal_edge_weight_(marginal_edge_weight), conformant_planning_threshold_(conformant_planning_threshold), edge_attempt_threshold_(edge_attempt_threshold), policy_action_attempt_count_(policy_action_attempt_count)
+        inline ExecutionPolicy(const UncertaintyPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold, const uint32_t policy_action_attempt_count, const std::function<void(const std::string&, const int32_t)>& logging_fn) : initialized_(true), planner_tree_(planner_tree), goal_(goal), marginal_edge_weight_(marginal_edge_weight), conformant_planning_threshold_(conformant_planning_threshold), edge_attempt_threshold_(edge_attempt_threshold), policy_action_attempt_count_(policy_action_attempt_count), logging_fn_(logging_fn)
         {
             RebuildPolicyGraph();
         }
 
-        inline ExecutionPolicy() : initialized_(false) {}
+        inline ExecutionPolicy() : initialized_(false), logging_fn_([] (const std::string& msg, const int32_t level) { std::cout << "Log [" << level << "] : " << msg << std::endl; }) {}
+
+        inline void RegisterLoggingFunction(const std::function<void(const std::string&, const int32_t)>& logging_fn)
+        {
+            logging_fn_ = logging_fn;
+        }
+
+        inline void Log(const std::string& msg, const int32_t level) const
+        {
+            logging_fn_(msg, level);
+        }
 
         inline std::pair<PolicyGraph, std::pair<std::vector<int64_t>, std::vector<double>>> BuildPolicyGraphComponentsFromTree(const UncertaintyPlanningTree& planner_tree, const Configuration& goal, const double marginal_edge_weight, const double conformant_planning_threshold, const uint32_t edge_attempt_threshold) const
         {
             const PolicyGraph preliminary_policy_graph = ExecutionPolicyGraphBuilder::BuildPolicyGraphFromPlannerTree(planner_tree, UncertaintyPlanningState(goal));
-            //std::cout << "Preliminary graph " << preliminary_policy_graph.Print() << std::endl;
-            //std::cout << "Policy graph has " << preliminary_policy_graph.GetNodesImmutable().size() << " graph nodes" << std::endl;
             const PolicyGraph intermediate_policy_graph = ExecutionPolicyGraphBuilder::ComputeTrueEdgeWeights(preliminary_policy_graph, marginal_edge_weight, conformant_planning_threshold, edge_attempt_threshold);
-            //std::cout << "Intermediate graph " << intermediate_policy_graph.Print() << std::endl;
-            //std::cout << "Computed true edge weights for " << intermediate_policy_graph.GetNodesImmutable().size() << " policy graph nodes" << std::endl;
             return ExecutionPolicyGraphBuilder::ComputeNodeDistances(intermediate_policy_graph, (int64_t)intermediate_policy_graph.GetNodesImmutable().size() - 1);
         }
 
@@ -657,7 +658,7 @@ namespace execution_policy
             // since this node has no meaningful value in cases of goal regions
             else if (target_state_index == (int64_t)(previous_index_map_.size() - 1))
             {
-                std::cout << "Already at a goal state " << current_state_index << " - cannot proceed to virtual goal state - repeating transition " << result_state.GetTransitionId() << " to command to our expectation" << std::endl;
+                Log("Already at a goal state " + std::to_string(current_state_index) + " - cannot proceed to virtual goal state - repeating transition " + std::to_string(result_state.GetTransitionId()) + " to command to our expectation", 3);
                 return PolicyQueryResult<Configuration>(current_state_index, result_state.GetTransitionId(), result_state.GetExpectation(), result_state.GetExpectation(), expected_cost_to_goal, false);
             }
             else
@@ -667,17 +668,16 @@ namespace execution_policy
                 // Figure out the correct action to take
                 const uint64_t result_state_id = result_state.GetStateId();
                 const uint64_t target_state_id = target_state.GetStateId();
-                //std::cout << "==========\nGenerating next action to go from current state " << result_state_id << " to target state " << target_state_id << std::endl;
                 // If the "previous" node that we want to go to is a downstream state, we get the action of the downstream state
                 if (result_state_id < target_state_id)
                 {
-                    std::cout << "Returning forward action for current state " << current_state_index << ", transition ID " << target_state.GetTransitionId() << std::endl;
+                    Log("Returning forward action for current state " + std::to_string(current_state_index) + ", transition ID " + std::to_string(target_state.GetTransitionId()), 2);
                     return PolicyQueryResult<Configuration>(current_state_index, target_state.GetTransitionId(), target_state.GetCommand(), target_state.GetExpectation(), expected_cost_to_goal, false);
                 }
                 // If the "previous" node that we want to go to is an upstream state, we get the expectation of the upstream state
                 else if (target_state_id < result_state_id)
                 {
-                    std::cout << "Returning reverse action for current state " << current_state_index << ", transition ID " << result_state.GetReverseTransitionId() << std::endl;
+                    Log("Returning reverse action for current state " + std::to_string(current_state_index) + ", transition ID " + std::to_string(result_state.GetReverseTransitionId()), 2);
                     return PolicyQueryResult<Configuration>(current_state_index, result_state.GetReverseTransitionId(), target_state.GetExpectation(), target_state.GetExpectation(), expected_cost_to_goal, true);
                 }
                 else
@@ -754,7 +754,7 @@ namespace execution_policy
             }
             if (best_node_index >= 0)
             {
-                std::cout << "Starting configuration best matches node " << best_node_index << std::endl;
+                Log("Starting configuration best matches node " + std::to_string(best_node_index), 2);
                 return QueryNextAction(best_node_index);
             }
             else
@@ -765,7 +765,7 @@ namespace execution_policy
 
         inline PolicyQueryResult<Configuration> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
-            std::cout << "++++++++++\nQuerying the policy with performed transition ID " << performed_transition_id << "..." << std::endl;
+            Log("++++++++++\nQuerying the policy with performed transition ID " + std::to_string(performed_transition_id) + "...", 2);
             if (performed_transition_id <= 0)
             {
                 throw std::invalid_argument("performed_transition_id must be greater than zero");
@@ -795,8 +795,8 @@ namespace execution_policy
             int64_t previous_state_index = -1;
             if (previous_state_index_possibilities.size() > 1)
             {
-                arc_helpers::ConditionalPrint("Multiple previous state index possibilities " + PrettyPrint::PrettyPrint(previous_state_index_possibilities), 1, 1);
-                arc_helpers::ConditionalPrint("Multiple sets of possible result states " + PrettyPrint::PrettyPrint(expected_possibility_result_states), 1, 1);
+                Log("Multiple previous state index possibilities " + PrettyPrint::PrettyPrint(previous_state_index_possibilities), 1);
+                Log("Multiple sets of possible result states " + PrettyPrint::PrettyPrint(expected_possibility_result_states), 1);
                 // Prefer planned states
                 for (auto itr = previous_state_index_possibilities.begin(); itr != previous_state_index_possibilities.end(); ++itr)
                 {
@@ -807,21 +807,20 @@ namespace execution_policy
                         previous_state_index = previous_state_index_possibility;
                     }
                 }
-                arc_helpers::ConditionalPrint("Selected " + std::to_string(previous_state_index) + " as previous state index", 1, 1);
+                Log("Selected " + std::to_string(previous_state_index) + " as previous state index", 2);
             }
             else
             {
-                arc_helpers::ConditionalPrint("Single previous state index possibility " + PrettyPrint::PrettyPrint(previous_state_index_possibilities), 1, 1);
+                Log("Single previous state index possibility " + PrettyPrint::PrettyPrint(previous_state_index_possibilities), 1);
                 previous_state_index = previous_state_index_possibilities.begin()->first;
-                arc_helpers::ConditionalPrint("Selected " + std::to_string(previous_state_index) + " as previous state index", 1, 1);
+                Log("Selected " + std::to_string(previous_state_index) + " as previous state index", 2);
             }
             const std::vector<std::pair<int64_t, bool>>& expected_possible_result_states = expected_possibility_result_states[previous_state_index];
             if (expected_possible_result_states.empty())
             {
                 throw std::runtime_error("expected_possible_result_states cannot be empty");
             }
-            std::cout << "Result state could match " << expected_possible_result_states.size() << " states" << std::endl;
-            //std::cout << "Expected possible result states: " << PrettyPrint::PrettyPrint(expected_possible_result_states) << std::endl;
+            Log("Result state could match " + std::to_string(expected_possible_result_states.size()) + " states", 2);
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Check if the current config matches one or more of the expected result states
             std::vector<std::pair<int64_t, bool>> expected_result_state_matches;
@@ -837,11 +836,10 @@ namespace execution_policy
                 if (is_cluster_member)
                 {
                     const Configuration possible_match_state_expectation = possible_match_state.GetExpectation();
-                    std::cout << "Possible result state matches with expectation " << PrettyPrint::PrettyPrint(possible_match_state_expectation) << std::endl;
+                    Log("Possible result state matches with expectation " + PrettyPrint::PrettyPrint(possible_match_state_expectation), 1);
                     expected_result_state_matches.push_back(possible_match);
                 }
             }
-            //std::cout << "Result state matches: " << PrettyPrint::PrettyPrint(expected_result_state_matches) << std::endl;
             // If any child states matched
             if (expected_result_state_matches.size() > 0)
             {
@@ -855,7 +853,7 @@ namespace execution_policy
             // If none match, we add a new node
             else
             {
-                std::cout << "Result state matched none of the " << expected_possible_result_states.size() << " expected results, checking if it matches a child of the expected results" << std::endl;
+                Log("Result state matched none of the " + std::to_string(expected_possible_result_states.size()) + " expected results, checking if it matches a child of the expected results", 2);
                 std::vector<std::pair<int64_t, bool>> expected_possible_result_child_states;
                 // Get all 1st-tier child states of the expected result states
                 for (size_t idx = 0; idx < expected_possible_result_states.size(); idx++)
@@ -870,7 +868,7 @@ namespace execution_policy
                         expected_possible_result_child_states.push_back(std::make_pair(child_state_index, false));
                     }
                 }
-                std::cout << "Result state could match " << expected_possible_result_states.size() << " child states" << std::endl;
+                Log("Result state could match " + std::to_string(expected_possible_result_states.size()) + " child states", 1);
                 // Check if the current config matches one or more of the expected result states
                 std::vector<std::pair<int64_t, bool>> expected_result_child_state_matches;
                 for (size_t idx = 0; idx < expected_possible_result_child_states.size(); idx++)
@@ -885,13 +883,13 @@ namespace execution_policy
                     if (is_cluster_member)
                     {
                         const Configuration possible_match_state_expectation = possible_match_state.GetExpectation();
-                        std::cout << "Possible result child state matches with expectation " << PrettyPrint::PrettyPrint(possible_match_state_expectation) << std::endl;
+                        Log("Possible result child state matches with expectation " + PrettyPrint::PrettyPrint(possible_match_state_expectation), 1);
                         expected_result_child_state_matches.push_back(possible_match);
                     }
                 }
                 if (expected_result_child_state_matches.size() > 0)
                 {
-                    std::cout << "Result state matched " << expected_result_child_state_matches.size() << " of the " << expected_possible_result_child_states.size() << " expected results child states" << std::endl;
+                    Log("Result state matched " + std::to_string(expected_result_child_state_matches.size()) + " of the " + std::to_string(expected_possible_result_child_states.size()) + " expected results child states", 1);
                     // WE CANNOT LEARN ACROSS PARENT->CHILD BRANCHES
                     // Select the current best-distance result state as THE result state
                     std::pair<int64_t, bool> best_result_state(-1, false);
@@ -915,11 +913,11 @@ namespace execution_policy
                     const int64_t result_state_index = (best_result_state.second) ? planner_tree_[(size_t)best_result_state.first].GetParentIndex() : best_result_state.first;
                     if (best_result_state.second == false)
                     {
-                        std::cout << "Selected best match result child state (forward movement): " << result_state_index << std::endl;
+                        Log("Selected best match result child state (forward movement): " + std::to_string(result_state_index), 2);
                     }
                     else
                     {
-                        std::cout << "Selected best match result child state (reverse movement): " << result_state_index << std::endl;
+                        Log("Selected best match result child state (reverse movement): " + std::to_string(result_state_index), 2);
                     }
                     return QueryNextAction(result_state_index);
                 }
@@ -927,7 +925,7 @@ namespace execution_policy
                 {
                     // What if we made *all* runtime-added states point back to their parent planning-time-added root node?
                     // This loses any state->state linkage, but means that multi-state returns would be handled properly
-                    std::cout << "Result state matched none of the " << expected_possible_result_states.size() << " expected results or their " << expected_possible_result_child_states.size() << " child states, adding a new state" << std::endl;
+                    Log("Result state matched none of the " + std::to_string(expected_possible_result_states.size()) + " expected results or their " + std::to_string(expected_possible_result_child_states.size()) + " child states, adding a new state", 3);
                     // Compute the parameters of the new node
                     const uint64_t new_child_state_id = planner_tree_.size() + UINT64_C(1000000000);
                     // These will get updated in the recursive call (that's why the reached counts are zero)
@@ -985,7 +983,7 @@ namespace execution_policy
                             // This value doesn't really matter
                             attempt_count = planner_tree_[(size_t)previous_state_index].GetValueImmutable().GetReverseAttemptAndReachedCounts().first;
                             split_id = performed_transition_id; // Split IDs aren't actually used, other than > 0 meaning children of splits
-                            arc_helpers::ConditionalPrint("Adding a new reversed state linked to planned parent", 1, 1);
+                            Log("Adding a new reversed state linked to planned parent", 2);
                         }
                         // This is the old behavior - runtime-generated states are linked to each other, rahter than all pointing to the original parent state
                         else
@@ -997,7 +995,7 @@ namespace execution_policy
                             // This value doesn't really matter
                             attempt_count = planner_tree_[(size_t)previous_state_index].GetValueImmutable().GetReverseAttemptAndReachedCounts().first;
                             split_id = performed_transition_id; // Split IDs aren't actually used, other than > 0 meaning children of splits
-                            arc_helpers::ConditionalPrint("Adding a new reversed state linked to previous state", 1, 1);
+                            Log("Adding a new reversed state linked to previous state", 2);
                         }
                     }
                     // If not, then grab the expectation & split ID from one of the children
@@ -1014,7 +1012,7 @@ namespace execution_policy
                         command = child_state.GetCommand();
                         attempt_count = child_state.GetAttemptAndReachedCounts().first;
                         split_id = child_state.GetSplitId();
-                        arc_helpers::ConditionalPrint("Adding a new forward state linked to previous state", 1, 1);
+                        Log("Adding a new forward state linked to previous state", 2);
                     }
                     // Put together the new state
                     // For now, we're going to assume that action outcomes are nominally independent (this may be a terrible assumption, but we can change it later)
@@ -1027,7 +1025,6 @@ namespace execution_policy
                     // NOTE - by adding to the tree, we have broken any references already held
                     // so we can't use the previous_index_tree_state any more!
                     planner_tree_[(size_t)acting_parent_state_index].AddChildIndex(new_state_index);
-                    //std::cout << "Added new state to tree with index " << new_state_index << ", transition ID " << transition_id << ", reverse transition ID " << reverse_transition_id << ", and state ID " << new_child_state_id << std::endl;
                     // Update the policy graph with the new state
                     RebuildPolicyGraph();
                     // To get the action, we recursively call this function (this time there will be an exact matching child state!)
@@ -1042,7 +1039,7 @@ namespace execution_policy
             // This should be the most likely case, and requires the least editing of the tree
             if (expected_possible_result_states.size() == 1 && expected_result_state_matches.size() == 1)
             {
-                std::cout << "Result state matched single expected result" << std::endl;
+                Log("Result state matched single expected result", 2);
                 const std::pair<int64_t, bool>& result_match = expected_result_state_matches[0];
                 // Update the attempt/reached counts
                 // If the transition was a forward transition, we update the result state
@@ -1054,7 +1051,6 @@ namespace execution_policy
                     const uint32_t attempt_count = AddWithOverflowClamp(counts.first, policy_action_attempt_count_);
                     const uint32_t reached_count = AddWithOverflowClamp(counts.second, policy_action_attempt_count_);
                     result_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
-                    //std::cout << "Forward motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(result_state.GetAttemptAndReachedCounts()) << std::endl;
                     return result_match.first;
                 }
                 else
@@ -1065,13 +1061,12 @@ namespace execution_policy
                     const uint32_t attempt_count = AddWithOverflowClamp(counts.first, policy_action_attempt_count_);
                     const uint32_t reached_count = AddWithOverflowClamp(counts.second, policy_action_attempt_count_);
                     result_child_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
-                    //std::cout << "Reverse motion - updated counts from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(result_child_state.GetReverseAttemptAndReachedCounts()) << std::endl;
                     return result_child_tree_state.GetParentIndex();
                 }
             }
             else
             {
-                std::cout << "Result state matched " << expected_result_state_matches.size() << " of " << expected_possible_result_states.size() << " expected results" << std::endl;
+                Log("Result state matched " + std::to_string(expected_result_state_matches.size()) + " of " + std::to_string(expected_possible_result_states.size()) + " expected results", 2);
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Select the current best-distance result state as THE result state
                 std::pair<int64_t, bool> best_result_state(-1, false);
@@ -1095,11 +1090,11 @@ namespace execution_policy
                 const int64_t result_state_index = (best_result_state.second) ? planner_tree_[(size_t)best_result_state.first].GetParentIndex() : best_result_state.first;
                 if (best_result_state.second == false)
                 {
-                    std::cout << "Selected best match result state (forward movement): " << result_state_index << std::endl;
+                    Log("Selected best match result state (forward movement): " + std::to_string(result_state_index), 1);
                 }
                 else
                 {
-                    std::cout << "Selected best match result state (reverse movement): " << result_state_index << std::endl;
+                    Log("Selected best match result state (reverse movement): " + std::to_string(result_state_index), 1);
                 }
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Update the attempt/reached counts for all *POSSIBLE* result states
@@ -1123,7 +1118,6 @@ namespace execution_policy
                             const uint32_t reached_count = AddWithOverflowClamp(counts.second, 0u);
                             possible_result_state.UpdateAttemptAndReachedCounts(attempt_count, reached_count);
                         }
-                        //std::cout << "Updated forward counts for state " << possible_result_match.first << " from " << PrettyPrint::PrettyPrint(counts) << " to " << PrettyPrint::PrettyPrint(possible_result_state.GetAttemptAndReachedCounts()) << std::endl;
                     }
                     else
                     {
@@ -1140,7 +1134,6 @@ namespace execution_policy
                             const uint32_t reached_count = AddWithOverflowClamp(reverse_counts.second, 0u);
                             possible_result_state.UpdateReverseAttemptAndReachedCounts(attempt_count, reached_count);
                         }
-                        //std::cout << "Updated reverse counts for state " << possible_result_match.first << " from " << PrettyPrint::PrettyPrint(reverse_counts) << " to " << PrettyPrint::PrettyPrint(possible_result_state.GetReverseAttemptAndReachedCounts()) << std::endl;
                     }
                 }
                 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1153,7 +1146,7 @@ namespace execution_policy
 
         inline void UpdatePlannerTreeProbabilities()
         {
-            // Fuck it, let's update the entire tree. This is slower than it could be, but I don't want to miss anything
+            // Let's update the entire tree. This is slower than it could be, but I don't want to miss anything
             UpdateChildTransitionProbabilities(0);
             // Backtrack up the tree and update P(->goal) probabilities
             for (int64_t idx = ((int64_t)planner_tree_.size() - 1); idx >= 0; idx--)
@@ -1254,7 +1247,7 @@ namespace execution_policy
                 }
                 else if ((p_reached >= 0.0) && (p_reached <= 1.001))
                 {
-                    std::cout << "WARNING - P(reached) = " << p_reached << " > 1.0 (probably numerical error)" << std::endl;
+                    Log("WARNING - P(reached) = " + std::to_string(p_reached) + " > 1.0 (probably numerical error)", 3);
                     p_reached = 1.0;
                     current_state.SetEffectiveEdgePfeasibility(p_reached);
                 }
@@ -1287,7 +1280,6 @@ namespace execution_policy
                 const uint64_t& child_transition_id = planner_tree_[(size_t)current_child_index].GetValueImmutable().GetTransitionId();
                 effective_child_branches[child_transition_id].push_back(current_child_index);
             }
-            //std::cout << "Gathered effective child branches: " << PrettyPrint::PrettyPrint(effective_child_branches) << std::endl;
             // Now that we have the transitions separated out, compute the goal probability of each transition
             std::vector<double> effective_child_branch_probabilities;
             for (auto itr = effective_child_branches.begin(); itr != effective_child_branches.end(); ++itr)
@@ -1295,7 +1287,6 @@ namespace execution_policy
                 double transtion_goal_probability = ComputeTransitionGoalProbability(itr->second, edge_attempt_threshold_);
                 effective_child_branch_probabilities.push_back(transtion_goal_probability);
             }
-            //std::cout << "Computed effective child branch probabilities: " << PrettyPrint::PrettyPrint(effective_child_branch_probabilities) << std::endl;
             // Now, get the highest transtion probability
             if (effective_child_branch_probabilities.size() > 0)
             {
@@ -1305,18 +1296,17 @@ namespace execution_policy
                     throw std::runtime_error("max_transition_probability out of range [0, 1]");
                 }
                 // Update the current state
-                //std::cout << "Updating P(goal reached) to " << max_transition_probability << std::endl;
                 current_tree_state.GetValueMutable().SetGoalPfeasibility(max_transition_probability);
             }
             else
             {
                 if (current_tree_state.GetValueMutable().GetGoalPfeasibility() > 0.0)
                 {
-                    //std::cout << "Not updating P(goal reached) for an assumed goal state" << std::endl;
+                    // Don't update P(goal reached) for an assumed goal state
                 }
                 else
                 {
-                    //std::cout << "Not updating P(goal reached) for a state with no children" << std::endl;
+                    // Don't P(goal reached) for a state with no children
                 }
             }
         }
@@ -1368,14 +1358,11 @@ namespace execution_policy
                     {
                         // How many particles got to our state on this attempt?
                         const double p_reached = percent_active * current_child.GetRawEdgePfeasibility();
-                        //std::cout << "P(reached) target child " << p_reached << std::endl;
                         // Children with negative P(goal feasibility) cannot reach the goal directly, and thus get P(goal reached)=0 here
                         const double raw_child_goal_Pfeasibility = current_child.GetGoalPfeasibility();
                         const double child_goal_Pfeasibility = (raw_child_goal_Pfeasibility > 0.0) ? raw_child_goal_Pfeasibility : 0.0;
                         const double p_we_reached = p_reached * child_goal_Pfeasibility;
-                        //std::cout << "P(we reached goal) in this attempt " << p_we_reached << std::endl;
                         p_we_reached_goal += p_we_reached;
-                        //std::cout << "P(we reached goal) so far " << p_we_reached_goal << std::endl;
                         // Update the percent of particles that are still usefully active
                         // and the probability that the goal was reached via a different child
                         double updated_percent_active = 0.0;
@@ -1411,7 +1398,7 @@ namespace execution_policy
                     {
                         if ((p_reached_goal >= 0.0) && (p_reached_goal <= 1.001))
                         {
-                            std::cout << "WARNING - P(reached goal) = " << p_reached_goal << " > 1.0 (probably numerical error)" << std::endl;
+                            Log("WARNING - P(reached goal) = " + std::to_string(p_reached_goal) + " > 1.0 (probably numerical error)", 3);
                             p_reached_goal = 1.0;
                         }
                         else
@@ -1437,7 +1424,7 @@ namespace execution_policy
                 }
                 else if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.001))
                 {
-                    std::cout << "WARNING - total P(goal reached) = " << total_p_goal_reached << " > 1.0 (probably numerical error)" << std::endl;
+                    Log("WARNING - total P(goal reached) = " + std::to_string(total_p_goal_reached) + " > 1.0 (probably numerical error)", 3);
                     return 1.0;
                 }
                 else

@@ -434,6 +434,7 @@ namespace uncertainty_planning_core
                             const SE2ClusteringPtr& clustering,
                             const SE2Config& start,
                             const SE2Config& goal,
+                            const std::function<void(const std::string&, const int32_t)>& logging_fn,
                             const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE2Policy, std::map<std::string, double>>
@@ -445,6 +446,7 @@ namespace uncertainty_planning_core
                        const SE2Config& start,
                        const SE2Config& goal,
                        const double policy_marker_size,
+                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE2Policy, std::map<std::string, double>>
@@ -456,6 +458,7 @@ namespace uncertainty_planning_core
                        const SE2Config& start,
                        const SE2UserGoalStateCheckFn& user_goal_check_fn,
                        const double policy_marker_size,
+                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -469,6 +472,7 @@ namespace uncertainty_planning_core
                                  const SE2Config& start,
                                  const SE2Config& goal,
                                  const double policy_marker_size,
+                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -487,6 +491,7 @@ namespace uncertainty_planning_core
                                                                                            const SE2Config&,
                                                                                            const bool,
                                                                                            const bool)>& robot_execution_fn,
+                                const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -500,6 +505,7 @@ namespace uncertainty_planning_core
                                  const SE2Config& start,
                                  const SE2UserGoalConfigCheckFn& user_goal_check_fn,
                                  const double policy_marker_size,
+                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE2Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -518,6 +524,7 @@ namespace uncertainty_planning_core
                                                                                            const SE2Config&,
                                                                                            const bool,
                                                                                            const bool)>& robot_execution_fn,
+                                const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     // SE3 Interface
@@ -530,6 +537,7 @@ namespace uncertainty_planning_core
                             const SE3ClusteringPtr& clustering,
                             const SE3Config& start,
                             const SE3Config& goal,
+                            const std::function<void(const std::string&, const int32_t)>& logging_fn,
                             const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE3Policy, std::map<std::string, double>>
@@ -541,6 +549,7 @@ namespace uncertainty_planning_core
                        const SE3Config& start,
                        const SE3Config& goal,
                        const double policy_marker_size,
+                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE3Policy, std::map<std::string, double>>
@@ -552,6 +561,7 @@ namespace uncertainty_planning_core
                        const SE3Config& start,
                        const SE3UserGoalStateCheckFn& user_goal_check_fn,
                        const double policy_marker_size,
+                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -565,6 +575,7 @@ namespace uncertainty_planning_core
                                  const SE3Config& start,
                                  const SE3Config& goal,
                                  const double policy_marker_size,
+                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -583,6 +594,7 @@ namespace uncertainty_planning_core
                                                                                            const SE3Config&,
                                                                                            const bool,
                                                                                            const bool)>& robot_execution_fn,
+                                const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -596,6 +608,7 @@ namespace uncertainty_planning_core
                                  const SE3Config& start,
                                  const SE3UserGoalConfigCheckFn& user_goal_check_fn,
                                  const double policy_marker_size,
+                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<SE3Policy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -614,6 +627,7 @@ namespace uncertainty_planning_core
                                                                                            const SE3Config&,
                                                                                            const bool,
                                                                                            const bool)>& robot_execution_fn,
+                                const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                 const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     // Linked Interface
@@ -626,6 +640,7 @@ namespace uncertainty_planning_core
                                const LinkedClusteringPtr& clustering,
                                const LinkedConfig& start,
                                const LinkedConfig& goal,
+                               const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<LinkedPolicy, std::map<std::string, double>>
@@ -637,6 +652,7 @@ namespace uncertainty_planning_core
                           const LinkedConfig& start,
                           const LinkedConfig& goal,
                           const double policy_marker_size,
+                          const std::function<void(const std::string&, const int32_t)>& logging_fn,
                           const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<LinkedPolicy, std::map<std::string, double>>
@@ -648,6 +664,7 @@ namespace uncertainty_planning_core
                           const LinkedConfig& start,
                           const LinkedUserGoalStateCheckFn& user_goal_check_fn,
                           const double policy_marker_size,
+                          const std::function<void(const std::string&, const int32_t)>& logging_fn,
                           const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -661,6 +678,7 @@ namespace uncertainty_planning_core
                                     const LinkedConfig& start,
                                     const LinkedConfig& goal,
                                     const double policy_marker_size,
+                                    const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                     const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -679,6 +697,7 @@ namespace uncertainty_planning_core
                                                                                                     const LinkedConfig&,
                                                                                                     const bool,
                                                                                                     const bool)>& robot_execution_fn,
+                                   const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -692,6 +711,7 @@ namespace uncertainty_planning_core
                                     const LinkedConfig& start,
                                     const LinkedUserGoalConfigCheckFn& user_goal_check_fn,
                                     const double policy_marker_size,
+                                    const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                     const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<LinkedPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -710,6 +730,7 @@ namespace uncertainty_planning_core
                                                                                                     const LinkedConfig&,
                                                                                                     const bool,
                                                                                                     const bool)>& robot_execution_fn,
+                                   const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     // VectorXd Interface
@@ -722,6 +743,7 @@ namespace uncertainty_planning_core
                                  const VectorXdClusteringPtr& clustering,
                                  const VectorXdConfig& start,
                                  const VectorXdConfig& goal,
+                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<VectorXdPolicy, std::map<std::string, double>>
@@ -733,6 +755,7 @@ namespace uncertainty_planning_core
                             const VectorXdConfig& start,
                             const VectorXdConfig& goal,
                             const double policy_marker_size,
+                            const std::function<void(const std::string&, const int32_t)>& logging_fn,
                             const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<VectorXdPolicy, std::map<std::string, double>>
@@ -744,6 +767,7 @@ namespace uncertainty_planning_core
                             const VectorXdConfig& start,
                             const VectorXdUserGoalStateCheckFn& user_goal_check_fn,
                             const double policy_marker_size,
+                            const std::function<void(const std::string&, const int32_t)>& logging_fn,
                             const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<VectorXdPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -757,6 +781,7 @@ namespace uncertainty_planning_core
                                       const VectorXdConfig& start,
                                       const VectorXdConfig& goal,
                                       const double policy_marker_size,
+                                      const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                       const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<VectorXdPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -775,6 +800,7 @@ namespace uncertainty_planning_core
                                                                                                           const VectorXdConfig&,
                                                                                                           const bool,
                                                                                                           const bool)>& robot_execution_fn,
+                                     const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                      const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<VectorXdPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -788,6 +814,7 @@ namespace uncertainty_planning_core
                                       const VectorXdConfig& start,
                                       const VectorXdUserGoalConfigCheckFn& user_goal_check_fn,
                                       const double policy_marker_size,
+                                      const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                       const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     std::pair<VectorXdPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>>
@@ -806,6 +833,7 @@ namespace uncertainty_planning_core
                                                                                                           const VectorXdConfig&,
                                                                                                           const bool,
                                                                                                           const bool)>& robot_execution_fn,
+                                     const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                      const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn);
 
     inline std::ostream& operator<<(std::ostream& strm, const PLANNING_AND_EXECUTION_OPTIONS& options)

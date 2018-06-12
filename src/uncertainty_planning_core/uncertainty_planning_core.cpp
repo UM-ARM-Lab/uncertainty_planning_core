@@ -97,9 +97,10 @@ uncertainty_planning_core::DemonstrateSE2Simulator(const PLANNING_AND_EXECUTION_
                                                    const SE2ClusteringPtr& clustering,
                                                    const SE2Config& start,
                                                    const SE2Config& goal,
+                                                   const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const simple_simulator_interface::ForwardSimulationStepTrace<SE2Config, SE2ConfigAlloc> trace = planning_space.DemonstrateSimulator(start, goal, display_fn);
     return simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
 }
@@ -113,9 +114,10 @@ uncertainty_planning_core::PlanSE2Uncertainty(const PLANNING_AND_EXECUTION_OPTIO
                                               const SE2Config& start,
                                               const SE2Config& goal,
                                               const double policy_marker_size,
+                                              const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                               const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalState(start, goal, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -129,9 +131,10 @@ uncertainty_planning_core::PlanSE2Uncertainty(const PLANNING_AND_EXECUTION_OPTIO
                                               const SE2Config& start,
                                               const SE2UserGoalStateCheckFn& user_goal_check_fn,
                                               const double policy_marker_size,
+                                              const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                               const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalSampling(start, options.goal_bias, user_goal_check_fn, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -147,10 +150,11 @@ uncertainty_planning_core::SimulateSE2UncertaintyPolicy(const PLANNING_AND_EXECU
                                                         const SE2Config& start,
                                                         const SE2Config& goal,
                                                         const double policy_marker_size,
+                                                        const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                         const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE2Policy working_policy = policy;
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -171,10 +175,11 @@ uncertainty_planning_core::ExecuteSE2UncertaintyPolicy(const PLANNING_AND_EXECUT
                                                                                                                   const SE2Config&,
                                                                                                                   const bool,
                                                                                                                   const bool)>& robot_execution_fn,
+                                                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE2Policy working_policy = policy;
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -190,10 +195,11 @@ uncertainty_planning_core::SimulateSE2UncertaintyPolicy(const PLANNING_AND_EXECU
                                                         const SE2Config& start,
                                                         const SE2UserGoalConfigCheckFn& user_goal_check_fn,
                                                         const double policy_marker_size,
+                                                        const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                         const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE2Policy working_policy = policy;
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -214,10 +220,11 @@ uncertainty_planning_core::ExecuteSE2UncertaintyPolicy(const PLANNING_AND_EXECUT
                                                                                                                   const SE2Config&,
                                                                                                                   const bool,
                                                                                                                   const bool)>& robot_execution_fn,
+                                                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE2Policy working_policy = policy;
-    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE2PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -232,9 +239,10 @@ uncertainty_planning_core::DemonstrateSE3Simulator(const PLANNING_AND_EXECUTION_
                                                    const SE3ClusteringPtr& clustering,
                                                    const SE3Config& start,
                                                    const SE3Config& goal,
+                                                   const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const simple_simulator_interface::ForwardSimulationStepTrace<SE3Config, SE3ConfigAlloc> trace = planning_space.DemonstrateSimulator(start, goal, display_fn);
     return simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
 }
@@ -248,9 +256,10 @@ uncertainty_planning_core::PlanSE3Uncertainty(const PLANNING_AND_EXECUTION_OPTIO
                                               const SE3Config& start,
                                               const SE3Config& goal,
                                               const double policy_marker_size,
+                                              const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                               const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalState(start, goal, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -264,9 +273,10 @@ uncertainty_planning_core::PlanSE3Uncertainty(const PLANNING_AND_EXECUTION_OPTIO
                                               const SE3Config& start,
                                               const SE3UserGoalStateCheckFn& user_goal_check_fn,
                                               const double policy_marker_size,
+                                              const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                               const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalSampling(start, options.goal_bias, user_goal_check_fn, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -282,10 +292,11 @@ uncertainty_planning_core::SimulateSE3UncertaintyPolicy(const PLANNING_AND_EXECU
                                                         const SE3Config& start,
                                                         const SE3Config& goal,
                                                         const double policy_marker_size,
+                                                        const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                         const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE3Policy working_policy = policy;
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -306,10 +317,11 @@ uncertainty_planning_core::ExecuteSE3UncertaintyPolicy(const PLANNING_AND_EXECUT
                                                                                                                   const SE3Config&,
                                                                                                                   const bool,
                                                                                                                   const bool)>& robot_execution_fn,
+                                                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE3Policy working_policy = policy;
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -325,10 +337,11 @@ uncertainty_planning_core::SimulateSE3UncertaintyPolicy(const PLANNING_AND_EXECU
                                                         const SE3Config& start,
                                                         const SE3UserGoalConfigCheckFn& user_goal_check_fn,
                                                         const double policy_marker_size,
+                                                        const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                         const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE3Policy working_policy = policy;
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -349,10 +362,11 @@ uncertainty_planning_core::ExecuteSE3UncertaintyPolicy(const PLANNING_AND_EXECUT
                                                                                                                   const SE3Config&,
                                                                                                                   const bool,
                                                                                                                   const bool)>& robot_execution_fn,
+                                                       const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                        const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     SE3Policy working_policy = policy;
-    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    SE3PlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -367,9 +381,10 @@ uncertainty_planning_core::DemonstrateLinkedSimulator(const PLANNING_AND_EXECUTI
                                                       const LinkedClusteringPtr& clustering,
                                                       const LinkedConfig& start,
                                                       const LinkedConfig& goal,
+                                                      const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                       const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const simple_simulator_interface::ForwardSimulationStepTrace<LinkedConfig, LinkedConfigAlloc> trace = planning_space.DemonstrateSimulator(start, goal, display_fn);
     return simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
 }
@@ -383,9 +398,10 @@ uncertainty_planning_core::PlanLinkedUncertainty(const PLANNING_AND_EXECUTION_OP
                                                  const LinkedConfig& start,
                                                  const LinkedConfig& goal,
                                                  const double policy_marker_size,
+                                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalState(start, goal, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -399,9 +415,10 @@ uncertainty_planning_core::PlanLinkedUncertainty(const PLANNING_AND_EXECUTION_OP
                                                  const LinkedConfig& start,
                                                  const LinkedUserGoalStateCheckFn& user_goal_check_fn,
                                                  const double policy_marker_size,
+                                                 const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                  const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalSampling(start, options.goal_bias, user_goal_check_fn, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -417,10 +434,11 @@ uncertainty_planning_core::SimulateLinkedUncertaintyPolicy(const PLANNING_AND_EX
                                                            const LinkedConfig& start,
                                                            const LinkedConfig& goal,
                                                            const double policy_marker_size,
+                                                           const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                            const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     LinkedPolicy working_policy = policy;
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -441,10 +459,11 @@ uncertainty_planning_core::ExecuteLinkedUncertaintyPolicy(const PLANNING_AND_EXE
                                                                                                                            const LinkedConfig&,
                                                                                                                            const bool,
                                                                                                                            const bool)>& robot_execution_fn,
+                                                          const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                           const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     LinkedPolicy working_policy = policy;
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -460,10 +479,11 @@ uncertainty_planning_core::SimulateLinkedUncertaintyPolicy(const PLANNING_AND_EX
                                                            const LinkedConfig& start,
                                                            const LinkedUserGoalConfigCheckFn& user_goal_check_fn,
                                                            const double policy_marker_size,
+                                                           const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                            const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     LinkedPolicy working_policy = policy;
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -484,10 +504,11 @@ uncertainty_planning_core::ExecuteLinkedUncertaintyPolicy(const PLANNING_AND_EXE
                                                                                                                            const LinkedConfig&,
                                                                                                                            const bool,
                                                                                                                            const bool)>& robot_execution_fn,
+                                                          const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                           const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     LinkedPolicy working_policy = policy;
-    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    LinkedPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -502,9 +523,10 @@ uncertainty_planning_core::DemonstrateVectorXdSimulator(const PLANNING_AND_EXECU
                                                         const VectorXdClusteringPtr& clustering,
                                                         const VectorXdConfig& start,
                                                         const VectorXdConfig& goal,
+                                                        const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                         const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const simple_simulator_interface::ForwardSimulationStepTrace<VectorXdConfig, VectorXdConfigAlloc> trace = planning_space.DemonstrateSimulator(start, goal, display_fn);
     return simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
 }
@@ -518,9 +540,10 @@ uncertainty_planning_core::PlanVectorXdUncertainty(const PLANNING_AND_EXECUTION_
                                                    const VectorXdConfig& start,
                                                    const VectorXdConfig& goal,
                                                    const double policy_marker_size,
+                                                   const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalState(start, goal, options.goal_bias, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -534,9 +557,10 @@ uncertainty_planning_core::PlanVectorXdUncertainty(const PLANNING_AND_EXECUTION_
                                                    const VectorXdConfig& start,
                                                    const VectorXdUserGoalStateCheckFn& user_goal_check_fn,
                                                    const double policy_marker_size,
+                                                   const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                    const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     const std::chrono::duration<double> planner_time_limit(options.planner_time_limit);
     return planning_space.PlanGoalSampling(start, options.goal_bias, user_goal_check_fn, planner_time_limit, options.edge_attempt_count, options.policy_action_attempt_count, options.use_contact, options.use_reverse, options.use_spur_actions, policy_marker_size, options.p_goal_reached_termination_threshold, display_fn);
 }
@@ -552,10 +576,11 @@ uncertainty_planning_core::SimulateVectorXdUncertaintyPolicy(const PLANNING_AND_
                                                              const VectorXdConfig& start,
                                                              const VectorXdConfig& goal,
                                                              const double policy_marker_size,
+                                                             const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                              const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     VectorXdPolicy working_policy = policy;
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -576,10 +601,11 @@ uncertainty_planning_core::ExecuteVectorXdUncertaintyPolicy(const PLANNING_AND_E
                                                                                                                                  const VectorXdConfig&,
                                                                                                                                  const bool,
                                                                                                                                  const bool)>& robot_execution_fn,
+                                                            const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                             const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     VectorXdPolicy working_policy = policy;
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, goal, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }
@@ -595,10 +621,11 @@ uncertainty_planning_core::SimulateVectorXdUncertaintyPolicy(const PLANNING_AND_
                                                              const VectorXdConfig& start,
                                                              const VectorXdUserGoalConfigCheckFn& user_goal_check_fn,
                                                              const double policy_marker_size,
+                                                             const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                              const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     VectorXdPolicy working_policy = policy;
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.SimulateExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, options.num_policy_simulations, options.max_exec_actions, display_fn, policy_marker_size, true, 0.001);
 }
@@ -619,10 +646,11 @@ uncertainty_planning_core::ExecuteVectorXdUncertaintyPolicy(const PLANNING_AND_E
                                                                                                                                  const VectorXdConfig&,
                                                                                                                                  const bool,
                                                                                                                                  const bool)>& robot_execution_fn,
+                                                            const std::function<void(const std::string&, const int32_t)>& logging_fn,
                                                             const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
 {
     VectorXdPolicy working_policy = policy;
-    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering);
+    VectorXdPlanningSpace planning_space(options.debug_level, options.num_particles, options.step_size, options.goal_distance_threshold, options.goal_probability_threshold, options.feasibility_alpha, options.variance_alpha, options.connect_after_first_solution, robot, sampler, simulator, clustering, logging_fn);
     working_policy.SetPolicyActionAttemptCount(options.policy_action_attempt_count);
     return planning_space.ExecuteExectionPolicy(working_policy, link_runtime_states_to_planned_parent, start, user_goal_check_fn, robot_execution_fn, options.num_policy_executions, options.max_policy_exec_time, display_fn, policy_marker_size, false, 0.001);
 }

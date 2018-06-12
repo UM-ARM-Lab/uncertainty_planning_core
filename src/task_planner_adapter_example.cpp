@@ -407,20 +407,6 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "task_planner_adapter_test");
   ros::NodeHandle nh;
   ros::NodeHandle nhp;
-  // Get seed for PRNG
-  int32_t prng_seed_init
-      = (int32_t)nhp.param(std::string("prng_seed_init"), -1);
-  if (prng_seed_init == -1)
-  {
-    prng_seed_init = (int32_t)std::chrono::high_resolution_clock::now()
-                     .time_since_epoch().count();
-    arc_helpers::ConditionalPrint(
-          "No PRNG seed provided, initializing from clock to ["
-          + std::to_string(prng_seed_init) + "]", 0, 0);
-  }
-  const int64_t prng_seed
-      = static_cast<int64_t>(
-          arc_helpers::SplitMix64PRNG((uint64_t)prng_seed_init)());
   // Get debug level
   const int32_t debug_level = nhp.param(std::string("debug_level"), 1);
   // Make display function
@@ -433,11 +419,24 @@ int main(int argc, char** argv)
     display_debug_publisher.publish(markers);
   };
   // Make logging function
-  std::function<void(const std::string&)> logging_fn
-      = [&] (const std::string& msg)
+  std::function<void(const std::string&, const int32_t)> logging_fn
+      = [&] (const std::string& msg, const int32_t level)
   {
-    ROS_INFO_NAMED(ros::this_node::getName(), "%s", msg.c_str());
+    ROS_INFO_NAMED(ros::this_node::getName(), "[%d] %s", level, msg.c_str());
   };
+  // Get seed for PRNG
+  int32_t prng_seed_init
+      = (int32_t)nhp.param(std::string("prng_seed_init"), -1);
+  if (prng_seed_init == -1)
+  {
+    prng_seed_init = (int32_t)std::chrono::high_resolution_clock::now()
+                     .time_since_epoch().count();
+    logging_fn("No PRNG seed provided, initializing from clock to ["
+               + std::to_string(prng_seed_init) + "]", 1);
+  }
+  const int64_t prng_seed
+      = static_cast<int64_t>(
+          arc_helpers::SplitMix64PRNG((uint64_t)prng_seed_init)());
   // Make the planner interface
   const std::function<uint32_t(const PutInBoxState&)> state_readiness_fn
       = [] (const PutInBoxState& state)
@@ -479,7 +478,7 @@ int main(int argc, char** argv)
   auto plan_result
       = planner.PlanPolicy(PutInBoxState(), 10.0, 1.0, 50u, 50u);
   logging_fn("Task planning statistics: "
-             + PrettyPrint::PrettyPrint(plan_result.second));
+             + PrettyPrint::PrettyPrint(plan_result.second), 1);
   int32_t objects_to_put_away = 5;
   const std::function<PutInBoxState(void)> single_execution_initialization_fn
       = [&] (void)
@@ -493,6 +492,6 @@ int main(int argc, char** argv)
                               single_execution_initialization_fn,
                               100u, 100u, false);
   logging_fn("Task execution statistics: "
-             + PrettyPrint::PrettyPrint(exec_result.second));
+             + PrettyPrint::PrettyPrint(exec_result.second), 1);
   return 0;
 }

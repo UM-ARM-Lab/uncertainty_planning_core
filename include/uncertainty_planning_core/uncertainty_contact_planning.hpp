@@ -72,6 +72,7 @@ namespace uncertainty_contact_planning
         double elapsed_clustering_time_;
         double elapsed_simulation_time_;
         UncertaintyPlanningTree nearest_neighbors_storage_;
+        std::function<void(const std::string&, const int32_t)> logging_fn_;
 
         inline static size_t GetNumOMPThreads()
         {
@@ -123,6 +124,11 @@ namespace uncertainty_contact_planning
             }
         }
 
+        void Log(const std::string& message, const int32_t level) const
+        {
+          logging_fn_(message, level);
+        }
+
     public:
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -141,8 +147,9 @@ namespace uncertainty_contact_planning
                                         const std::shared_ptr<Robot>& robot,
                                         const std::shared_ptr<simple_sampler_interface::SamplerInterface<Configuration, PRNG>>& sampler_ptr,
                                         const std::shared_ptr<simple_simulator_interface::SimulatorInterface<Configuration, PRNG, ConfigAlloc>>& simulator_ptr,
-                                        const std::shared_ptr<simple_outcome_clustering_interface::OutcomeClusteringInterface<Configuration, ConfigAlloc>>& clustering_ptr)
-                                         : robot_ptr_(robot), sampler_ptr_(sampler_ptr), simulator_ptr_(simulator_ptr), clustering_ptr_(clustering_ptr)
+                                        const std::shared_ptr<simple_outcome_clustering_interface::OutcomeClusteringInterface<Configuration, ConfigAlloc>>& clustering_ptr,
+                                        const std::function<void(const std::string&, const int32_t)>& logging_fn)
+                                         : robot_ptr_(robot), sampler_ptr_(sampler_ptr), simulator_ptr_(simulator_ptr), clustering_ptr_(clustering_ptr), logging_fn_(logging_fn)
         {
             debug_level_ = debug_level;
             num_particles_ = num_particles;
@@ -271,7 +278,7 @@ namespace uncertainty_contact_planning
         static inline int64_t GetNearestNeighbor(const UncertaintyPlanningTree& planner_nodes,
                                                  const UncertaintyPlanningState& random_state,
                                                  const std::function<double(const UncertaintyPlanningState&, const UncertaintyPlanningState&)>& state_distance_fn,
-                                                 const int32_t debug_level)
+                                                 const std::function<void(const std::string&, const int32_t)>& logging_fn)
         {
             // Get the nearest neighbor (ignoring the disabled states)
             std::vector<std::pair<int64_t, double>> per_thread_bests(GetNumOMPThreads(), std::pair<int64_t, double>(-1, INFINITY));
@@ -306,7 +313,7 @@ namespace uncertainty_contact_planning
                     best_distance = thread_minimum_distance;
                 }
             }
-            arc_helpers::ConditionalPrint("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear)", 3, debug_level);
+            logging_fn("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear)", 3);
             return best_index;
         }
 
@@ -337,12 +344,12 @@ namespace uncertainty_contact_planning
             {
                 if (goal_bias_distribution(simulator_ptr_->GetRandomGenerator()) > goal_bias)
                 {
-                    arc_helpers::ConditionalPrint("Sampled state", 2, debug_level_);
+                    Log("Sampled state", 1);
                     return SampleRandomTargetState();
                 }
                 else
                 {
-                    arc_helpers::ConditionalPrint("Sampled goal state", 2, debug_level_);
+                    Log("Sampled goal state", 1);
                     return SampleRandomTargetGoalState();
                 }
             };
@@ -445,7 +452,7 @@ namespace uncertainty_contact_planning
             {
                 return StateDistance(state1, state2);
             };
-            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, debug_level_); };
+            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, logging_fn_); };
             UncertaintyPlanningState start_state(start);
             return PlanGoalSampling(start_state,
                                     goal_bias,
@@ -507,7 +514,7 @@ namespace uncertainty_contact_planning
             {
                 return StateDistance(state1, state2);
             };
-            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, debug_level_); };
+            std::function<int64_t(const UncertaintyPlanningTree&, const UncertaintyPlanningState&)> nearest_neighbor_fn = [&] (const UncertaintyPlanningTree& tree, const UncertaintyPlanningState& new_state) { return GetNearestNeighbor(tree, new_state, state_distance_fn, logging_fn_); };
             std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalState(goal_candidate, goal_state, edge_attempt_count, allow_contacts); };
             std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree, new_goal_state_idx, edge_attempt_count, start_time); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
@@ -515,12 +522,12 @@ namespace uncertainty_contact_planning
             {
                 if (goal_bias_distribution(simulator_ptr_->GetRandomGenerator()) > goal_bias)
                 {
-                    arc_helpers::ConditionalPrint("Sampled state", 2, debug_level_);
+                    Log("Sampled state", 1);
                     return SampleRandomTargetState();
                 }
                 else
                 {
-                    arc_helpers::ConditionalPrint("Sampled goal state", 2, debug_level_);
+                    Log("Sampled goal state", 1);
                     return goal_state;
                 }
             };
@@ -548,7 +555,7 @@ namespace uncertainty_contact_planning
         {
             // Make sure we got somewhere
             std::map<std::string, double> planning_statistics = planning_results.second;
-            std::cout << "Planner terminated with goal reached probability: " << total_goal_reached_probability_ << std::endl;
+            Log("Planner terminated with goal reached probability: " + std::to_string(total_goal_reached_probability_), 2);
             planning_statistics["P(goal reached)"] = total_goal_reached_probability_;
             planning_statistics["Time to first solution"] = time_to_first_solution_;
             const std::map<std::string, double> simulator_resolve_statistics = simulator_ptr_->GetStatistics();
@@ -638,7 +645,7 @@ namespace uncertainty_contact_planning
          */
         inline UncertaintyPlanningTree PostProcessTree(const UncertaintyPlanningTree& planner_tree) const
         {
-            std::cout << "Postprocessing planner tree in preparation for policy extraction..." << std::endl;
+            Log("Postprocessing planner tree in preparation for policy extraction...", 1);
             std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             // Let's do some post-processing to the planner tree - we don't want to mess with the original tree, so we copy it
             UncertaintyPlanningTree postprocessed_planner_tree = planner_tree;
@@ -695,7 +702,7 @@ namespace uncertainty_contact_planning
             }
             std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> postprocessing_time(end_time - start_time);
-            std::cout << "...postprocessing complete, took " << postprocessing_time.count() << " seconds" << std::endl;
+            Log("...postprocessing complete, took " + std::to_string(postprocessing_time.count()) + " seconds", 1);
             return postprocessed_planner_tree;
         }
 
@@ -710,7 +717,7 @@ namespace uncertainty_contact_planning
             {
                 throw std::runtime_error("planner_tree has invalid linkage");
             }
-            std::cout << "Pruning planner tree in preparation for policy extraction..." << std::endl;
+            Log("Pruning planner tree in preparation for policy extraction...", 1);
             std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
             // Let's do some post-processing to the planner tree - we don't want to mess with the original tree, so we copy it
             UncertaintyPlanningTree intermediate_planner_tree = planner_tree;
@@ -767,7 +774,7 @@ namespace uncertainty_contact_planning
             }
             std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> pruning_time(end_time - start_time);
-            std::cout << "...pruning complete, pruned to " << pruned_planner_tree.size() << " states, took " << pruning_time.count() << " seconds" << std::endl;
+            Log("...pruning complete, pruned to " + std::to_string(pruned_planner_tree.size()) + " states, took " + std::to_string(pruning_time.count()) + " seconds", 1);
             return pruned_planner_tree;
         }
 
@@ -777,7 +784,7 @@ namespace uncertainty_contact_planning
         inline UncertaintyPlanningPolicy ExtractPolicy(const UncertaintyPlanningTree& planner_tree, const Configuration& goal, const uint32_t planner_action_try_attempts, const uint32_t policy_action_attempt_count) const
         {
             const double marginal_edge_weight = 0.05;
-            const UncertaintyPlanningPolicy policy(planner_tree, goal, marginal_edge_weight, goal_probability_threshold_, planner_action_try_attempts, policy_action_attempt_count);
+            const UncertaintyPlanningPolicy policy(planner_tree, goal, marginal_edge_weight, goal_probability_threshold_, planner_action_try_attempts, policy_action_attempt_count, logging_fn_);
             return policy;
         }
 
@@ -786,8 +793,7 @@ namespace uncertainty_contact_planning
             std::ofstream log_file(filename, std::ios_base::out);
             if (!log_file.is_open())
             {
-                std::cerr << "\x1b[31;1m Unable to create folder/file to log to: " << filename << "\x1b[0m \n";
-                throw std::invalid_argument("Log filename must be write-openable");
+                throw std::invalid_argument("Log filename [" + filename + "] must be write-openable");
             }
             for (size_t idx = 0; idx < particle_executions.size(); idx++)
             {
@@ -877,11 +883,11 @@ namespace uncertainty_contact_planning
                 if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
-                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully, " << reached_goal << " successful so far" << std::endl;
+                    Log("...finished policy execution " + std::to_string(idx + 1) + " of " + std::to_string(num_executions) + " successfully, " + std::to_string(reached_goal) + " successful so far", 2);
                 }
                 else
                 {
-                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " unsuccessfully, " << reached_goal << " successful so far" << std::endl;
+                    Log("...finished policy execution " + std::to_string(idx + 1) + " of " + std::to_string(num_executions) + " unsuccessfully, " + std::to_string(reached_goal) + " successful so far", 3);
                 }
             }
             // Draw the trajectory in a pretty way
@@ -946,7 +952,7 @@ namespace uncertainty_contact_planning
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
-                std::cout << "Starting policy execution " << idx << "..." << std::endl;
+                Log("Starting policy execution " + std::to_string(idx) + "...", 1);
                 const double start_time = ros::Time::now().toSec();
                 const std::function<bool(void)> policy_exec_termination_fn =
                         [&] ()
@@ -964,7 +970,7 @@ namespace uncertainty_contact_planning
                 };
                 const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, link_runtime_states_to_planned_parent, start_configs[idx], move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
                 const double end_time = ros::Time::now().toSec();
-                std::cout << "Started policy exec @ " << start_time << " finished policy exec @ " << end_time << std::endl;
+                Log("Started policy exec @ " + std::to_string(start_time) + " finished policy exec @ " + std::to_string(end_time), 1);
                 const double execution_seconds = end_time - start_time;
                 policy_execution_times[idx] = execution_seconds;
                 particle_executions[idx] = particle_execution.first;
@@ -977,11 +983,11 @@ namespace uncertainty_contact_planning
                 if (policy_execution_step_count >= 0)
                 {
                     reached_goal++;
-                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " successfully in " << execution_seconds << " seconds, " << reached_goal << " successful so far" << std::endl;
+                    Log("...finished policy execution " + std::to_string(idx + 1) + " of " + std::to_string(num_executions) + " successfully in " + std::to_string(execution_seconds) + " seconds, " + std::to_string(reached_goal) + " successful so far", 2);
                 }
                 else
                 {
-                    std::cout << "...finished policy execution " << idx + 1 << " of " << num_executions << " unsuccessfully in " << execution_seconds << " seconds, " << reached_goal << " successful so far" << std::endl;
+                    Log("...finished policy execution " + std::to_string(idx + 1) + " of " + std::to_string(num_executions) + " unsuccessfully in " + std::to_string(execution_seconds) + " seconds, " + std::to_string(reached_goal) + " successful so far", 3);
                 }
             }
             // Draw the trajectory in a pretty way
@@ -1015,7 +1021,7 @@ namespace uncertainty_contact_planning
         inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> PerformSinglePolicyExecution(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<bool(void)>& policy_exec_termination_fn, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user) const
         {
             UncertaintyPlanningPolicy policy = immutable_policy;
-            std::cout << "Drawing environment..." << std::endl;
+            Log("Drawing environment...", 1);
             ClearAndRedrawEnvironment(display_fn);
             if (wait_for_user)
             {
@@ -1027,7 +1033,7 @@ namespace uncertainty_contact_planning
                 // Wait for a bit
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
             }
-            std::cout << "Drawing initial policy..." << std::endl;
+            Log("Drawing initial policy...", 1);
             DrawPolicy(policy, policy_marker_size, "execution_policy", display_fn);
             if (wait_for_user)
             {
@@ -1042,9 +1048,9 @@ namespace uncertainty_contact_planning
             // Let's do this
             std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)> policy_particle_clustering_fn = [&] (const std::vector<Configuration, ConfigAlloc>& particles, const Configuration& config) { return PolicyParticleClusteringFn(particles, config, display_fn); };
             // Reset the robot first
-            std::cout << "Reseting before policy execution..." << std::endl;
+            Log("Reseting before policy execution...", 1);
             move_fn(start, start, start, false, true);
-            std::cout << "Executing policy..." << std::endl;
+            Log("Executing policy...", 1);
             std::vector<Configuration, ConfigAlloc> particle_trajectory;
             particle_trajectory.push_back(start);
             uint64_t desired_transition_id = 0;
@@ -1061,13 +1067,13 @@ namespace uncertainty_contact_planning
                 const Configuration& action = policy_query_response.Action();
                 const Configuration& expected_result = policy_query_response.ExpectedResult();
                 const bool is_reverse_action = policy_query_response.IsReverseAction();
-                std::cout << "----------\nReceived new action for best matching state index " << previous_state_idx << " with transition ID " << desired_transition_id << "\n==========" << std::endl;
-                std::cout << "Drawing updated policy..." << std::endl;
+                Log("----------\nReceived new action for best matching state index " + std::to_string(previous_state_idx) + " with transition ID " + std::to_string(desired_transition_id) + "\n==========", 1);
+                Log("Drawing updated policy...", 1);
                 ClearAndRedrawEnvironment(display_fn);
                 DrawPolicy(policy, policy_marker_size, "execution_policy", display_fn);
                 DrawLocalPolicy(policy, policy_marker_size, 0, MakeColor(0.0, 0.0, 1.0, 1.0), "policy_start_to_goal", display_fn);
                 DrawLocalPolicy(policy, policy_marker_size, previous_state_idx, MakeColor(0.0, 0.0, 1.0, 1.0), "policy_here_to_goal", display_fn);
-                std::cout << "Drawing current config (blue), parent state (cyan), and action (magenta)..." << std::endl;
+                Log("Drawing current config (blue), parent state (cyan), and action (magenta)...", 1);
                 const UncertaintyPlanningState& parent_state = policy.GetRawPolicy().GetNodeImmutable(previous_state_idx).GetValueImmutable();
                 const Configuration parent_state_config = parent_state.GetExpectation();
                 std_msgs::ColorRGBA parent_state_color;
@@ -1111,12 +1117,12 @@ namespace uncertainty_contact_planning
                 if (user_goal_check_fn(result_config))
                 {
                     // We've reached the goal!
-                    std::cout << "Policy execution reached the goal in " << current_exec_step << " steps" << std::endl;
+                    Log("Policy execution reached the goal in " + std::to_string(current_exec_step) + " steps", 2);
                     return std::make_pair(particle_trajectory, std::make_pair(policy, (int64_t)current_exec_step));
                 }
             }
             // If we get here, we haven't reached the goal!
-            std::cout << "Policy execution failed to reach the goal in " << current_exec_step << " steps" << std::endl;
+            Log("Policy execution failed to reach the goal in " + std::to_string(current_exec_step) + " steps", 3);
             return std::make_pair(particle_trajectory, std::make_pair(policy, -((int64_t)current_exec_step)));
         }
 
@@ -1136,7 +1142,7 @@ namespace uncertainty_contact_planning
             std::vector<Configuration, ConfigAlloc> execution_trajectory = simple_simulator_interface::ExtractTrajectoryFromTrace(trace);
             if (execution_trajectory.empty())
             {
-                std::cerr << "Exec trajectory is empty, this should not happen!" << std::endl;
+                throw std::runtime_error("SimulatePolicyStep execution trajectory is empty, this should not happen!");
             }
             return execution_trajectory;
         }
@@ -1362,7 +1368,7 @@ namespace uncertainty_contact_planning
         inline UncertaintyPlanningState SampleRandomTargetState()
         {
             const Configuration random_point = sampler_ptr_->Sample(simulator_ptr_->GetRandomGenerator());
-            arc_helpers::ConditionalPrint("Sampled config: " + PrettyPrint::PrettyPrint(random_point), 3, debug_level_);
+            Log("Sampled config: " + PrettyPrint::PrettyPrint(random_point), 0);
             const UncertaintyPlanningState random_state(random_point);
             return random_state;
         }
@@ -1370,7 +1376,7 @@ namespace uncertainty_contact_planning
         inline UncertaintyPlanningState SampleRandomTargetGoalState()
         {
             const Configuration random_goal_point = sampler_ptr_->SampleGoal(simulator_ptr_->GetRandomGenerator());
-            arc_helpers::ConditionalPrint("Sampled goal config: " + PrettyPrint::PrettyPrint(random_goal_point), 3, debug_level_);
+            Log("Sampled goal config: " + PrettyPrint::PrettyPrint(random_goal_point), 0);
             const UncertaintyPlanningState random_goal_state(random_goal_point);
             return random_goal_state;
         }
@@ -1537,7 +1543,6 @@ namespace uncertainty_contact_planning
             bool is_split_child = false;
             if (particle_clusters.size() > 1)
             {
-                //std::cout << "Transition produced " << particle_clusters.size() << " split states" << std::endl;
                 is_split_child = true;
                 split_id_++;
             }
@@ -1579,13 +1584,11 @@ namespace uncertainty_contact_planning
                     // Don't do extra work with one particle
                     if (did_collide && (propagated_points.size() > 1))
                     {
-                        //std::cout << "Simulation resulted in collision, defering reversibility check to post-processing" << std::endl;
                         reverse_attempt_count = (uint32_t)current_cluster.size();
                         reverse_reached_count = 0u;
                     }
                     else if (is_split_child)
                     {
-                        //std::cout << "Simulation resulted in split, defering reversibility check to post-processing" << std::endl;
                         reverse_attempt_count = (uint32_t)current_cluster.size();
                         reverse_reached_count = 0u;
                     }
@@ -1619,7 +1622,7 @@ namespace uncertainty_contact_planning
                     current_state.UpdateReverseAttemptAndReachedCounts((uint32_t)current_state.GetNumParticles(), 0u);
                 }
             }
-            arc_helpers::ConditionalPrint("Forward simultation produced " + std::to_string(result_states.size()) + " states, needed to compute reversibility for " + std::to_string(computed_reversibility) + " of them", 3, debug_level_);
+            Log("Forward simultation produced " + std::to_string(result_states.size()) + " states, needed to compute reversibility for " + std::to_string(computed_reversibility) + " of them", 1);
             // We only do further processing if a split happened
             if (result_states.size() > 1)
             {
@@ -1658,7 +1661,7 @@ namespace uncertainty_contact_planning
                     }
                     else if ((p_reached >= 0.0) && (p_reached <= 1.001))
                     {
-                        std::cout << "WARNING - P(reached) = " << p_reached << " > 1.0 (probably numerical error)" << std::endl;
+                        Log("WARNING - P(reached) = " + std::to_string(p_reached) + " > 1.0 (probably numerical error)", 3);
                         p_reached = 1.0;
                         current_state.SetEffectiveEdgePfeasibility(p_reached);
                     }
@@ -1666,7 +1669,7 @@ namespace uncertainty_contact_planning
                     {
                         throw std::runtime_error("p_reached out of range [0, 1]");
                     }
-                    arc_helpers::ConditionalPrint("Computed effective edge P(feasibility) of " + std::to_string(p_reached) + " for " + std::to_string(planner_action_try_attempts) + " try/retry attempts", 4, debug_level_);
+                    Log("Computed effective edge P(feasibility) of " + std::to_string(p_reached) + " for " + std::to_string(planner_action_try_attempts) + " try/retry attempts", 1);
                 }
             }
             if (debug_level_ >= 30)
@@ -1758,13 +1761,13 @@ namespace uncertainty_contact_planning
                 if (target_distance > step_size_)
                 {
                     const double step_fraction = step_size_ / target_distance;
-                    arc_helpers::ConditionalPrint("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
+                    Log("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 0);
                     const Configuration interpolated_target_point = robot_ptr_->InterpolateBetweenConfigurations(nearest.GetExpectation(), target_point, step_fraction);
                     target_point = interpolated_target_point;
                 }
                 else
                 {
-                    arc_helpers::ConditionalPrint("Forward simulating, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
+                    Log("Forward simulating, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 0);
                 }
                 UncertaintyPlanningState target_state(target_point);
                 std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
@@ -1794,7 +1797,7 @@ namespace uncertainty_contact_planning
                         const double step_fraction = step_size_ / target_distance;
                         const Configuration interpolated_target_point = robot_ptr_->InterpolateBetweenConfigurations(current.GetExpectation(), target_point, step_fraction);
                         current_target_point = interpolated_target_point;
-                        arc_helpers::ConditionalPrint("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
+                        Log("Forward simulating for " + std::to_string(step_fraction) + " step fraction, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 0);
                     }
                     // TODO: NOT SURE WHY THIS WAS EVER HERE
 //                    // If we've reached the target state, stop
@@ -1806,7 +1809,7 @@ namespace uncertainty_contact_planning
                     // If we're less than step size away, this is our last step
                     else
                     {
-                        arc_helpers::ConditionalPrint("Forward simulating last step towars target, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 3, debug_level_);
+                        Log("Forward simulating last step towars target, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 0);
                         completed = true;
                     }
                     // Take a step forwards
@@ -1882,7 +1885,7 @@ namespace uncertainty_contact_planning
                 {
                     // Update the state
                     goal_state_candidate.SetGoalPfeasibility(goal_reached_probability);
-                    arc_helpers::ConditionalPrint("Goal reached with state " + goal_state_candidate.Print() + " with probability(this->goal): " + std::to_string(goal_reached_probability) + " and probability(start->goal): " + std::to_string(start_to_goal_probability), 3, debug_level_);
+                    Log("Goal reached with state " + goal_state_candidate.Print() + " with probability(this->goal): " + std::to_string(goal_reached_probability) + " and probability(start->goal): " + std::to_string(start_to_goal_probability), 2);
                     return true;
                 }
             }
@@ -1908,7 +1911,7 @@ namespace uncertainty_contact_planning
                 {
                     // Update the state
                     goal_state_candidate.SetGoalPfeasibility(goal_reached_probability);
-                    arc_helpers::ConditionalPrint("Goal reached with state " + goal_state_candidate.Print() + " with probability(this->goal): " + std::to_string(goal_reached_probability) + " and probability(start->goal): " + std::to_string(goal_probability), 3, debug_level_);
+                    Log("Goal reached with state " + goal_state_candidate.Print() + " with probability(this->goal): " + std::to_string(goal_reached_probability) + " and probability(start->goal): " + std::to_string(goal_probability), 2);
                     return true;
                 }
             }
@@ -1946,9 +1949,7 @@ namespace uncertainty_contact_planning
                     break;
                 }
             }
-            //std::cout << "Backtracked to state " << current_index << " for goal branch blacklisting" << std::endl;
             BlacklistGoalBranch(goal_branch_root_index);
-            //std::cout << "Goal branch blacklisting complete" << std::endl;
             // Update the goal reached probability
             // Backtrack all the way to the goal, updating each state's goal_Pfeasbility
             // Make sure something hasn't gone wrong
@@ -1968,7 +1969,7 @@ namespace uncertainty_contact_planning
             }
             // Get the goal reached probability that we use to decide when we're done
             total_goal_reached_probability_ = nearest_neighbors_storage_[0].GetValueImmutable().GetGoalPfeasibility();
-            std::cout << "Updated goal reached probability to " << total_goal_reached_probability_ << std::endl;
+            Log("Updated goal reached probability to " + std::to_string(total_goal_reached_probability_), 2);
         }
 
         inline void BlacklistGoalBranch(const int64_t goal_branch_root_index)
@@ -1979,11 +1980,10 @@ namespace uncertainty_contact_planning
             }
             else if (goal_branch_root_index == 0)
             {
-                std::cerr << "Blacklisting with goal branch root == tree root is not possible!" << std::endl;
+                Log("Blacklisting with goal branch root == tree root is not possible!", 3);
             }
             else
             {
-                //std::cout << "Blacklisting goal branch starting at index " << goal_branch_root_index << std::endl;
                 // Get the current node
                 simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState>& current_state = nearest_neighbors_storage_[(size_t)goal_branch_root_index];
                 // Recursively blacklist it
@@ -2111,7 +2111,7 @@ namespace uncertainty_contact_planning
 
         inline double ComputeTransitionGoalProbability(const std::vector<UncertaintyPlanningState>& child_nodes, const uint32_t planner_action_try_attempts) const
         {
-            arc_helpers::ConditionalPrint("Computing transition goal probability with " + std::to_string(child_nodes.size()) + " child nodes", 1, debug_level_);
+            Log("Computing transition goal probability with " + std::to_string(child_nodes.size()) + " child nodes", 1);
             // Let's handle the special cases first
             // The most common case - a non-split transition
             if (child_nodes.size() == 1)
@@ -2136,7 +2136,7 @@ namespace uncertainty_contact_planning
                 {
                     // Get the current child
                     const UncertaintyPlanningState& current_child = child_nodes[idx];
-                    arc_helpers::ConditionalPrint("Child node: " + current_child.Print(), 1, debug_level_);
+                    Log("Child node: " + current_child.Print(), 0);
                     // For the selected child, we keep track of the probability that we reach the goal directly via the child state AND the probability that we reach the goal from unintended other child states
                     double percent_active = 1.0;
                     double p_we_reached_goal = 0.0;
@@ -2171,14 +2171,14 @@ namespace uncertainty_contact_planning
                         }
                         percent_active = updated_percent_active;
                     }
-                    arc_helpers::ConditionalPrint("P(child->goal) via ourself " + std::to_string(p_we_reached_goal), 1, debug_level_);
-                    arc_helpers::ConditionalPrint("P(child->goal) via others " + std::to_string(p_others_reached_goal), 1, debug_level_);
+                    Log("P(child->goal) via ourself " + std::to_string(p_we_reached_goal), 0);
+                    Log("P(child->goal) via others " + std::to_string(p_others_reached_goal), 0);
                     double p_reached_goal = p_we_reached_goal + p_others_reached_goal;
                     if ((p_reached_goal < 0.0) || (p_reached_goal > 1.0))
                     {
                         if ((p_reached_goal >= 0.0) && (p_reached_goal <= 1.001))
                         {
-                            std::cout << "WARNING - P(reached goal) = " << p_reached_goal << " > 1.0 (probably numerical error)" << std::endl;
+                            Log("WARNING - P(reached goal) = " + std::to_string(p_reached_goal) + " > 1.0 (probably numerical error)", 3);
                             p_reached_goal = 1.0;
                         }
                         else
@@ -2186,7 +2186,7 @@ namespace uncertainty_contact_planning
                             throw std::runtime_error("p_reached_goal out of range [0, 1]");
                         }
                     }
-                    arc_helpers::ConditionalPrint("P(child->goal) " + std::to_string(p_reached_goal), 1, debug_level_);
+                    Log("P(child->goal) " + std::to_string(p_reached_goal), 0);
                     if (current_child.IsActionOutcomeNominallyIndependent())
                     {
                         action_outcomes_independent_child_goal_reached_probabilities.push_back(p_reached_goal);
@@ -2196,19 +2196,19 @@ namespace uncertainty_contact_planning
                         action_outcomes_dependent_child_goal_reached_probabilities.push_back(p_reached_goal);
                     }
                 }
-                arc_helpers::ConditionalPrint("action_outcomes_dependent_child_goal_reached_probabilities: " + PrettyPrint::PrettyPrint(action_outcomes_dependent_child_goal_reached_probabilities), 1, debug_level_);
-                arc_helpers::ConditionalPrint("action_outcomes_independent_child_goal_reached_probabilities: " + PrettyPrint::PrettyPrint(action_outcomes_independent_child_goal_reached_probabilities), 1, debug_level_);
+                Log("action_outcomes_dependent_child_goal_reached_probabilities: " + PrettyPrint::PrettyPrint(action_outcomes_dependent_child_goal_reached_probabilities), 1);
+                Log("action_outcomes_independent_child_goal_reached_probabilities: " + PrettyPrint::PrettyPrint(action_outcomes_independent_child_goal_reached_probabilities), 1);
                 const double dependent_child_goal_reached_probability = EigenHelpers::Sum(action_outcomes_dependent_child_goal_reached_probabilities);
                 const double independent_child_goal_reached_probability = (action_outcomes_independent_child_goal_reached_probabilities.size() > 0) ? *std::max_element(action_outcomes_independent_child_goal_reached_probabilities.begin(), action_outcomes_independent_child_goal_reached_probabilities.end()) : 0.0;
                 const double total_p_goal_reached = independent_child_goal_reached_probability + dependent_child_goal_reached_probability;
-                arc_helpers::ConditionalPrint("dependent_child_goal_reached_probability " + std::to_string(dependent_child_goal_reached_probability) + " independent_child_goal_reached_probability " + std::to_string(independent_child_goal_reached_probability) + " total_p_goal_reached " + std::to_string(total_p_goal_reached), 1, debug_level_);
+                Log("dependent_child_goal_reached_probability " + std::to_string(dependent_child_goal_reached_probability) + " independent_child_goal_reached_probability " + std::to_string(independent_child_goal_reached_probability) + " total_p_goal_reached " + std::to_string(total_p_goal_reached), 1);
                 if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.0))
                 {
                     return total_p_goal_reached;
                 }
                 else if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.001))
                 {
-                    std::cout << "WARNING - total P(goal reached) = " << total_p_goal_reached << " > 1.0 (probably numerical error)" << std::endl;
+                    Log("WARNING - total P(goal reached) = " + std::to_string(total_p_goal_reached) + " > 1.0 (probably numerical error)", 3);
                     return 1.0;
                 }
                 else
