@@ -813,7 +813,7 @@ namespace uncertainty_contact_planning
         /*
          * Policy simulation and execution functions
          */
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const Configuration& start, const Configuration& goal, const uint32_t num_executions, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             std::function<bool(const Configuration&)> simple_goal_check_fn = [&] (const Configuration& current_config)
             {
@@ -826,16 +826,16 @@ namespace uncertainty_contact_planning
                     return false;
                 }
             };
-            return SimulateExectionPolicy(immutable_policy, link_runtime_states_to_planned_parent, start, simple_goal_check_fn, num_executions, exec_step_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
+            return SimulateExectionPolicy(immutable_policy, allow_branch_jumping, link_runtime_states_to_planned_parent, start, simple_goal_check_fn, num_executions, exec_step_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t num_executions, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t num_executions, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             const std::vector<Configuration, ConfigAlloc> start_configs(num_executions, start);
-            return SimulateExectionPolicy(immutable_policy, link_runtime_states_to_planned_parent, true, start_configs, user_goal_check_fn, exec_step_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
+            return SimulateExectionPolicy(immutable_policy, allow_branch_jumping, link_runtime_states_to_planned_parent, true, start_configs, user_goal_check_fn, exec_step_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const bool enable_cumulative_learning, const std::vector<Configuration, ConfigAlloc>& start_configs, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> SimulateExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const bool enable_cumulative_learning, const std::vector<Configuration, ConfigAlloc>& start_configs, const std::function<bool(const Configuration&)>& user_goal_check_fn, const uint32_t exec_step_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             const uint32_t num_executions = (uint32_t)start_configs.size();
             UncertaintyPlanningPolicy policy = immutable_policy;
@@ -868,7 +868,7 @@ namespace uncertainty_contact_planning
                         return false;
                     }
                 };
-                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, link_runtime_states_to_planned_parent, start_configs[idx], simulator_move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
+                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, allow_branch_jumping, link_runtime_states_to_planned_parent, start_configs[idx], simulator_move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
                 const std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
                 const std::chrono::duration<double> execution_time(end_time - start_time);
                 const double execution_seconds = execution_time.count();
@@ -914,7 +914,7 @@ namespace uncertainty_contact_planning
             return std::make_pair(policy, std::make_pair(policy_statistics, std::make_pair(policy_execution_step_counts, policy_execution_times)));
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const Configuration& start, const Configuration& goal, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             std::function<bool(const Configuration&)> simple_goal_check_fn = [&] (const Configuration& current_config)
             {
@@ -927,16 +927,16 @@ namespace uncertainty_contact_planning
                     return false;
                 }
             };
-            return ExecuteExectionPolicy(immutable_policy, link_runtime_states_to_planned_parent, start, simple_goal_check_fn, move_fn, num_executions, exec_time_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
+            return ExecuteExectionPolicy(immutable_policy, allow_branch_jumping, link_runtime_states_to_planned_parent, start, simple_goal_check_fn, move_fn, num_executions, exec_time_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const uint32_t num_executions, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             const std::vector<Configuration, ConfigAlloc> start_configs(num_executions, start);
-            return ExecuteExectionPolicy(immutable_policy, link_runtime_states_to_planned_parent, true, start_configs, user_goal_check_fn, move_fn, exec_time_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
+            return ExecuteExectionPolicy(immutable_policy, allow_branch_jumping, link_runtime_states_to_planned_parent, true, start_configs, user_goal_check_fn, move_fn, exec_time_limit, display_fn, policy_marker_size, wait_for_user, draw_wait);
         }
 
-        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const bool enable_cumulative_learning, const std::vector<Configuration, ConfigAlloc>& start_configs, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
+        inline std::pair<UncertaintyPlanningPolicy, std::pair<std::map<std::string, double>, std::pair<std::vector<int64_t>, std::vector<double>>>> ExecuteExectionPolicy(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const bool enable_cumulative_learning, const std::vector<Configuration, ConfigAlloc>& start_configs, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const double exec_time_limit, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user, const double draw_wait) const
         {
             const uint32_t num_executions = (uint32_t)start_configs.size();
             UncertaintyPlanningPolicy policy = immutable_policy;
@@ -968,7 +968,7 @@ namespace uncertainty_contact_planning
                     }
                     return false;
                 };
-                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, link_runtime_states_to_planned_parent, start_configs[idx], move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
+                const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, allow_branch_jumping, link_runtime_states_to_planned_parent, start_configs[idx], move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
                 const double end_time = ros::Time::now().toSec();
                 Log("Started policy exec @ " + std::to_string(start_time) + " finished policy exec @ " + std::to_string(end_time), 1);
                 const double execution_seconds = end_time - start_time;
@@ -1018,7 +1018,7 @@ namespace uncertainty_contact_planning
             return arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(r, g, b, a);
         }
 
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> PerformSinglePolicyExecution(const UncertaintyPlanningPolicy& immutable_policy, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<bool(void)>& policy_exec_termination_fn, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user) const
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> PerformSinglePolicyExecution(const UncertaintyPlanningPolicy& immutable_policy, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const Configuration& start, const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)>& move_fn, const std::function<bool(const Configuration&)>& user_goal_check_fn, const std::function<bool(void)>& policy_exec_termination_fn, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn, const double policy_marker_size, const bool wait_for_user) const
         {
             UncertaintyPlanningPolicy policy = immutable_policy;
             Log("Drawing environment...", 1);
@@ -1061,7 +1061,7 @@ namespace uncertainty_contact_planning
                 // Get the current configuration
                 const Configuration& current_config = particle_trajectory.back();
                 // Get the next action
-                const execution_policy::PolicyQueryResult<Configuration> policy_query_response = policy.QueryBestAction(desired_transition_id, current_config, link_runtime_states_to_planned_parent, policy_particle_clustering_fn);
+                const execution_policy::PolicyQueryResult<Configuration> policy_query_response = policy.QueryBestAction(desired_transition_id, current_config, allow_branch_jumping, link_runtime_states_to_planned_parent, policy_particle_clustering_fn);
                 const int64_t previous_state_idx = policy_query_response.PreviousStateIndex();
                 desired_transition_id = policy_query_response.DesiredTransitionId();
                 const Configuration& action = policy_query_response.Action();

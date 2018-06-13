@@ -490,7 +490,7 @@ int main(int argc, char** argv)
   auto exec_result
       = planner.ExecutePolicy(plan_result.first,
                               single_execution_initialization_fn,
-                              100u, 100u, false);
+                              100u, 100u, true, false);
   logging_fn("Task execution statistics: "
              + PrettyPrint::PrettyPrint(exec_result.second), 1);
   return 0;

@@ -692,7 +692,7 @@ namespace execution_policy
         /*
          * If your particle clustering function is not thread safe, you will have a bad time!
          */
-        inline PolicyQueryResult<Configuration> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline PolicyQueryResult<Configuration> QueryBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             if (initialized_)
             {
@@ -703,7 +703,7 @@ namespace execution_policy
                 }
                 else
                 {
-                    return QueryNormalBestAction(performed_transition_id, current_config, link_runtime_states_to_planned_parent, particle_clustering_fn);
+                    return QueryNormalBestAction(performed_transition_id, current_config, allow_branch_jumping, link_runtime_states_to_planned_parent, particle_clustering_fn);
                 }
             }
             else
@@ -714,7 +714,7 @@ namespace execution_policy
 
     private:
 
-        inline PolicyQueryResult<Configuration> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline int64_t FindBestMatchingStateInPolicy(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn) const
         {
             // Get the starting state - NOTE, we ignore the last node in the policy graph, which is the virtual goal node
             std::vector<std::pair<int64_t, double>> per_thread_best_node(GetNumOMPThreads(), std::make_pair(-1, std::numeric_limits<double>::infinity()));
@@ -752,6 +752,12 @@ namespace execution_policy
                     best_node_expected_cost_to_goal = thread_best.second;
                 }
             }
+            return best_node_index;
+        }
+
+        inline PolicyQueryResult<Configuration> QueryStartBestAction(const Configuration& current_config, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn) const
+        {
+            const int64_t best_node_index = FindBestMatchingStateInPolicy(current_config, particle_clustering_fn);
             if (best_node_index >= 0)
             {
                 Log("Starting configuration best matches node " + std::to_string(best_node_index), 2);
@@ -763,7 +769,7 @@ namespace execution_policy
             }
         }
 
-        inline PolicyQueryResult<Configuration> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
+        inline PolicyQueryResult<Configuration> QueryNormalBestAction(const uint64_t performed_transition_id, const Configuration& current_config, const bool allow_branch_jumping, const bool link_runtime_states_to_planned_parent, const std::function<bool(const std::vector<Configuration, ConfigAlloc>&, const Configuration&)>& particle_clustering_fn)
         {
             Log("++++++++++\nQuerying the policy with performed transition ID " + std::to_string(performed_transition_id) + "...", 2);
             if (performed_transition_id <= 0)
@@ -923,6 +929,21 @@ namespace execution_policy
                 }
                 else
                 {
+                    if (allow_branch_jumping)
+                    {
+                        // This loses any state->state linkage, but does provide more robust error handling with fewer recovery steps in many cases. However, your clustering must be precise! If it is not, the policy could just to a totally different branch and you will get stuck.
+                        Log("Result state matched none of the " + std::to_string(expected_possible_result_states.size()) + " expected results or their " + std::to_string(expected_possible_result_child_states.size()) + " child states, trying to jump branches to find a matching state", 3);
+                        const int64_t best_matching_branch_jump_index = FindBestMatchingStateInPolicy(current_config, particle_clustering_fn);
+                        if (best_matching_branch_jump_index >= 0)
+                        {
+                            Log("Branch jumping found a best-matching state with index " + std::to_string(best_matching_branch_jump_index), 2);
+                            return QueryNextAction(best_matching_branch_jump_index);
+                        }
+                        else
+                        {
+                            Log("Branch jumping failed to find a matching state", 3);
+                        }
+                    }
                     // What if we made *all* runtime-added states point back to their parent planning-time-added root node?
                     // This loses any state->state linkage, but means that multi-state returns would be handled properly
                     Log("Result state matched none of the " + std::to_string(expected_possible_result_states.size()) + " expected results or their " + std::to_string(expected_possible_result_child_states.size()) + " child states, adding a new state", 3);
@@ -1028,7 +1049,7 @@ namespace execution_policy
                     // Update the policy graph with the new state
                     RebuildPolicyGraph();
                     // To get the action, we recursively call this function (this time there will be an exact matching child state!)
-                    return QueryNormalBestAction(performed_transition_id, current_config, link_runtime_states_to_planned_parent, particle_clustering_fn);
+                    return QueryNormalBestAction(performed_transition_id, current_config, allow_branch_jumping, link_runtime_states_to_planned_parent, particle_clustering_fn);
                 }
             }
         }

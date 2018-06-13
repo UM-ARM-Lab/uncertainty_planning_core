@@ -1100,6 +1100,7 @@ public:
                 const std::function<State(void)>& exec_initialization_fn,
                 const int64_t max_policy_exec_steps,
                 const int64_t max_policy_executions,
+                const bool allow_branch_jumping,
                 const bool enable_cumulative_learning)
   {
     TaskPlanningPolicy policy = starting_policy;
@@ -1166,8 +1167,8 @@ public:
         // Real policy query
         const TaskPlanningPolicyQuery policy_query_response
             = working_policy.QueryBestAction(
-                desired_transition_id, current_state, true,
-                policy_outcome_clustering_fn);
+                desired_transition_id, current_state, allow_branch_jumping,
+                true, policy_outcome_clustering_fn);
         desired_transition_id = policy_query_response.DesiredTransitionId();
         const State& action = policy_query_response.Action();
         const bool is_reverse_action = policy_query_response.IsReverseAction();
@@ -1212,8 +1213,8 @@ public:
           const State& candidate_outcome = action_results[idx];
           const TaskPlanningPolicyQuery speculative_query_response
               = working_policy.QueryBestAction(
-                  desired_transition_id, candidate_outcome, true,
-                  policy_outcome_clustering_fn);
+                  desired_transition_id, candidate_outcome,
+                  allow_branch_jumping, true, policy_outcome_clustering_fn);
           const double expected_cost
               = speculative_query_response.ExpectedCostToGoal();
           if (expected_cost < best_outcome_cost)
