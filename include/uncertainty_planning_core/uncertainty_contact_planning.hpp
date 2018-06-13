@@ -1661,7 +1661,7 @@ namespace uncertainty_contact_planning
                     }
                     else if ((p_reached >= 0.0) && (p_reached <= 1.001))
                     {
-                        Log("WARNING - P(reached) = " + std::to_string(p_reached) + " > 1.0 (probably numerical error)", 3);
+                        Log("WARNING - P(reached) = " + std::to_string(p_reached) + " > 1.0 (probably numerical error)", 1);
                         p_reached = 1.0;
                         current_state.SetEffectiveEdgePfeasibility(p_reached);
                     }
@@ -2178,7 +2178,7 @@ namespace uncertainty_contact_planning
                     {
                         if ((p_reached_goal >= 0.0) && (p_reached_goal <= 1.001))
                         {
-                            Log("WARNING - P(reached goal) = " + std::to_string(p_reached_goal) + " > 1.0 (probably numerical error)", 3);
+                            Log("WARNING - P(reached goal) = " + std::to_string(p_reached_goal) + " > 1.0 (probably numerical error)", 1);
                             p_reached_goal = 1.0;
                         }
                         else
@@ -2208,7 +2208,7 @@ namespace uncertainty_contact_planning
                 }
                 else if ((total_p_goal_reached >= 0.0) && (total_p_goal_reached <= 1.001))
                 {
-                    Log("WARNING - total P(goal reached) = " + std::to_string(total_p_goal_reached) + " > 1.0 (probably numerical error)", 3);
+                    Log("WARNING - total P(goal reached) = " + std::to_string(total_p_goal_reached) + " > 1.0 (probably numerical error)", 1);
                     return 1.0;
                 }
                 else

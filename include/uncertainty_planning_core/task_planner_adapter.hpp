@@ -921,7 +921,7 @@ private:
         else if ((p_reached >= 0.0) && (p_reached <= 1.001))
         {
           Log("WARNING - P(reached) = " + std::to_string(p_reached)
-              + " > 1.0 (probably numerical error)", 3);
+              + " > 1.0 (probably numerical error)", 1);
           p_reached = 1.0;
           current_state.SetEffectiveEdgePfeasibility(p_reached);
         }
