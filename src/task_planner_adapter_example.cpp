@@ -476,7 +476,7 @@ int main(int argc, char** argv)
   planner.RegisterPrimitive(put_object_in_box_primitive_ptr);
   // Plan
   auto plan_result
-      = planner.PlanPolicy(PutInBoxState(), 10.0, 1.0, 50u, 50u);
+      = planner.PlanPolicy(PutInBoxState(), 10.0, 1.0, 0.01, 50u, 50u);
   logging_fn("Task planning statistics: "
              + PrettyPrint::PrettyPrint(plan_result.second), 1);
   int32_t objects_to_put_away = 5;

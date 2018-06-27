@@ -2226,12 +2226,15 @@ namespace uncertainty_contact_planning
             const bool time_limit_reached = (((std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now() - start_time) > time_limit);
             if (time_limit_reached)
             {
+                Log("Terminating, reached time limit", 0);
                 return true;
             }
             else if (p_goal_termination_threshold > 0.0)
             {
-                if (total_goal_reached_probability_ >= p_goal_termination_threshold)
+                const double p_goal_gap = p_goal_termination_threshold - total_goal_reached_probability_;
+                if (p_goal_gap <= 1e-10)
                 {
+                    Log("Terminating, reached p_goal_termination_threshold", 0);
                     return true;
                 }
             }

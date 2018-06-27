@@ -1016,6 +1016,7 @@ public:
   PlanPolicy(const State& start_state,
              const double time_limit,
              const double p_task_done_termination_threshold,
+             const double minimum_goal_candiate_probability,
              const uint32_t edge_attempt_count,
              const uint32_t policy_action_attempt_count)
   {
@@ -1036,7 +1037,9 @@ public:
     const double step_size = std::numeric_limits<double>::infinity();
     TaskPlanningSpace planning_space(debug_level_, 0,
                                      step_size,
-                                     0.0, 0.01, 0.75, 0.75, false,
+                                     0.0,
+                                     minimum_goal_candiate_probability,
+                                     0.75, 0.75, false,
                                      robot_ptr,
                                      sampling_ptr,
                                      simulator_ptr,
