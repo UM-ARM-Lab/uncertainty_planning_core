@@ -1188,8 +1188,8 @@ public:
           }
           else if (start_readiness > target_readiness)
           {
-            Log("More ready than our parent, not even trying to reverse", 2);
-            action_results.push_back(current_state);
+            Log("More ready than parent, ExecuteBestAvailablePrimitive", 2);
+            action_results = ExecuteBestAvailablePrimitive(current_state);
           }
           else
           {
@@ -1203,19 +1203,20 @@ public:
           action_results = ExecuteBestAvailablePrimitive(current_state);
         }
         // Identify the "ideal" outcome
-        // Because we want purely speculative queries, we disable learning
+        // Because we want purely speculative queries, we make a copy
+        auto speculative_policy_copy = working_policy;
+        std::function<void(const std::string&, const int32_t)> null_logger
+            = [] (const std::string&, const int32_t) {};
+        speculative_policy_copy.RegisterLoggingFunction(null_logger);
         Log("Speculatively querying the policy to identify best outcome of "
-            + std::to_string(action_results.size()) + " outcomes...", 1);
-        const uint32_t policy_action_attempt_count
-            = working_policy.GetPolicyActionAttemptCount();
-        working_policy.SetPolicyActionAttemptCount(0u);
+            + std::to_string(action_results.size()) + " outcomes...", 2);
         double best_outcome_cost = std::numeric_limits<double>::infinity();
         int64_t best_outcome_idx = -1;
         for (size_t idx = 0; idx < action_results.size(); idx++)
         {
           const State& candidate_outcome = action_results[idx];
           const TaskPlanningPolicyQuery speculative_query_response
-              = working_policy.QueryBestAction(
+              = speculative_policy_copy.QueryBestAction(
                   desired_transition_id, candidate_outcome,
                   allow_branch_jumping, true, policy_outcome_clustering_fn);
           const double expected_cost
@@ -1226,8 +1227,6 @@ public:
             best_outcome_idx = static_cast<int64_t>(idx);
           }
         }
-        // Re-enable learning
-        working_policy.SetPolicyActionAttemptCount(policy_action_attempt_count);
         if (best_outcome_idx >= 0)
         {
           Log("Out of " + std::to_string(action_results.size())
@@ -1244,6 +1243,7 @@ public:
                 + std::to_string(action_results.size()) + " results");
         }
         const State& outcome = execution_trace.back();
+        Log("Outcome state is: " + PrettyPrint::PrettyPrint(outcome), 1);
         if (IsTaskCompleted(outcome))
         {
           Log("Outcome state for execution " + std::to_string(num_executions)
