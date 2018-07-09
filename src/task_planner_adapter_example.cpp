@@ -27,17 +27,17 @@ public:
 
   bool BoxOpen() const { return box_open_; }
 
-  uint32_t GetStateReadiness() const
+  uint64_t GetStateReadiness() const
   {
     return GetStateReadiness(*this);
   }
 
-  static uint32_t GetStateReadiness(const PutInBoxState& state)
+  static uint64_t GetStateReadiness(const PutInBoxState& state)
   {
-    const uint32_t BOX_OPEN = 0x01;
-    const uint32_t NUM_OBJECTS_KNOWN = 0x02;
-    const uint32_t OBJECTS_ALL_PUT_AWAY = 0x04;
-    uint32_t state_readiness = 0u;
+    const uint64_t BOX_OPEN = 0x01;
+    const uint64_t NUM_OBJECTS_KNOWN = 0x02;
+    const uint64_t OBJECTS_ALL_PUT_AWAY = 0x04;
+    uint64_t state_readiness = 0u;
     if (state.BoxOpen())
     {
       state_readiness |= BOX_OPEN;
@@ -438,7 +438,7 @@ int main(int argc, char** argv)
       = static_cast<int64_t>(
           arc_helpers::SplitMix64PRNG((uint64_t)prng_seed_init)());
   // Make the planner interface
-  const std::function<uint32_t(const PutInBoxState&)> state_readiness_fn
+  const std::function<uint64_t(const PutInBoxState&)> state_readiness_fn
       = [] (const PutInBoxState& state)
   {
     return PutInBoxState::GetStateReadiness(state);

@@ -156,13 +156,13 @@ class TaskStateRobot : public SimpleRobotModelInterface<State, StateAlloc>
 private:
 
   State state_;
-  std::function<uint32_t(const State&)> compute_readiness_fn_;
+  std::function<uint64_t(const State&)> compute_readiness_fn_;
 
 public:
 
   TaskStateRobot(
       const State& state,
-      const std::function<uint32_t(const State&)> compute_readiness_fn)
+      const std::function<uint64_t(const State&)> compute_readiness_fn)
     : SimpleRobotModelInterface<State, StateAlloc>(),
       state_(state), compute_readiness_fn_(compute_readiness_fn) {}
 
@@ -362,11 +362,11 @@ private:
   std::vector<std::vector<size_t>> ClusterParticlesImpl(
       const std::vector<std::pair<State, std::pair<bool, bool>>>& particles)
   {
-    std::map<uint32_t, std::vector<size_t>> cluster_map;
+    std::map<uint64_t, std::vector<size_t>> cluster_map;
     for (size_t idx = 0; idx < particles.size(); idx++)
     {
       const State& config = particles[idx].first;
-      const uint32_t particle_readiness
+      const uint64_t particle_readiness
           = ComputeStateReadiness(config);
       cluster_map[particle_readiness].push_back(idx);
     }
@@ -385,11 +385,11 @@ private:
   {
     if (cluster.size() > 0)
     {
-      const uint32_t parent_cluster_readiness
+      const uint64_t parent_cluster_readiness
           = ComputeStateReadiness(cluster[0]);
       for (size_t idx = 1; idx < cluster.size(); idx++)
       {
-        const uint32_t current_particle_readiness
+        const uint64_t current_particle_readiness
             = ComputeStateReadiness(cluster[idx]);
         if (parent_cluster_readiness != current_particle_readiness)
         {
@@ -400,7 +400,7 @@ private:
       for (size_t idx = 0; idx < particles.size(); idx++)
       {
         const State& config = particles[idx].first;
-        const uint32_t particle_readiness
+        const uint64_t particle_readiness
             = ComputeStateReadiness(config);
         if (parent_cluster_readiness == particle_readiness)
         {
@@ -555,7 +555,8 @@ private:
     }
     else
     {
-      throw std::runtime_error("No available primitive to handle state");
+      throw std::runtime_error("No available primitive to handle state "
+                                     + PrettyPrint::PrettyPrint(start));
     }
   }
 
@@ -591,15 +592,16 @@ private:
     }
     else
     {
-      throw std::runtime_error("No available primitive to handle state");
+      throw std::runtime_error("No available primitive to handle state "
+                                     + PrettyPrint::PrettyPrint(start));
     }
   }
 
   std::vector<std::pair<State, std::pair<bool, bool>>>
   PerformTargettedPrimitive(const State& start, const State& target)
   {
-    const uint32_t start_readiness = ComputeStateReadiness(start);
-    const uint32_t target_readiness = ComputeStateReadiness(target);
+    const uint64_t start_readiness = ComputeStateReadiness(start);
+    const uint64_t target_readiness = ComputeStateReadiness(target);
     if (start_readiness < target_readiness)
     {
       Log("We are less ready than our parent", 2);
@@ -630,9 +632,9 @@ private:
       return 0;
     }
     // Get the nearest neighbor (ignoring the disabled states)
-    std::vector<std::pair<int64_t, uint32_t>>
+    std::vector<std::pair<int64_t, uint64_t>>
         per_thread_bests(GetNumOMPThreads(),
-                         std::pair<int64_t, uint32_t>(-1, 0u));
+                         std::pair<int64_t, uint64_t>(-1, 0));
     // Greedy best-first expansion strategy
     #pragma omp parallel for
     for (size_t idx = 1; idx < tree.size(); idx++)
@@ -648,7 +650,7 @@ private:
           throw std::runtime_error("Encountered state with no particles");
         }
         const State& representative_particle = particles.first.at(0);
-        const uint32_t state_readiness
+        const uint64_t state_readiness
             = ComputeStateReadiness(representative_particle);
   #if defined(_OPENMP)
         const size_t current_thread_id = (size_t)omp_get_thread_num();
@@ -663,10 +665,10 @@ private:
       }
     }
     int64_t best_index = -1;
-    uint32_t best_state_readiness = 0u;
+    uint64_t best_state_readiness = 0;
     for (size_t idx = 0; idx < per_thread_bests.size(); idx++)
     {
-      const uint32_t thread_best_state_readiness = per_thread_bests[idx].second;
+      const uint64_t thread_best_state_readiness = per_thread_bests[idx].second;
       const int64_t thread_best_index = per_thread_bests[idx].first;
       if (thread_best_index >= 0)
       {
@@ -677,10 +679,13 @@ private:
         }
       }
     }
-    Log("Selected node " + std::to_string(best_index)
-        + " as best neighbor (Qnear)", 2);
     if (best_index >= 0)
     {
+      const TaskPlanningState& best_state
+          = tree.at(best_index).GetValueImmutable();
+      Log("Selected node " + std::to_string(best_index)
+          + " with state " + PrettyPrint::PrettyPrint(best_state)
+          + " as best neighbor (Qnear)", 2);
       return best_index;
     }
     else
@@ -958,7 +963,7 @@ private:
     drawing_fn_(markers);
   }
 
-  uint32_t ComputeStateReadiness(const State& state) const
+  uint64_t ComputeStateReadiness(const State& state) const
   {
     return state_readiness_fn_(state);
   }
@@ -981,7 +986,7 @@ public:
   /// - prng_seed: seed value to random number generators.
   /// - debug_level: internal level to control logging verbosity.
   TaskPlannerAdapter(
-      const std::function<uint32_t(const State&)>& state_readiness_fn,
+      const std::function<uint64_t(const State&)>& state_readiness_fn,
       const std::function<bool(const State&)>& single_execution_completed_fn,
       const std::function<bool(const State&)>& task_completed_fn,
       const std::function<void(const std::string&, const int32_t)>& logging_fn,
@@ -1020,7 +1025,7 @@ public:
              const uint32_t edge_attempt_count,
              const uint32_t policy_action_attempt_count)
   {
-    std::function<uint32_t(const State&)> compute_readiness_fn
+    std::function<uint64_t(const State&)> compute_readiness_fn
         = [&] (const State& state)
     {
       return ComputeStateReadiness(state);
@@ -1179,8 +1184,8 @@ public:
         std::vector<State, StateAlloc> action_results;
         if (is_reverse_action)
         {
-          const uint32_t start_readiness = ComputeStateReadiness(current_state);
-          const uint32_t target_readiness = ComputeStateReadiness(action);
+          const uint64_t start_readiness = ComputeStateReadiness(current_state);
+          const uint64_t target_readiness = ComputeStateReadiness(action);
           if (start_readiness < target_readiness)
           {
             Log("Less ready than parent, ExecuteBestAvailablePrimitive", 2);
