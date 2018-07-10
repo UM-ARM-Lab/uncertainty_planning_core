@@ -729,11 +729,14 @@ private:
     // Make sure there are particles to cluster
     if (particles.size() == 0)
     {
+      Log("Single cluster with no states", 1);
       return
           std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>>();
     }
     else if (particles.size() == 1)
     {
+      Log("Single cluster with one state "
+          + PrettyPrint::PrettyPrint(particles.front()), 1);
       return std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>>{
                 particles};
     }
@@ -743,6 +746,9 @@ private:
     std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>> clusters;
     clusters.reserve(index_clusters.size());
     size_t total_particles = 0;
+    Log("Clustering produced " + std::to_string(index_clusters.size())
+            + " clusters from " + std::to_string(particles.size())
+            + " propagated states", 1);
     for (size_t cluster_idx = 0;
          cluster_idx < index_clusters.size();
          cluster_idx++)
@@ -759,6 +765,9 @@ private:
         final_cluster.push_back(particle);
       }
       final_cluster.shrink_to_fit();
+      Log("Cluster " + std::to_string(cluster_idx) + " with "
+          + std::to_string(final_cluster.size()) + " states "
+          + PrettyPrint::PrettyPrint(final_cluster), 1);
       clusters.push_back(final_cluster);
     }
     clusters.shrink_to_fit();
