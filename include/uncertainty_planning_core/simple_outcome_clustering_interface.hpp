@@ -12,6 +12,7 @@
 #include <memory>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/simple_robot_model_interface.hpp>
+#include <uncertainty_planning_core/simple_simulator_interface.hpp>
 #include <visualization_msgs/MarkerArray.h>
 
 #ifndef SIMPLE_OUTCOME_CLUSTERING_INTERFACE_HPP
@@ -25,6 +26,7 @@ namespace simple_outcome_clustering_interface
     protected:
 
         typedef simple_robot_model_interface::SimpleRobotModelInterface<Configuration, ConfigAlloc> Robot;
+        typedef simple_simulator_interface::SimulationResult<Configuration> SimulationResult;
 
     public:
 
@@ -38,9 +40,9 @@ namespace simple_outcome_clustering_interface
 
         virtual void ResetStatistics() = 0;
 
-        virtual std::vector<std::vector<size_t>> ClusterParticles(const std::shared_ptr<Robot>& robot, const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual std::vector<std::vector<size_t>> ClusterParticles(const std::shared_ptr<Robot>& robot, const std::vector<SimulationResult>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::vector<uint8_t> IdentifyClusterMembers(const std::shared_ptr<Robot>& robot, const std::vector<Configuration, ConfigAlloc>& cluster, const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual std::vector<uint8_t> IdentifyClusterMembers(const std::shared_ptr<Robot>& robot, const std::vector<Configuration, ConfigAlloc>& cluster, const std::vector<SimulationResult>& particles, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
     };
 }
 

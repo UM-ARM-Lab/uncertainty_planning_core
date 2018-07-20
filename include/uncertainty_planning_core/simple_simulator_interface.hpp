@@ -76,6 +76,40 @@ namespace simple_simulator_interface
         return execution_trajectory;
     }
 
+    template<typename Configuration>
+    class SimulationResult
+    {
+    private:
+
+        Configuration result_config_;
+        Configuration actual_target_;
+        bool did_contact_;
+        bool outcome_is_nominally_independent_;
+
+    public:
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        SimulationResult() : did_contact_(false), outcome_is_nominally_independent_(false) {}
+
+        SimulationResult(const Configuration& result_config, const Configuration& actual_target, const bool did_contact, const bool outcome_is_nominally_independent) : result_config_(result_config), actual_target_(actual_target), did_contact_(did_contact), outcome_is_nominally_independent_(outcome_is_nominally_independent) {}
+
+        const Configuration& ResultConfig() const { return result_config_; }
+
+        const Configuration& ActualTarget() const { return actual_target_; }
+
+        bool DidContact() const { return did_contact_; }
+
+        bool OutcomeIsNominallyIndependent() const { return outcome_is_nominally_independent_; }
+
+        std::string Print() const
+        {
+          std::ostringstream strm;
+          strm << "Result config: " << PrettyPrint::PrettyPrint(ResultConfig()) << " Actual target: " << PrettyPrint::PrettyPrint(ActualTarget()) << " Did contact [" + PrettyPrint::PrettyPrint(DidContact()) + "] Outcome is nominally independent [" << PrettyPrint::PrettyPrint(OutcomeIsNominallyIndependent()) << "]";
+          return strm.str();
+        }
+    };
+
     template<typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
     class SimulatorInterface
     {
@@ -119,18 +153,25 @@ namespace simple_simulator_interface
 
         virtual bool CheckConfigCollision(const std::shared_ptr<Robot>& immutable_robot, const Configuration& config, const double inflation_ratio=0.0) const = 0;
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ForwardSimulateMutableRobot(const std::shared_ptr<Robot>& mutable_robot, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual SimulationResult<Configuration> ForwardSimulateMutableRobot(const std::shared_ptr<Robot>& mutable_robot, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ForwardSimulateRobot(const std::shared_ptr<Robot>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual SimulationResult<Configuration> ForwardSimulateRobot(const std::shared_ptr<Robot>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::vector<std::pair<Configuration, std::pair<bool, bool>>> ForwardSimulateRobots(const std::shared_ptr<Robot>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual std::vector<SimulationResult<Configuration>> ForwardSimulateRobots(const std::shared_ptr<Robot>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ReverseSimulateMutableRobot(const std::shared_ptr<Robot>& mutable_robot, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual SimulationResult<Configuration> ReverseSimulateMutableRobot(const std::shared_ptr<Robot>& mutable_robot, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ReverseSimulateRobot(const std::shared_ptr<Robot>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual SimulationResult<Configuration> ReverseSimulateRobot(const std::shared_ptr<Robot>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
 
-        virtual std::vector<std::pair<Configuration, std::pair<bool, bool>>> ReverseSimulateRobots(const std::shared_ptr<Robot>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
+        virtual std::vector<SimulationResult<Configuration>> ReverseSimulateRobots(const std::shared_ptr<Robot>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) = 0;
     };
+}
+
+template<typename Configuration>
+std::ostream& operator<<(std::ostream& strm, const simple_simulator_interface::SimulationResult<Configuration>& result)
+{
+    strm << result.Print();
+    return strm;
 }
 
 #endif // SIMPLE_SIMULATOR_INTERFACE_HPP

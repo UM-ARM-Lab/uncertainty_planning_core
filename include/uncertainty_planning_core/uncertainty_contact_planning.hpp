@@ -39,6 +39,7 @@ namespace uncertainty_contact_planning
     protected:
 
         // Typedef so we don't hate ourselves
+        typedef simple_simulator_interface::SimulationResult<Configuration> SimulationResult;
         typedef simple_robot_model_interface::SimpleRobotModelInterface<Configuration, ConfigAlloc> Robot;
         typedef uncertainty_planning_tools::UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningState;
         typedef execution_policy::ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningPolicy;
@@ -1349,13 +1350,13 @@ namespace uncertainty_contact_planning
             return markers;
         }
 
-        inline visualization_msgs::MarkerArray MakeParticlesDisplayRep(const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
+        inline visualization_msgs::MarkerArray MakeParticlesDisplayRep(const std::vector<SimulationResult>& particles, const std_msgs::ColorRGBA& color, const std::string& ns) const
         {
             visualization_msgs::MarkerArray markers;
             int32_t starting_idx = 1;
             for (size_t idx = 0; idx < particles.size(); idx++)
             {
-                const visualization_msgs::MarkerArray particle_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, particles[idx].first, color, starting_idx, ns);
+                const visualization_msgs::MarkerArray particle_markers = simulator_ptr_->MakeConfigurationDisplayRep(robot_ptr_, particles[idx].ResultConfig(), color, starting_idx, ns);
                 markers.markers.insert(markers.markers.end(), particle_markers.markers.begin(), particle_markers.markers.end());
                 starting_idx = (int32_t)markers.markers.size() + 1;
             }
@@ -1390,8 +1391,8 @@ namespace uncertainty_contact_planning
             {
                 throw std::invalid_argument("parent_particles cannot be empty");
             }
-            std::vector<std::pair<Configuration, std::pair<bool, bool>>> result_particles;
-            result_particles.push_back(std::make_pair(current_config, std::make_pair(false, false)));
+            std::vector<SimulationResult> result_particles;
+            result_particles.push_back(SimulationResult(current_config, current_config, false, false));
             const std::vector<uint8_t> cluster_membership = clustering_ptr_->IdentifyClusterMembers(robot_ptr_, parent_particles, result_particles, display_fn);
             const uint8_t parent_cluster_membership = cluster_membership.at(0);
             if (parent_cluster_membership > 0x00)
@@ -1407,34 +1408,34 @@ namespace uncertainty_contact_planning
         /*
          * Particle clustering function for planning
          */
-        inline std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>> ClusterParticles(const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& particles, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::vector<std::vector<SimulationResult>> ClusterParticles(const std::vector<SimulationResult>& particles, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Make sure there are particles to cluster
             if (particles.size() == 0)
             {
-                return std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>>();
+                return std::vector<std::vector<SimulationResult>>();
             }
             else if (particles.size() == 1)
             {
-                return std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>>{particles};
+                return std::vector<std::vector<SimulationResult>>{particles};
             }
             const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             const std::vector<std::vector<size_t>> final_index_clusters = clustering_ptr_->ClusterParticles(robot_ptr_, particles, display_fn);
             // Before we return, we need to convert the index clusters to configuration clusters
-            std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>> final_clusters;
+            std::vector<std::vector<SimulationResult>> final_clusters;
             final_clusters.reserve(final_index_clusters.size());
             size_t total_particles = 0;
             for (size_t cluster_idx = 0; cluster_idx < final_index_clusters.size(); cluster_idx++)
             {
                 const std::vector<size_t>& cluster = final_index_clusters[cluster_idx];
-                std::vector<std::pair<Configuration, std::pair<bool, bool>>> final_cluster;
+                std::vector<SimulationResult> final_cluster;
                 final_cluster.reserve(cluster.size());
                 for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
                 {
                     total_particles++;
                     const size_t particle_idx = cluster[element_idx];
-                    const std::pair<Configuration, std::pair<bool, bool>>& particle = particles.at(particle_idx);
-                    if ((particle.second.first == false) || allow_contacts)
+                    const SimulationResult& particle = particles.at(particle_idx);
+                    if ((particle.DidContact() == false) || allow_contacts)
                     {
                         final_cluster.push_back(particle);
                     }
@@ -1457,7 +1458,7 @@ namespace uncertainty_contact_planning
         /*
          * Forward propagation functions
          */
-        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>> SimulateParticles(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const bool allow_contacts, const bool simulate_reverse, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>> SimulateParticles(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const bool allow_contacts, const bool simulate_reverse, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             // First, compute a target state
@@ -1488,7 +1489,7 @@ namespace uncertainty_contact_planning
             target_position.reserve(1);
             target_position.push_back(target_point);
             target_position.shrink_to_fit();
-            std::vector<std::pair<Configuration, std::pair<bool, bool>>> propagated_points;
+            std::vector<SimulationResult> propagated_points;
             if (simulate_reverse == false)
             {
                 propagated_points = simulator_ptr_->ForwardSimulateRobots(robot_ptr_, initial_particles, target_position, allow_contacts, display_fn);
@@ -1501,12 +1502,12 @@ namespace uncertainty_contact_planning
             const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
             const std::chrono::duration<double> elapsed = end - start;
             elapsed_simulation_time_ += elapsed.count();
-            return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>(initial_particles, propagated_points);
+            return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>(initial_particles, propagated_points);
         }
 
         inline std::pair<uint32_t, uint32_t> ComputeReverseEdgeProbability(const UncertaintyPlanningState& parent, const UncertaintyPlanningState& child, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
-            const std::vector<std::pair<Configuration, std::pair<bool, bool>>> simulation_result = SimulateParticles(child, parent, true, true, display_fn).second;
+            const std::vector<SimulationResult> simulation_result = SimulateParticles(child, parent, true, true, display_fn).second;
             std::vector<uint8_t> parent_cluster_membership;
             if (parent.HasParticles())
             {
@@ -1529,17 +1530,17 @@ namespace uncertainty_contact_planning
             return std::make_pair((uint32_t)parent_cluster_membership.size(), reached_parent);
         }
 
-        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> ForwardSimulateStates(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>> ForwardSimulateStates(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Increment the transition ID
             transition_id_++;
             const uint64_t current_forward_transition_id = transition_id_;
             // Forward propagate each of the particles
-            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>> simulation_result = SimulateParticles(nearest, target, allow_contacts, false, display_fn);
+            std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>> simulation_result = SimulateParticles(nearest, target, allow_contacts, false, display_fn);
             std::vector<Configuration, ConfigAlloc>& initial_particles = simulation_result.first;
-            std::vector<std::pair<Configuration, std::pair<bool, bool>>>& propagated_points = simulation_result.second;
+            std::vector<SimulationResult>& propagated_points = simulation_result.second;
             // Cluster the live particles into (potentially) multiple states
-            const std::vector<std::vector<std::pair<Configuration, std::pair<bool, bool>>>>& particle_clusters = ClusterParticles(propagated_points, allow_contacts, display_fn);
+            const std::vector<std::vector<SimulationResult>>& particle_clusters = ClusterParticles(propagated_points, allow_contacts, display_fn);
             bool is_split_child = false;
             if (particle_clusters.size() > 1)
             {
@@ -1547,11 +1548,12 @@ namespace uncertainty_contact_planning
                 split_id_++;
             }
             // Build the forward-propagated states
-            const Configuration control_target = target.GetExpectation();
+            // We know in this case that all propagated points will have the same actual target, so we just use the first
+            const Configuration control_target = propagated_points.at(0).ActualTarget();
             std::vector<std::pair<UncertaintyPlanningState, int64_t>> result_states(particle_clusters.size());
             for (size_t idx = 0; idx < particle_clusters.size(); idx++)
             {
-                const std::vector<std::pair<Configuration, std::pair<bool, bool>>>& current_cluster = particle_clusters[idx];
+                const std::vector<SimulationResult>& current_cluster = particle_clusters[idx];
                 if (debug_level_ >= 15)
                 {
                     display_fn(MakeParticlesDisplayRep(current_cluster, arc_helpers::GenerateUniqueColor<std_msgs::ColorRGBA>((uint32_t)(idx + 1), 1.0f), "result_cluster_" + std::to_string(idx + 1)));
@@ -1568,12 +1570,12 @@ namespace uncertainty_contact_planning
                     bool action_is_nominally_independent = true;
                     for (size_t pdx = 0; pdx < current_cluster.size(); pdx++)
                     {
-                        particle_locations[pdx] = current_cluster[pdx].first;
-                        if (current_cluster[pdx].second.first)
+                        particle_locations[pdx] = current_cluster[pdx].ResultConfig();
+                        if (current_cluster[pdx].DidContact())
                         {
                             did_collide = true;
                         }
-                        if (current_cluster[pdx].second.second == false)
+                        if (current_cluster[pdx].OutcomeIsNominallyIndependent() == false)
                         {
                             action_is_nominally_independent = false;
                         }
@@ -1677,13 +1679,13 @@ namespace uncertainty_contact_planning
                 std::cout << "Press ENTER to add new states..." << std::endl;
                 std::cin.get();
             }
-            return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>(result_states, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>(initial_particles, propagated_points));
+            return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>>(result_states, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>(initial_particles, propagated_points));
         }
 
         inline std::vector<std::pair<UncertaintyPlanningState, int64_t>> PropagateForwardsAndDraw(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // First, perform the forwards propagation
-            const std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>> propagated_state = PerformForwardPropagation(nearest, random, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
+            const std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>>> propagated_state = PerformForwardPropagation(nearest, random, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
             if (debug_level_ >= 1)
             {
                 // Draw the expansion
@@ -1734,7 +1736,7 @@ namespace uncertainty_contact_planning
             return propagated_state.first;
         }
 
-        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>> PerformForwardPropagation(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        inline std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>>> PerformForwardPropagation(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& random, const uint32_t planner_action_try_attempts, const bool allow_contacts, const bool include_reverse_actions, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             const bool solution_already_found = (total_goal_reached_probability_ >= goal_probability_threshold_);
             bool use_extend = false;
@@ -1770,15 +1772,15 @@ namespace uncertainty_contact_planning
                     Log("Forward simulating, step size is " + std::to_string(step_size_) + ", target distance is " + std::to_string(target_distance), 0);
                 }
                 UncertaintyPlanningState target_state(target_point);
-                std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
-                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> raw_particle_propagations = {propagation_results.second};
-                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>>(propagation_results.first, raw_particle_propagations);
+                std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
+                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>> raw_particle_propagations = {propagation_results.second};
+                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>>>(propagation_results.first, raw_particle_propagations);
             }
             // If we haven't found a solution yet, we use RRT-Connect
             else
             {
                 std::vector<std::pair<UncertaintyPlanningState, int64_t>> propagated_states;
-                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> raw_particle_propagations;
+                std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>> raw_particle_propagations;
                 int64_t parent_offset = -1;
                 // Compute a maximum number of steps to take
                 const Configuration target_point = random.GetExpectation();
@@ -1814,7 +1816,7 @@ namespace uncertainty_contact_planning
                     }
                     // Take a step forwards
                     UncertaintyPlanningState target_state(current_target_point);
-                    std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
+                    std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>> propagation_results = ForwardSimulateStates(nearest, target_state, planner_action_try_attempts, allow_contacts, include_reverse_actions, display_fn);
                     raw_particle_propagations.push_back(propagation_results.second);
                     const std::vector<std::pair<UncertaintyPlanningState, int64_t>>& simulation_results = propagation_results.first;
                     // If simulation results in a single new state, we keep going
@@ -1842,7 +1844,7 @@ namespace uncertainty_contact_planning
                         completed = true;
                     }
                 }
-                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<std::pair<Configuration, std::pair<bool, bool>>>>>>(propagated_states, raw_particle_propagations);
+                return std::pair<std::vector<std::pair<UncertaintyPlanningState, int64_t>>, std::vector<std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult>>>>(propagated_states, raw_particle_propagations);
             }
         }
 

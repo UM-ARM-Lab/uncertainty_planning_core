@@ -289,6 +289,8 @@ private:
             State, StateSerializer, StateAlloc,
             uncertainty_planning_core::PRNG> TaskPlanningSpace;
 
+  typedef simple_simulator_interface::SimulationResult<State> SimulationResult;
+
   static void
   DeleteSamplerPtrFn(TaskPlannerSampling<State, StateAlloc>* ptr)
   {
@@ -360,12 +362,12 @@ private:
   }
 
   std::vector<std::vector<size_t>> ClusterParticlesImpl(
-      const std::vector<std::pair<State, std::pair<bool, bool>>>& particles)
+      const std::vector<SimulationResult>& particles)
   {
     std::map<uint64_t, std::vector<size_t>> cluster_map;
     for (size_t idx = 0; idx < particles.size(); idx++)
     {
-      const State& config = particles[idx].first;
+      const State& config = particles[idx].ResultConfig();
       const uint64_t particle_readiness
           = ComputeStateReadiness(config);
       cluster_map[particle_readiness].push_back(idx);
@@ -380,8 +382,7 @@ private:
 
   std::vector<uint8_t> IdentifyClusterMembersImpl(
       const std::vector<State, StateAlloc>& cluster,
-      const std::vector<std::pair<State,
-                                  std::pair<bool, bool>>>& particles)
+      const std::vector<SimulationResult>& particles)
   {
     if (cluster.size() > 0)
     {
@@ -399,7 +400,7 @@ private:
       std::vector<uint8_t> particle_cluster_membership(particles.size(), 0x00);
       for (size_t idx = 0; idx < particles.size(); idx++)
       {
-        const State& config = particles[idx].first;
+        const State& config = particles[idx].ResultConfig();
         const uint64_t particle_readiness
             = ComputeStateReadiness(config);
         if (parent_cluster_readiness == particle_readiness)
@@ -419,8 +420,7 @@ private:
     }
   }
 
-  std::vector<std::pair<State, std::pair<bool, bool>>>
-  ForwardSimulatePrimitives(
+  std::vector<SimulationResult> ForwardSimulatePrimitives(
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions)
   {
@@ -434,14 +434,13 @@ private:
               "target_positions.size() must be 1 or start_positions.size()");
       }
     }
-    std::vector<std::pair<State, std::pair<bool, bool>>>
-        propagated_points;
+    std::vector<SimulationResult> propagated_points;
     propagated_points.reserve(start_positions.size());
     for (size_t idx = 0; idx < start_positions.size(); idx++)
     {
       const State& initial_particle = start_positions[idx];
-      const std::vector<std::pair<State, std::pair<bool, bool>>>
-          results = PerformBestAvailablePrimitive(initial_particle);
+      const std::vector<SimulationResult> results
+          = PerformBestAvailablePrimitive(initial_particle);
       propagated_points.insert(propagated_points.end(),
                                results.begin(),
                                results.end());
@@ -451,7 +450,7 @@ private:
     return propagated_points;
   }
 
-  std::vector<std::pair<State, std::pair<bool, bool>>>
+  std::vector<SimulationResult>
   ReverseSimulatePrimitives(
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions)
@@ -466,8 +465,7 @@ private:
               "target_positions.size() must be 1 or start_positions.size()");
       }
     }
-    std::vector<std::pair<State, std::pair<bool, bool>>>
-        propagated_points;
+    std::vector<SimulationResult> propagated_points;
     propagated_points.reserve(start_positions.size());
     for (size_t idx = 0; idx < start_positions.size(); idx++)
     {
@@ -475,8 +473,7 @@ private:
       const State& target_position
           = (target_positions.size() > 1) ? target_positions[idx]
                                           : target_positions[0];
-      const std::vector<std::pair<State, std::pair<bool, bool>>>
-          results
+      const std::vector<SimulationResult> results
           = PerformTargettedPrimitive(initial_particle, target_position);
       propagated_points.insert(propagated_points.end(),
                                results.begin(),
@@ -487,26 +484,26 @@ private:
     return propagated_points;
   }
 
-  std::vector<std::pair<State, std::pair<bool, bool>>>
+  std::vector<SimulationResult>
   MakePrimitiveResults(
       const std::vector<State, StateAlloc>& raw_primitive_results,
       const bool is_primitive_outcome_nominally_independent) const
   {
-      std::vector<std::pair<State, std::pair<bool, bool>>>
-          primitive_results;
-      primitive_results.reserve(raw_primitive_results.size());
-      for (size_t idx = 0; idx < raw_primitive_results.size(); idx++)
-      {
-          primitive_results.push_back(
-            std::make_pair(raw_primitive_results[idx],
-              std::make_pair(false,
-                             is_primitive_outcome_nominally_independent)));
-      }
-      primitive_results.shrink_to_fit();
-      return primitive_results;
+    std::vector<SimulationResult> primitive_results;
+    primitive_results.reserve(raw_primitive_results.size());
+    for (size_t idx = 0; idx < raw_primitive_results.size(); idx++)
+    {
+      primitive_results.emplace_back(
+            SimulationResult(raw_primitive_results[idx],
+                             raw_primitive_results[idx],
+                             false,
+                             is_primitive_outcome_nominally_independent));
+    }
+    primitive_results.shrink_to_fit();
+    return primitive_results;
   }
 
-  std::vector<std::pair<State, std::pair<bool, bool>>>
+  std::vector<SimulationResult>
   PerformBestAvailablePrimitive(const State& start)
   {
     int64_t best_primitive_idx = -1;
@@ -537,7 +534,7 @@ private:
       const std::vector<std::pair<State, bool>> primitive_results
           = best_primitive->GetOutcomes(start);
       // Package the results
-      std::vector<std::pair<State, std::pair<bool, bool>>> complete_results;
+      std::vector<SimulationResult> complete_results;
       complete_results.reserve(primitive_results.size());
       for (size_t idx = 0; idx < primitive_results.size(); idx++)
       {
@@ -545,10 +542,11 @@ private:
         const bool outcome_is_nominally_independent
             = primitive_results[idx].second;
         const bool did_contact = false; // Contact has no meaning here
-        complete_results.push_back(
-              std::make_pair(result_state,
-                             std::make_pair(did_contact,
-                                            outcome_is_nominally_independent)));
+        complete_results.emplace_back(
+              SimulationResult(result_state,
+                               result_state,
+                               did_contact,
+                               outcome_is_nominally_independent));
       }
       complete_results.shrink_to_fit();
       return complete_results;
@@ -597,7 +595,7 @@ private:
     }
   }
 
-  std::vector<std::pair<State, std::pair<bool, bool>>>
+  std::vector<SimulationResult>
   PerformTargettedPrimitive(const State& start, const State& target)
   {
     const uint64_t start_readiness = ComputeStateReadiness(start);
@@ -694,7 +692,7 @@ private:
     }
   }
 
-  std::vector<std::pair<State, std::pair<bool, bool>>>
+  std::vector<SimulationResult>
   PerformParticlePropagation(const TaskPlanningState& nearest,
                              const TaskPlanningState& target,
                              const bool simulate_reverse)
@@ -708,7 +706,7 @@ private:
     target_position.reserve(1);
     target_position.push_back(target.GetExpectation());
     target_position.shrink_to_fit();
-    std::vector<std::pair<State, std::pair<bool, bool>>> propagated_points;
+    std::vector<SimulationResult> propagated_points;
     if (simulate_reverse == false)
     {
       propagated_points = ForwardSimulatePrimitives(initial_particles,
@@ -722,28 +720,28 @@ private:
     return propagated_points;
   }
 
-  std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>>
+  std::vector<std::vector<SimulationResult>>
   PerformStateClustering(
-      const std::vector<std::pair<State, std::pair<bool, bool>>>& particles)
+      const std::vector<SimulationResult>& particles)
   {
     // Make sure there are particles to cluster
     if (particles.size() == 0)
     {
       Log("Single cluster with no states", 1);
       return
-          std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>>();
+          std::vector<std::vector<SimulationResult>>();
     }
     else if (particles.size() == 1)
     {
       Log("Single cluster with one state "
           + PrettyPrint::PrettyPrint(particles.front()), 1);
-      return std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>>{
+      return std::vector<std::vector<SimulationResult>>{
                 particles};
     }
     const std::vector<std::vector<size_t>> index_clusters
         = ClusterParticlesImpl(particles);
     // Before we return, we need to convert the index clusters to State clusters
-    std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>> clusters;
+    std::vector<std::vector<SimulationResult>> clusters;
     clusters.reserve(index_clusters.size());
     size_t total_particles = 0;
     Log("Clustering produced " + std::to_string(index_clusters.size())
@@ -754,14 +752,13 @@ private:
          cluster_idx++)
     {
       const std::vector<size_t>& cluster = index_clusters[cluster_idx];
-      std::vector<std::pair<State, std::pair<bool, bool>>> final_cluster;
+      std::vector<SimulationResult> final_cluster;
       final_cluster.reserve(cluster.size());
       for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
       {
         total_particles++;
         const size_t particle_idx = cluster[element_idx];
-        const std::pair<State, std::pair<bool, bool>>& particle
-            = particles.at(particle_idx);
+        const SimulationResult& particle = particles.at(particle_idx);
         final_cluster.push_back(particle);
       }
       final_cluster.shrink_to_fit();
@@ -782,7 +779,7 @@ private:
   ComputeReverseEdgeProbability(const TaskPlanningState& parent,
                                 const TaskPlanningState& child)
   {
-    const std::vector<std::pair<State, std::pair<bool, bool>>>
+    const std::vector<SimulationResult>
         simulation_result = PerformParticlePropagation(child, parent, true);
     std::vector<uint8_t> parent_cluster_membership;
     if (parent.HasParticles())
@@ -822,10 +819,10 @@ private:
     transition_id_++;
     const uint64_t current_forward_transition_id = transition_id_;
     // Forward propagate each of the particles
-    std::vector<std::pair<State, std::pair<bool, bool>>> propagated_points
+    std::vector<SimulationResult> propagated_points
         = PerformParticlePropagation(nearest, target, false);
     // Cluster the live particles into (potentially) multiple states
-    const std::vector<std::vector<std::pair<State, std::pair<bool, bool>>>>&
+    const std::vector<std::vector<SimulationResult>>&
         particle_clusters = PerformStateClustering(propagated_points);
     bool is_split_child = false;
     if (particle_clusters.size() > 1)
@@ -839,8 +836,8 @@ private:
           particle_clusters.size());
     for (size_t idx = 0; idx < particle_clusters.size(); idx++)
     {
-      const std::vector<std::pair<State, std::pair<bool, bool>>>&
-          current_cluster = particle_clusters[idx];
+      const std::vector<SimulationResult>& current_cluster
+          = particle_clusters[idx];
       if (current_cluster.size() > 0)
       {
         state_counter_++;
@@ -851,8 +848,8 @@ private:
         bool action_is_nominally_independent = true;
         for (size_t pdx = 0; pdx < current_cluster.size(); pdx++)
         {
-          particle_locations.push_back(current_cluster[pdx].first);
-          if (current_cluster[pdx].second.second == false)
+          particle_locations.push_back(current_cluster[pdx].ResultConfig());
+          if (current_cluster[pdx].OutcomeIsNominallyIndependent() == false)
           {
             action_is_nominally_independent = false;
           }
@@ -1133,9 +1130,9 @@ public:
         = [&] (const std::vector<State, StateAlloc>& particles,
                const State& result_state)
     {
-      std::vector<std::pair<State, std::pair<bool, bool>>> result_particles;
-      result_particles.push_back(std::make_pair(result_state,
-                                                std::make_pair(false, false)));
+      std::vector<SimulationResult> result_particles;
+      result_particles.emplace_back(
+            SimulationResult(result_state, result_state, false, false));
       const std::vector<uint8_t> cluster_membership
           = IdentifyClusterMembersImpl(particles, result_particles);
       const uint8_t parent_cluster_membership = cluster_membership.at(0);
@@ -1412,7 +1409,7 @@ public:
 
   virtual std::vector<std::vector<size_t>> ClusterParticles(
     const TaskStateRobotBasePtr& robot,
-    const std::vector<std::pair<State, std::pair<bool, bool>>>& particles,
+    const std::vector<SimulationResult>& particles,
     const DisplayFn& display_fn)
   {
     UNUSED(robot);
@@ -1423,8 +1420,7 @@ public:
   virtual std::vector<uint8_t> IdentifyClusterMembers(
     const TaskStateRobotBasePtr& robot,
     const std::vector<State, StateAlloc>& cluster,
-    const std::vector<std::pair<State,
-                                std::pair<bool, bool>>>& particles,
+    const std::vector<SimulationResult>& particles,
     const DisplayFn& display_fn)
   {
     UNUSED(robot);
@@ -1510,8 +1506,7 @@ public:
     return false;
   }
 
-  virtual std::pair<State, std::pair<bool, bool>>
-  ForwardSimulateMutableRobot(
+  virtual SimulationResult ForwardSimulateMutableRobot(
       const TaskStateRobotBasePtr& mutable_robot,
       const State& target_position,
       const bool allow_contacts,
@@ -1528,8 +1523,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::pair<State, std::pair<bool, bool>>
-  ReverseSimulateMutableRobot(
+  virtual SimulationResult ReverseSimulateMutableRobot(
       const TaskStateRobotBasePtr& mutable_robot,
       const State& target_position,
       const bool allow_contacts,
@@ -1546,8 +1540,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::pair<State, std::pair<bool, bool>>
-  ForwardSimulateRobot(
+  virtual SimulationResult ForwardSimulateRobot(
       const TaskStateRobotBasePtr& immutable_robot,
       const State& start_position,
       const State& target_position,
@@ -1566,8 +1559,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::pair<State, std::pair<bool, bool>>
-  ReverseSimulateRobot(
+  virtual SimulationResult ReverseSimulateRobot(
       const TaskStateRobotBasePtr& immutable_robot,
       const State& start_position,
       const State& target_position,
@@ -1586,8 +1578,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::vector<std::pair<State, std::pair<bool, bool>>>
-  ForwardSimulateRobots(
+  virtual std::vector<SimulationResult> ForwardSimulateRobots(
       const TaskStateRobotBasePtr& immutable_robot,
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions,
@@ -1602,8 +1593,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::vector<std::pair<State, std::pair<bool, bool>>>
-  ReverseSimulateRobots(
+  virtual std::vector<SimulationResult> ReverseSimulateRobots(
       const TaskStateRobotBasePtr& immutable_robot,
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions,
