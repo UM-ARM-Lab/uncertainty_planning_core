@@ -503,8 +503,7 @@ private:
     return primitive_results;
   }
 
-  std::vector<SimulationResult>
-  PerformBestAvailablePrimitive(const State& start)
+  int64_t GetBestPrimitiveIndex(const State& start)
   {
     int64_t best_primitive_idx = -1;
     double best_primitive_ranking = 0.0;
@@ -524,13 +523,20 @@ private:
         }
       }
     }
+    return best_primitive_idx;
+  }
+
+  std::vector<SimulationResult>
+  PerformBestAvailablePrimitive(const State& start)
+  {
+    const int64_t best_primitive_idx = GetBestPrimitiveIndex(start);
     if (best_primitive_idx >= 0)
     {
       const ActionPrimitivePtr<State, StateAlloc>& best_primitive
           = primitives_[static_cast<size_t>(best_primitive_idx)];
       Log("Performing best available primitive ["
           + best_primitive->Name() + "] with ranking "
-          + std::to_string(best_primitive_ranking), 2);
+          + std::to_string(best_primitive->Ranking()), 2);
       const std::vector<std::pair<State, bool>> primitive_results
           = best_primitive->GetOutcomes(start);
       // Package the results
@@ -561,31 +567,14 @@ private:
   std::vector<State, StateAlloc>
   ExecuteBestAvailablePrimitive(const State& start)
   {
-    int64_t best_primitive_idx = -1;
-    double best_primitive_ranking = 0.0;
-    for (size_t idx = 0; idx < primitives_.size(); idx++)
-    {
-      const ActionPrimitivePtr<State, StateAlloc>& primitive = primitives_[idx];
-      if (primitive->IsCandidate(start))
-      {
-        const double primitive_ranking = primitive->Ranking();
-        Log("Considering available primitive ["
-            + primitive->Name() + "] with ranking "
-            + std::to_string(primitive_ranking), 1);
-        if (primitive_ranking >= best_primitive_ranking)
-        {
-          best_primitive_ranking = primitive_ranking;
-          best_primitive_idx = static_cast<int64_t>(idx);
-        }
-      }
-    }
+    const int64_t best_primitive_idx = GetBestPrimitiveIndex(start);
     if (best_primitive_idx >= 0)
     {
       const ActionPrimitivePtr<State, StateAlloc>& best_primitive
           = primitives_[static_cast<size_t>(best_primitive_idx)];
       Log("Executing best available primitive ["
           + best_primitive->Name() + "] with ranking "
-          + std::to_string(best_primitive_ranking), 2);
+          + std::to_string(best_primitive->Ranking()), 2);
       if (GetDebugLevel() >= 1)
       {
         Log("Press ENTER to continue...", 4);
@@ -1357,6 +1346,22 @@ public:
   void ClearPrimitives()
   {
     primitives_.clear();
+  }
+
+  std::string GetBestPrimitiveName(const State& state)
+  {
+    const int64_t best_primitive_idx = GetBestPrimitiveIndex(state);
+    if (best_primitive_idx >= 0)
+    {
+      const ActionPrimitivePtr<State, StateAlloc>& best_primitive
+          = primitives_[static_cast<size_t>(best_primitive_idx)];
+      return best_primitive->Name();
+    }
+    else
+    {
+      throw std::runtime_error("No available primitive to handle state "
+                                     + PrettyPrint::PrettyPrint(state));
+    }
   }
 
   void SetStateReadinessFn(const std::function<uint32_t(const State&)>& fn)
