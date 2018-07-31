@@ -487,9 +487,17 @@ int main(int argc, char** argv)
     objects_to_put_away--;
     return PutInBoxState(-objects_to_put_away_old, false, false);
   };
+  const std::function<void(const PutInBoxState&, const PutInBoxState&)>
+      pre_action_callback_fn
+          = [] (const PutInBoxState&, const PutInBoxState&) {};
+  const std::function<void(const std::vector<PutInBoxState>&, const int64_t)>
+      post_outcome_callback_fn
+          = [] (const std::vector<PutInBoxState>&, const int64_t) {};
   auto exec_result
       = planner.ExecutePolicy(plan_result.first,
                               single_execution_initialization_fn,
+                              pre_action_callback_fn,
+                              post_outcome_callback_fn,
                               100u, 100u, true, false);
   logging_fn("Task execution statistics: "
              + PrettyPrint::PrettyPrint(exec_result.second), 1);

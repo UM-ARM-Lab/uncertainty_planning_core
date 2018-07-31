@@ -1099,6 +1099,8 @@ public:
   /// - Task policy
   /// - Function to initialize each execution of the policy and return the
   ///   initial state to start policy execution from
+  /// - User-defined pre-action callback function
+  /// - User-defined post-action callback function
   /// - Max number of execution steps in each single policy execution
   /// - Max number of policy executions to perform to complete the task
   /// - Allow transition probability learning accross all policy executions
@@ -1106,6 +1108,11 @@ public:
   std::pair<TaskPlanningPolicy, std::map<std::string, double>>
   ExecutePolicy(const TaskPlanningPolicy& starting_policy,
                 const std::function<State(void)>& exec_initialization_fn,
+                const std::function<void(const State&, const State&)>&
+                    pre_action_callback_fn,
+                const std::function<void(
+                    const std::vector<State, StateAlloc>&, const int64_t)>&
+                        post_outcome_callback_fn,
                 const int64_t max_policy_exec_steps,
                 const int64_t max_policy_executions,
                 const bool allow_branch_jumping,
@@ -1180,6 +1187,7 @@ public:
         desired_transition_id = policy_query_response.DesiredTransitionId();
         const State& action = policy_query_response.Action();
         const bool is_reverse_action = policy_query_response.IsReverseAction();
+        pre_action_callback_fn(current_state, action);
         // Perform the action
         std::vector<State, StateAlloc> action_results;
         if (is_reverse_action)
@@ -1240,6 +1248,7 @@ public:
               + std::to_string(best_outcome_cost), 2);
           const State& best_outcome = action_results[best_outcome_idx];
           execution_trace.push_back(best_outcome);
+          post_outcome_callback_fn(action_results, best_outcome_idx);
         }
         else
         {
