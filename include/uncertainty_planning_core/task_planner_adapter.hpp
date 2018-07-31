@@ -586,6 +586,11 @@ private:
       Log("Executing best available primitive ["
           + best_primitive->Name() + "] with ranking "
           + std::to_string(best_primitive_ranking), 2);
+      if (GetDebugLevel() >= 1)
+      {
+        Log("Press ENTER to continue...", 4);
+        std::cin.get();
+      }
       return best_primitive->Execute(start);
     }
     else

@@ -408,7 +408,7 @@ int main(int argc, char** argv)
   ros::NodeHandle nh;
   ros::NodeHandle nhp;
   // Get debug level
-  const int32_t debug_level = nhp.param(std::string("debug_level"), 1);
+  const int32_t debug_level = nhp.param(std::string("debug_level"), 0);
   // Make display function
   ros::Publisher display_debug_publisher =
       nh.advertise<visualization_msgs::MarkerArray>(
