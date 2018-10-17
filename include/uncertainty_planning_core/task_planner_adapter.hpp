@@ -15,12 +15,14 @@
 #include <Eigen/Geometry>
 #include <ros/ros.h>
 #include <visualization_msgs/Marker.h>
-#include <arc_utilities/eigen_helpers.hpp>
-#include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <arc_utilities/pretty_print.hpp>
+#include <common_robotics_utilities/math.hpp>
+#include <common_robotics_utilities/conversions.hpp>
+#include <common_robotics_utilities/print.hpp>
 #include <uncertainty_planning_core/uncertainty_planning_core.hpp>
 #include <omp.h>
 
+namespace uncertainty_planning_core
+{
 namespace task_planner_adapter
 {
 using DisplayFn = std::function<void(const visualization_msgs::MarkerArray&)>;
@@ -30,7 +32,6 @@ template<typename State, typename StateAlloc=std::allocator<State>>
 class ActionPrimitiveInterface
 {
 public:
-
   virtual ~ActionPrimitiveInterface() {}
 
   /// Returns true if the provided state is a candidare for the primitive
@@ -131,22 +132,18 @@ public:
 
 template<typename State, typename StateAlloc=std::allocator<State>>
 using TaskPlannerClustering
-  = simple_outcome_clustering_interface
-    ::OutcomeClusteringInterface<State, StateAlloc>;
+  = SimpleOutcomeClusteringInterface<State, StateAlloc>;
 
 template<typename State, typename StateAlloc=std::allocator<State>>
 using TaskPlannerSampling
-  = simple_sampler_interface
-    ::SamplerInterface<State, uncertainty_planning_core::PRNG>;
+  = SimpleSamplerInterface<State, uncertainty_planning_core::PRNG>;
 
 template<typename State, typename StateAlloc=std::allocator<State>>
 using TaskPlannerSimulator
-  = simple_simulator_interface
-    ::SimulatorInterface<State,
-                         uncertainty_planning_core::PRNG,
-                         StateAlloc>;
+  = SimpleSimulatorInterface<State, PRNG, StateAlloc>;
 
-using simple_robot_model_interface::SimpleRobotModelInterface;
+using common_robotics_utilities::simple_robot_model_interface
+    ::SimpleRobotModelInterface;
 
 /// Helper class to implement robot model interface for task planning problems
 /// You should never need to directly instantiate or use a TaskStateRobot.
@@ -188,18 +185,27 @@ public:
   }
 
   virtual Eigen::Isometry3d GetLinkTransform(
+      const int64_t link_index) const
+  {
+    UNUSED(link_index);
+    throw std::runtime_error("Not a valid operation on TaskStateRobot");
+  }
+
+  virtual Eigen::Isometry3d GetLinkTransform(
       const std::string& link_name) const
   {
     UNUSED(link_name);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
-  virtual EigenHelpers::VectorIsometry3d GetLinkTransforms() const
+  virtual common_robotics_utilities::math::VectorIsometry3d
+  GetLinkTransforms() const
   {
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
-  virtual EigenHelpers::MapStringIsometry3d GetLinkTransformsMap() const
+  virtual common_robotics_utilities::math::MapStringIsometry3d
+  GetLinkTransformsMap() const
   {
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
@@ -253,12 +259,17 @@ public:
     UNUSED(link_relative_point);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
+
+  virtual Eigen::Matrix<double, 6, Eigen::Dynamic>
+  ComputeLinkPointJacobian(
+    const std::string& link_name,
+    const Eigen::Vector4d& link_relative_point) const
+  {
+    UNUSED(link_name);
+    UNUSED(link_relative_point);
+    throw std::runtime_error("Not a valid operation on TaskStateRobot");
+  }
 };
-
-using simple_simulator_interface::ForwardSimulationStepTrace;
-using uncertainty_planning_tools::UncertaintyPlannerState;
-using uncertainty_planning_core::UncertaintyPlanningTree;
-
 
 template<typename State, typename StateSerializer,
          typename StateAlloc=std::allocator<State>>
@@ -280,16 +291,13 @@ private:
   typedef UncertaintyPlanningTree<
             State, StateSerializer, StateAlloc> TaskPlanningTree;
 
-  typedef execution_policy::ExecutionPolicy<
+  typedef ExecutionPolicy<
             State, StateSerializer, StateAlloc> TaskPlanningPolicy;
 
-  typedef execution_policy::PolicyQueryResult<State> TaskPlanningPolicyQuery;
+  typedef PolicyQueryResult<State> TaskPlanningPolicyQuery;
 
-  typedef uncertainty_contact_planning::UncertaintyPlanningSpace<
-            State, StateSerializer, StateAlloc,
-            uncertainty_planning_core::PRNG> TaskPlanningSpace;
-
-  typedef simple_simulator_interface::SimulationResult<State> SimulationResult;
+  typedef UncertaintyPlanningSpace<
+            State, StateSerializer, StateAlloc, PRNG> TaskPlanningSpace;
 
   static void
   DeleteSamplerPtrFn(TaskPlannerSampling<State, StateAlloc>* ptr)
@@ -362,7 +370,7 @@ private:
   }
 
   std::vector<std::vector<size_t>> ClusterParticlesImpl(
-      const std::vector<SimulationResult>& particles)
+      const std::vector<SimulationResult<State>>& particles)
   {
     std::map<uint64_t, std::vector<size_t>> cluster_map;
     for (size_t idx = 0; idx < particles.size(); idx++)
@@ -382,7 +390,7 @@ private:
 
   std::vector<uint8_t> IdentifyClusterMembersImpl(
       const std::vector<State, StateAlloc>& cluster,
-      const std::vector<SimulationResult>& particles)
+      const std::vector<SimulationResult<State>>& particles)
   {
     if (cluster.size() > 0)
     {
@@ -420,7 +428,7 @@ private:
     }
   }
 
-  std::vector<SimulationResult> ForwardSimulatePrimitives(
+  std::vector<SimulationResult<State>> ForwardSimulatePrimitives(
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions)
   {
@@ -434,12 +442,12 @@ private:
               "target_positions.size() must be 1 or start_positions.size()");
       }
     }
-    std::vector<SimulationResult> propagated_points;
+    std::vector<SimulationResult<State>> propagated_points;
     propagated_points.reserve(start_positions.size());
     for (size_t idx = 0; idx < start_positions.size(); idx++)
     {
       const State& initial_particle = start_positions[idx];
-      const std::vector<SimulationResult> results
+      const std::vector<SimulationResult<State>> results
           = PerformBestAvailablePrimitive(initial_particle);
       propagated_points.insert(propagated_points.end(),
                                results.begin(),
@@ -450,7 +458,7 @@ private:
     return propagated_points;
   }
 
-  std::vector<SimulationResult>
+  std::vector<SimulationResult<State>>
   ReverseSimulatePrimitives(
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions)
@@ -465,7 +473,7 @@ private:
               "target_positions.size() must be 1 or start_positions.size()");
       }
     }
-    std::vector<SimulationResult> propagated_points;
+    std::vector<SimulationResult<State>> propagated_points;
     propagated_points.reserve(start_positions.size());
     for (size_t idx = 0; idx < start_positions.size(); idx++)
     {
@@ -473,7 +481,7 @@ private:
       const State& target_position
           = (target_positions.size() > 1) ? target_positions[idx]
                                           : target_positions[0];
-      const std::vector<SimulationResult> results
+      const std::vector<SimulationResult<State>> results
           = PerformTargettedPrimitive(initial_particle, target_position);
       propagated_points.insert(propagated_points.end(),
                                results.begin(),
@@ -484,17 +492,17 @@ private:
     return propagated_points;
   }
 
-  std::vector<SimulationResult>
+  std::vector<SimulationResult<State>>
   MakePrimitiveResults(
       const std::vector<State, StateAlloc>& raw_primitive_results,
       const bool is_primitive_outcome_nominally_independent) const
   {
-    std::vector<SimulationResult> primitive_results;
+    std::vector<SimulationResult<State>> primitive_results;
     primitive_results.reserve(raw_primitive_results.size());
     for (size_t idx = 0; idx < raw_primitive_results.size(); idx++)
     {
       primitive_results.emplace_back(
-            SimulationResult(raw_primitive_results[idx],
+            SimulationResult<State>(raw_primitive_results[idx],
                              raw_primitive_results[idx],
                              false,
                              is_primitive_outcome_nominally_independent));
@@ -526,7 +534,7 @@ private:
     return best_primitive_idx;
   }
 
-  std::vector<SimulationResult>
+  std::vector<SimulationResult<State>>
   PerformBestAvailablePrimitive(const State& start)
   {
     const int64_t best_primitive_idx = GetBestPrimitiveIndex(start);
@@ -540,7 +548,7 @@ private:
       const std::vector<std::pair<State, bool>> primitive_results
           = best_primitive->GetOutcomes(start);
       // Package the results
-      std::vector<SimulationResult> complete_results;
+      std::vector<SimulationResult<State>> complete_results;
       complete_results.reserve(primitive_results.size());
       for (size_t idx = 0; idx < primitive_results.size(); idx++)
       {
@@ -549,7 +557,7 @@ private:
             = primitive_results[idx].second;
         const bool did_contact = false; // Contact has no meaning here
         complete_results.emplace_back(
-              SimulationResult(result_state,
+              SimulationResult<State>(result_state,
                                result_state,
                                did_contact,
                                outcome_is_nominally_independent));
@@ -559,8 +567,9 @@ private:
     }
     else
     {
-      throw std::runtime_error("No available primitive to handle state "
-                                     + PrettyPrint::PrettyPrint(start));
+      throw std::runtime_error(
+          "No available primitive to handle state "
+          + common_robotics_utilities::print::Print(start));
     }
   }
 
@@ -584,12 +593,13 @@ private:
     }
     else
     {
-      throw std::runtime_error("No available primitive to handle state "
-                                     + PrettyPrint::PrettyPrint(start));
+      throw std::runtime_error(
+          "No available primitive to handle state "
+          + common_robotics_utilities::print::Print(start));
     }
   }
 
-  std::vector<SimulationResult>
+  std::vector<SimulationResult<State>>
   PerformTargettedPrimitive(const State& start, const State& target)
   {
     const uint64_t start_readiness = ComputeStateReadiness(start);
@@ -637,11 +647,7 @@ private:
       {
         auto particles
             = current_state.GetValueImmutable().GetParticlePositionsImmutable();
-        if (particles.second == false)
-        {
-          throw std::runtime_error("Encountered state with no particles");
-        }
-        const State& representative_particle = particles.first.at(0);
+        const State& representative_particle = particles.Value().at(0);
         const uint64_t state_readiness
             = ComputeStateReadiness(representative_particle);
   #if defined(_OPENMP)
@@ -676,7 +682,7 @@ private:
       const TaskPlanningState& best_state
           = tree.at(best_index).GetValueImmutable();
       Log("Selected node " + std::to_string(best_index)
-          + " with state " + PrettyPrint::PrettyPrint(best_state)
+          + " with state " + common_robotics_utilities::print::Print(best_state)
           + " as best neighbor (Qnear)", 2);
       return best_index;
     }
@@ -686,7 +692,7 @@ private:
     }
   }
 
-  std::vector<SimulationResult>
+  std::vector<SimulationResult<State>>
   PerformParticlePropagation(const TaskPlanningState& nearest,
                              const TaskPlanningState& target,
                              const bool simulate_reverse)
@@ -700,7 +706,7 @@ private:
     target_position.reserve(1);
     target_position.push_back(target.GetExpectation());
     target_position.shrink_to_fit();
-    std::vector<SimulationResult> propagated_points;
+    std::vector<SimulationResult<State>> propagated_points;
     if (simulate_reverse == false)
     {
       propagated_points = ForwardSimulatePrimitives(initial_particles,
@@ -714,28 +720,28 @@ private:
     return propagated_points;
   }
 
-  std::vector<std::vector<SimulationResult>>
+  std::vector<std::vector<SimulationResult<State>>>
   PerformStateClustering(
-      const std::vector<SimulationResult>& particles)
+      const std::vector<SimulationResult<State>>& particles)
   {
     // Make sure there are particles to cluster
     if (particles.size() == 0)
     {
       Log("Single cluster with no states", 1);
       return
-          std::vector<std::vector<SimulationResult>>();
+          std::vector<std::vector<SimulationResult<State>>>();
     }
     else if (particles.size() == 1)
     {
       Log("Single cluster with one state "
-          + PrettyPrint::PrettyPrint(particles.front()), 1);
-      return std::vector<std::vector<SimulationResult>>{
+          + common_robotics_utilities::print::Print(particles.front()), 1);
+      return std::vector<std::vector<SimulationResult<State>>>{
                 particles};
     }
     const std::vector<std::vector<size_t>> index_clusters
         = ClusterParticlesImpl(particles);
     // Before we return, we need to convert the index clusters to State clusters
-    std::vector<std::vector<SimulationResult>> clusters;
+    std::vector<std::vector<SimulationResult<State>>> clusters;
     clusters.reserve(index_clusters.size());
     size_t total_particles = 0;
     Log("Clustering produced " + std::to_string(index_clusters.size())
@@ -746,19 +752,19 @@ private:
          cluster_idx++)
     {
       const std::vector<size_t>& cluster = index_clusters[cluster_idx];
-      std::vector<SimulationResult> final_cluster;
+      std::vector<SimulationResult<State>> final_cluster;
       final_cluster.reserve(cluster.size());
       for (size_t element_idx = 0; element_idx < cluster.size(); element_idx++)
       {
         total_particles++;
         const size_t particle_idx = cluster[element_idx];
-        const SimulationResult& particle = particles.at(particle_idx);
+        const SimulationResult<State>& particle = particles.at(particle_idx);
         final_cluster.push_back(particle);
       }
       final_cluster.shrink_to_fit();
       Log("Cluster " + std::to_string(cluster_idx) + " with "
           + std::to_string(final_cluster.size()) + " states "
-          + PrettyPrint::PrettyPrint(final_cluster), 1);
+          + common_robotics_utilities::print::Print(final_cluster), 1);
       clusters.push_back(final_cluster);
     }
     clusters.shrink_to_fit();
@@ -773,14 +779,15 @@ private:
   ComputeReverseEdgeProbability(const TaskPlanningState& parent,
                                 const TaskPlanningState& child)
   {
-    const std::vector<SimulationResult>
+    const std::vector<SimulationResult<State>>
         simulation_result = PerformParticlePropagation(child, parent, true);
     std::vector<uint8_t> parent_cluster_membership;
     if (parent.HasParticles())
     {
       parent_cluster_membership
           = IdentifyClusterMembersImpl(
-              parent.GetParticlePositionsImmutable().first, simulation_result);
+              parent.GetParticlePositionsImmutable().Value(),
+              simulation_result);
     }
     else
     {
@@ -813,10 +820,10 @@ private:
     transition_id_++;
     const uint64_t current_forward_transition_id = transition_id_;
     // Forward propagate each of the particles
-    std::vector<SimulationResult> propagated_points
+    std::vector<SimulationResult<State>> propagated_points
         = PerformParticlePropagation(nearest, target, false);
     // Cluster the live particles into (potentially) multiple states
-    const std::vector<std::vector<SimulationResult>>&
+    const std::vector<std::vector<SimulationResult<State>>>&
         particle_clusters = PerformStateClustering(propagated_points);
     bool is_split_child = false;
     if (particle_clusters.size() > 1)
@@ -830,7 +837,7 @@ private:
           particle_clusters.size());
     for (size_t idx = 0; idx < particle_clusters.size(); idx++)
     {
-      const std::vector<SimulationResult>& current_cluster
+      const std::vector<SimulationResult<State>>& current_cluster
           = particle_clusters[idx];
       if (current_cluster.size() > 0)
       {
@@ -1131,9 +1138,9 @@ public:
         = [&] (const std::vector<State, StateAlloc>& particles,
                const State& result_state)
     {
-      std::vector<SimulationResult> result_particles;
+      std::vector<SimulationResult<State>> result_particles;
       result_particles.emplace_back(
-            SimulationResult(result_state, result_state, false, false));
+            SimulationResult<State>(result_state, result_state, false, false));
       const std::vector<uint8_t> cluster_membership
           = IdentifyClusterMembersImpl(particles, result_particles);
       const uint8_t parent_cluster_membership = cluster_membership.at(0);
@@ -1257,7 +1264,8 @@ public:
                 + std::to_string(action_results.size()) + " results");
         }
         const State& outcome = execution_trace.back();
-        Log("Outcome state is: " + PrettyPrint::PrettyPrint(outcome), 1);
+        Log("Outcome state is: "
+            + common_robotics_utilities::print::Print(outcome), 1);
         if (IsTaskCompleted(outcome))
         {
           Log("Outcome state for execution " + std::to_string(num_executions)
@@ -1368,8 +1376,9 @@ public:
     }
     else
     {
-      throw std::runtime_error("No available primitive to handle state "
-                                     + PrettyPrint::PrettyPrint(state));
+      throw std::runtime_error(
+          "No available primitive to handle state "
+          + common_robotics_utilities::print::Print(state));
     }
   }
 
@@ -1428,7 +1437,7 @@ public:
 
   virtual std::vector<std::vector<size_t>> ClusterParticles(
     const TaskStateRobotBasePtr& robot,
-    const std::vector<SimulationResult>& particles,
+    const std::vector<SimulationResult<State>>& particles,
     const DisplayFn& display_fn)
   {
     UNUSED(robot);
@@ -1439,7 +1448,7 @@ public:
   virtual std::vector<uint8_t> IdentifyClusterMembers(
     const TaskStateRobotBasePtr& robot,
     const std::vector<State, StateAlloc>& cluster,
-    const std::vector<SimulationResult>& particles,
+    const std::vector<SimulationResult<State>>& particles,
     const DisplayFn& display_fn)
   {
     UNUSED(robot);
@@ -1525,7 +1534,7 @@ public:
     return false;
   }
 
-  virtual SimulationResult ForwardSimulateMutableRobot(
+  virtual SimulationResult<State> ForwardSimulateMutableRobot(
       const TaskStateRobotBasePtr& mutable_robot,
       const State& target_position,
       const bool allow_contacts,
@@ -1542,7 +1551,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual SimulationResult ReverseSimulateMutableRobot(
+  virtual SimulationResult<State> ReverseSimulateMutableRobot(
       const TaskStateRobotBasePtr& mutable_robot,
       const State& target_position,
       const bool allow_contacts,
@@ -1559,7 +1568,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual SimulationResult ForwardSimulateRobot(
+  virtual SimulationResult<State> ForwardSimulateRobot(
       const TaskStateRobotBasePtr& immutable_robot,
       const State& start_position,
       const State& target_position,
@@ -1578,7 +1587,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual SimulationResult ReverseSimulateRobot(
+  virtual SimulationResult<State> ReverseSimulateRobot(
       const TaskStateRobotBasePtr& immutable_robot,
       const State& start_position,
       const State& target_position,
@@ -1597,7 +1606,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::vector<SimulationResult> ForwardSimulateRobots(
+  virtual std::vector<SimulationResult<State>> ForwardSimulateRobots(
       const TaskStateRobotBasePtr& immutable_robot,
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions,
@@ -1612,7 +1621,7 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
-  virtual std::vector<SimulationResult> ReverseSimulateRobots(
+  virtual std::vector<SimulationResult<State>> ReverseSimulateRobots(
       const TaskStateRobotBasePtr& immutable_robot,
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions,
@@ -1627,4 +1636,5 @@ public:
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 };
-}
+}  // namespace task_planner_adapter
+}  // namespace uncertainty_planning_core

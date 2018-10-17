@@ -1,3 +1,4 @@
+#include <common_robotics_utilities/simple_prngs.hpp>
 #include <uncertainty_planning_core/task_planner_adapter.hpp>
 
 class PutInBoxState
@@ -57,8 +58,10 @@ public:
   {
     std::string rep
         = "Objects available: " + std::to_string(objects_available_)
-          + " Object put away: " + PrettyPrint::PrettyPrint(object_put_away_)
-          + " Box open: " + PrettyPrint::PrettyPrint(box_open_);
+          + " Object put away: "
+          + common_robotics_utilities::print::Print(object_put_away_)
+          + " Box open: "
+          + common_robotics_utilities::print::Print(box_open_);
     return rep;
   }
 
@@ -95,13 +98,13 @@ public:
   static uint64_t
   Serialize(const PutInBoxState& value, std::vector<uint8_t>& buffer)
   {
+    using common_robotics_utilities::serialization::SerializeMemcpyable;
     const uint64_t start_buffer_size = buffer.size();
-    arc_helpers::SerializeFixedSizePOD<int32_t>(
-          value.ObjectsAvailable(), buffer);
-    arc_helpers::SerializeFixedSizePOD<uint8_t>(
-          static_cast<uint8_t>(value.ObjectPutAway()), buffer);
-    arc_helpers::SerializeFixedSizePOD<uint8_t>(
-          static_cast<uint8_t>(value.BoxOpen()), buffer);
+    SerializeMemcpyable<int32_t>(value.ObjectsAvailable(), buffer);
+    SerializeMemcpyable<uint8_t>(
+        static_cast<uint8_t>(value.ObjectPutAway()), buffer);
+    SerializeMemcpyable<uint8_t>(
+        static_cast<uint8_t>(value.BoxOpen()), buffer);
     const uint64_t end_buffer_size = buffer.size();
     const uint64_t bytes_written = end_buffer_size - start_buffer_size;
     return bytes_written;
@@ -110,17 +113,18 @@ public:
   static std::pair<PutInBoxState, uint64_t>
   Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
   {
+    using common_robotics_utilities::serialization::DeserializeMemcpyable;
     uint64_t current_position = current;
     auto deser_objects_available
-        = arc_helpers::DeserializeFixedSizePOD<int32_t>(buffer, current);
+        = DeserializeMemcpyable<int32_t>(buffer, current);
     const int32_t objects_available = deser_objects_available.first;
     current_position += deser_objects_available.second;
     auto deser_object_put_away
-        = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current);
+        = DeserializeMemcpyable<uint8_t>(buffer, current);
     const bool object_put_away = static_cast<bool>(deser_object_put_away.first);
     current_position += deser_object_put_away.second;
     auto deser_box_open
-        = arc_helpers::DeserializeFixedSizePOD<uint8_t>(buffer, current);
+        = DeserializeMemcpyable<uint8_t>(buffer, current);
     const bool box_open = static_cast<bool>(deser_box_open.first);
     current_position += deser_box_open.second;
     // How much did we read?
@@ -139,12 +143,14 @@ std::ostream& operator<<(std::ostream& strm, const PutInBoxState& state)
 }
 
 class OpenBoxPrimitive
-    : public task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>
+    : public uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>
 {
 public:
 
   OpenBoxPrimitive()
-    : task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>() {}
+    : uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>() {}
 
   virtual bool IsCandidate(const PutInBoxState& state) const
   {
@@ -203,12 +209,14 @@ public:
 };
 
 class CloseBoxPrimitive
-    : public task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>
+    : public uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>
 {
 public:
 
   CloseBoxPrimitive()
-    : task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>() {}
+    : uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>() {}
 
   virtual bool IsCandidate(const PutInBoxState& state) const
   {
@@ -267,12 +275,14 @@ public:
 };
 
 class CheckIfAvailableObjectPrimitive
-    : public task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>
+    : public uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>
 {
 public:
 
   CheckIfAvailableObjectPrimitive()
-    : task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>() {}
+    : uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>() {}
 
   virtual bool IsCandidate(const PutInBoxState& state) const
   {
@@ -337,12 +347,14 @@ public:
 };
 
 class PutObjectInBoxPrimitive
-    : public task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>
+    : public uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>
 {
 public:
 
   PutObjectInBoxPrimitive()
-    : task_planner_adapter::ActionPrimitiveInterface<PutInBoxState>() {}
+    : uncertainty_planning_core::task_planner_adapter
+        ::ActionPrimitiveInterface<PutInBoxState>() {}
 
   virtual bool IsCandidate(const PutInBoxState& state) const
   {
@@ -436,7 +448,8 @@ int main(int argc, char** argv)
   }
   const int64_t prng_seed
       = static_cast<int64_t>(
-          arc_helpers::SplitMix64PRNG((uint64_t)prng_seed_init)());
+          common_robotics_utilities::simple_prngs
+              ::SplitMix64PRNG((uint64_t)prng_seed_init)());
   // Make the planner interface
   const std::function<uint64_t(const PutInBoxState&)> state_readiness_fn
       = [] (const PutInBoxState& state)
@@ -456,20 +469,24 @@ int main(int argc, char** argv)
     return PutInBoxState::IsTaskComplete(state);
   };
 
-  task_planner_adapter::TaskPlannerAdapter<PutInBoxState, PutInBoxState>
-      planner(state_readiness_fn,
-              single_execution_complete_fn,
-              task_complete_fn,
-              logging_fn, display_fn, prng_seed, debug_level);
+  uncertainty_planning_core::task_planner_adapter
+      ::TaskPlannerAdapter<PutInBoxState, PutInBoxState>
+          planner(state_readiness_fn, single_execution_complete_fn,
+                  task_complete_fn, logging_fn, display_fn, prng_seed,
+                  debug_level);
   // Add primitives
-  task_planner_adapter::ActionPrimitivePtr<PutInBoxState>
-      open_box_primitive_ptr(new OpenBoxPrimitive());
-  task_planner_adapter::ActionPrimitivePtr<PutInBoxState>
-      close_box_primitive_ptr(new CloseBoxPrimitive());
-  task_planner_adapter::ActionPrimitivePtr<PutInBoxState>
-      check_if_available_primitive_ptr(new CheckIfAvailableObjectPrimitive());
-  task_planner_adapter::ActionPrimitivePtr<PutInBoxState>
-      put_object_in_box_primitive_ptr(new PutObjectInBoxPrimitive());
+  uncertainty_planning_core::task_planner_adapter
+      ::ActionPrimitivePtr<PutInBoxState> open_box_primitive_ptr(
+          new OpenBoxPrimitive());
+  uncertainty_planning_core::task_planner_adapter
+      ::ActionPrimitivePtr<PutInBoxState> close_box_primitive_ptr(
+          new CloseBoxPrimitive());
+  uncertainty_planning_core::task_planner_adapter
+      ::ActionPrimitivePtr<PutInBoxState> check_if_available_primitive_ptr(
+          new CheckIfAvailableObjectPrimitive());
+  uncertainty_planning_core::task_planner_adapter
+      ::ActionPrimitivePtr<PutInBoxState> put_object_in_box_primitive_ptr(
+          new PutObjectInBoxPrimitive());
   planner.RegisterPrimitive(open_box_primitive_ptr);
   planner.RegisterPrimitive(close_box_primitive_ptr);
   planner.RegisterPrimitive(check_if_available_primitive_ptr);
@@ -478,7 +495,7 @@ int main(int argc, char** argv)
   auto plan_result
       = planner.PlanPolicy(PutInBoxState(), 10.0, 1.0, 0.01, 50u, 50u);
   logging_fn("Task planning statistics: "
-             + PrettyPrint::PrettyPrint(plan_result.second), 1);
+             + common_robotics_utilities::print::Print(plan_result.second), 1);
   int32_t objects_to_put_away = 5;
   const std::function<PutInBoxState(void)> single_execution_initialization_fn
       = [&] (void)
@@ -500,6 +517,6 @@ int main(int argc, char** argv)
                               post_outcome_callback_fn,
                               100u, 100u, true, false);
   logging_fn("Task execution statistics: "
-             + PrettyPrint::PrettyPrint(exec_result.second), 1);
+             + common_robotics_utilities::print::Print(exec_result.second), 1);
   return 0;
 }
