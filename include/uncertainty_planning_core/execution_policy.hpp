@@ -755,6 +755,18 @@ public:
     return edge_attempt_threshold_;
   }
 
+  const UncertaintyPlanningTree& GetRawPolicyTree() const
+  {
+    if (initialized_)
+    {
+      return planner_tree_;
+    }
+    else
+    {
+      throw std::runtime_error("PolicyGraph is not initialized");
+    }
+  }
+
   const PolicyGraph& GetRawPolicy() const
   {
     if (initialized_)
@@ -2000,7 +2012,7 @@ std::ostream& operator<<(
     const uncertainty_planning_core::ExecutionPolicy<
         Configuration, ConfigSerializer, ConfigAlloc>& policy)
 {
-  const auto& raw_policy_tree = policy.GetRawPolicy();
+  const auto& raw_policy_tree = policy.GetRawPolicyTree();
   strm << "Execution Policy - Policy: ";
   for (size_t idx = 0; idx < raw_policy_tree.size(); idx++)
   {

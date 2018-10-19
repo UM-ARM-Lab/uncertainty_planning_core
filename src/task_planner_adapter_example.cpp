@@ -496,6 +496,8 @@ int main(int argc, char** argv)
       = planner.PlanPolicy(PutInBoxState(), 10.0, 1.0, 0.01, 50u, 50u);
   logging_fn("Task planning statistics: "
              + common_robotics_utilities::print::Print(plan_result.second), 1);
+  logging_fn("Planned policy:\n"
+             + common_robotics_utilities::print::Print(plan_result.first), 1);
   int32_t objects_to_put_away = 5;
   const std::function<PutInBoxState(void)> single_execution_initialization_fn
       = [&] (void)
