@@ -441,7 +441,7 @@ int main(int argc, char** argv)
       = (int32_t)nhp.param(std::string("prng_seed_init"), -1);
   if (prng_seed_init == -1)
   {
-    prng_seed_init = (int32_t)std::chrono::high_resolution_clock::now()
+    prng_seed_init = (int32_t)std::chrono::steady_clock::now()
                      .time_since_epoch().count();
     logging_fn("No PRNG seed provided, initializing from clock to ["
                + std::to_string(prng_seed_init) + "]", 1);

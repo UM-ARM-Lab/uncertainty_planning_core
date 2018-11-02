@@ -337,7 +337,7 @@ namespace uncertainty_planning_core
                                                                                                     const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             // Bind the helper functions
-            const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
+            const std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
             std::function<bool(const UncertaintyPlanningState&)> goal_reached_fn = [&] (const UncertaintyPlanningState& goal_candidate) { return GoalReachedGoalFunction(goal_candidate, user_goal_check_fn, edge_attempt_count, allow_contacts); };
             std::function<void(UncertaintyPlanningTree&, const int64_t)> goal_reached_callback = [&] (UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx) { return GoalReachedCallback(tree, new_goal_state_idx, edge_attempt_count, start_time); };
             std::uniform_real_distribution<double> goal_bias_distribution(0.0, 1.0);
@@ -511,7 +511,7 @@ namespace uncertainty_planning_core
             UncertaintyPlanningState start_state(start);
             UncertaintyPlanningState goal_state(goal);
             // Bind the helper functions
-            const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
+            const std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
             std::function<double(const UncertaintyPlanningState&, const UncertaintyPlanningState&)> state_distance_fn = [&] (const UncertaintyPlanningState& state1, const UncertaintyPlanningState& state2)
             {
                 return StateDistance(state1, state2);
@@ -649,7 +649,7 @@ namespace uncertainty_planning_core
         inline UncertaintyPlanningTree PostProcessTree(const UncertaintyPlanningTree& planner_tree) const
         {
             Log("Postprocessing planner tree in preparation for policy extraction...", 1);
-            std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
+            std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
             // Let's do some post-processing to the planner tree - we don't want to mess with the original tree, so we copy it
             UncertaintyPlanningTree postprocessed_planner_tree = planner_tree;
             // We have already computed reversibility for all edges, however, we now need to update the P(goal reached) for reversible children
@@ -703,7 +703,7 @@ namespace uncertainty_planning_core
                     }
                 }
             }
-            std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
+            std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
             std::chrono::duration<double> postprocessing_time(end_time - start_time);
             Log("...postprocessing complete, took " + std::to_string(postprocessing_time.count()) + " seconds", 1);
             return postprocessed_planner_tree;
@@ -721,7 +721,7 @@ namespace uncertainty_planning_core
                 throw std::runtime_error("planner_tree has invalid linkage");
             }
             Log("Pruning planner tree in preparation for policy extraction...", 1);
-            std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
+            std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
             // Let's do some post-processing to the planner tree - we don't want to mess with the original tree, so we copy it
             UncertaintyPlanningTree intermediate_planner_tree = planner_tree;
             // Loop through the tree and prune unproductive nodes+edges
@@ -775,7 +775,7 @@ namespace uncertainty_planning_core
             {
                 throw std::runtime_error("pruned_planner_tree has invalid linkage");
             }
-            std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
+            std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
             std::chrono::duration<double> pruning_time(end_time - start_time);
             Log("...pruning complete, pruned to " + std::to_string(pruned_planner_tree.size()) + " states, took " + std::to_string(pruning_time.count()) + " seconds", 1);
             return pruned_planner_tree;
@@ -849,7 +849,7 @@ namespace uncertainty_planning_core
             uint32_t reached_goal = 0;
             for (size_t idx = 0; idx < num_executions; idx++)
             {
-                const std::chrono::time_point<std::chrono::high_resolution_clock> start_time = std::chrono::high_resolution_clock::now();
+                const std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
                 const std::function<std::vector<Configuration, ConfigAlloc>(const Configuration&, const Configuration&, const Configuration&, const bool, const bool)> simulator_move_fn =
                         [&] (const Configuration& current, const Configuration& action, const Configuration& expected_result, const bool is_reverse_motion, const bool is_reset_motion)
                 {
@@ -872,7 +872,7 @@ namespace uncertainty_planning_core
                     }
                 };
                 const std::pair<std::vector<Configuration, ConfigAlloc>, std::pair<UncertaintyPlanningPolicy, int64_t>> particle_execution = PerformSinglePolicyExecution(policy, allow_branch_jumping, link_runtime_states_to_planned_parent, start_configs[idx], simulator_move_fn, user_goal_check_fn, policy_exec_termination_fn, display_fn, policy_marker_size, wait_for_user);
-                const std::chrono::time_point<std::chrono::high_resolution_clock> end_time = std::chrono::high_resolution_clock::now();
+                const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
                 const std::chrono::duration<double> execution_time(end_time - start_time);
                 const double execution_seconds = execution_time.count();
                 policy_execution_times[idx] = execution_seconds;
@@ -1409,7 +1409,7 @@ namespace uncertainty_planning_core
             {
                 return std::vector<std::vector<SimulationResult<Configuration>>>{particles};
             }
-            const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+            const std::chrono::time_point<std::chrono::steady_clock> start = (std::chrono::time_point<std::chrono::steady_clock>)std::chrono::steady_clock::now();
             const std::vector<std::vector<size_t>> final_index_clusters = clustering_ptr_->ClusterParticles(robot_ptr_, particles, display_fn);
             // Before we return, we need to convert the index clusters to configuration clusters
             std::vector<std::vector<SimulationResult<Configuration>>> final_clusters;
@@ -1439,7 +1439,7 @@ namespace uncertainty_planning_core
                 throw std::runtime_error("total_particles != particles.size()");
             }
             // Now, return the clusters and probability table
-            const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+            const std::chrono::time_point<std::chrono::steady_clock> end = (std::chrono::time_point<std::chrono::steady_clock>)std::chrono::steady_clock::now();
             const std::chrono::duration<double> elapsed = end - start;
             elapsed_clustering_time_ += elapsed.count();
             return final_clusters;
@@ -1450,7 +1450,7 @@ namespace uncertainty_planning_core
          */
         inline std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult<Configuration>>> SimulateParticles(const UncertaintyPlanningState& nearest, const UncertaintyPlanningState& target, const bool allow_contacts, const bool simulate_reverse, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
-            const std::chrono::time_point<std::chrono::high_resolution_clock> start = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+            const std::chrono::time_point<std::chrono::steady_clock> start = (std::chrono::time_point<std::chrono::steady_clock>)std::chrono::steady_clock::now();
             // First, compute a target state
             const Configuration target_point = target.GetExpectation();
             // Get the initial particles
@@ -1489,7 +1489,7 @@ namespace uncertainty_planning_core
                 propagated_points = simulator_ptr_->ReverseSimulateRobots(robot_ptr_, initial_particles, target_position, allow_contacts, display_fn);
             }
             particles_simulated_ += propagated_points.size();
-            const std::chrono::time_point<std::chrono::high_resolution_clock> end = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+            const std::chrono::time_point<std::chrono::steady_clock> end = (std::chrono::time_point<std::chrono::steady_clock>)std::chrono::steady_clock::now();
             const std::chrono::duration<double> elapsed = end - start;
             elapsed_simulation_time_ += elapsed.count();
             return std::pair<std::vector<Configuration, ConfigAlloc>, std::vector<SimulationResult<Configuration>>>(initial_particles, propagated_points);
@@ -1910,13 +1910,13 @@ namespace uncertainty_planning_core
             return false;
         }
 
-        inline void GoalReachedCallback(UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx, const uint32_t planner_action_try_attempts, const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time)
+        inline void GoalReachedCallback(UncertaintyPlanningTree& tree, const int64_t new_goal_state_idx, const uint32_t planner_action_try_attempts, const std::chrono::time_point<std::chrono::steady_clock>& start_time)
         {
             UncertaintyPlanningTreeState& new_goal = tree[new_goal_state_idx];
             // Update the time-to-first-solution if need be
             if (time_to_first_solution_ == 0.0)
             {
-                const std::chrono::time_point<std::chrono::high_resolution_clock> current_time = (std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now();
+                const std::chrono::time_point<std::chrono::steady_clock> current_time = (std::chrono::time_point<std::chrono::steady_clock>)std::chrono::steady_clock::now();
                 const std::chrono::duration<double> elapsed = current_time - start_time;
                 time_to_first_solution_ = elapsed.count();
             }
@@ -2213,9 +2213,9 @@ namespace uncertainty_planning_core
         /*
          * Check if we should stop planning (have we reached the time limit?)
          */
-        inline bool PlannerTerminationCheck(const std::chrono::time_point<std::chrono::high_resolution_clock>& start_time, const std::chrono::duration<double>& time_limit, const double p_goal_termination_threshold) const
+        inline bool PlannerTerminationCheck(const std::chrono::time_point<std::chrono::steady_clock>& start_time, const std::chrono::duration<double>& time_limit, const double p_goal_termination_threshold) const
         {
-            const bool time_limit_reached = (((std::chrono::time_point<std::chrono::high_resolution_clock>)std::chrono::high_resolution_clock::now() - start_time) > time_limit);
+            const bool time_limit_reached = (((std::chrono::time_point<std::chrono::steady_clock>)std::chrono::steady_clock::now() - start_time) > time_limit);
             if (time_limit_reached)
             {
                 Log("Terminating, reached time limit", 0);
