@@ -65,7 +65,7 @@ inline std::vector<Configuration, ConfigAlloc> ExtractTrajectoryFromTrace(
     // Get the current trace segment
     if (step_trace.contact_resolver_steps.empty())
     {
-        throw std::runtime_error("step_trace.contact_resolver_steps is empty");
+      throw std::runtime_error("step_trace.contact_resolver_steps is empty");
     }
     // The last contact resolution step is the final result of resolving the
     // contacts in that timestep
@@ -74,8 +74,8 @@ inline std::vector<Configuration, ConfigAlloc> ExtractTrajectoryFromTrace(
     // Get the last (collision-free resolved) config of the last resolution step
     if (contact_resolution_trace.contact_resolution_steps.empty())
     {
-        throw std::runtime_error(
-            "contact_resolution_trace.contact_resolution_steps is empty");
+      throw std::runtime_error(
+          "contact_resolution_trace.contact_resolution_steps is empty");
     }
     const Configuration& resolved_config
         = contact_resolution_trace.contact_resolution_steps.back();
@@ -130,7 +130,7 @@ public:
          << common_robotics_utilities::print::Print(DidContact())
          << "] Outcome is nominally independent ["
          << common_robotics_utilities::print::Print(
-              OutcomeIsNominallyIndependent()) << "]";
+             OutcomeIsNominallyIndependent()) << "]";
     return strm.str();
   }
 };

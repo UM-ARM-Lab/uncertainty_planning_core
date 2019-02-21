@@ -134,9 +134,8 @@ template<typename State, typename StateAlloc=std::allocator<State>>
 using TaskPlannerClustering
   = SimpleOutcomeClusteringInterface<State, StateAlloc>;
 
-template<typename State, typename StateAlloc=std::allocator<State>>
-using TaskPlannerSampling
-  = SimpleSamplerInterface<State, uncertainty_planning_core::PRNG>;
+template<typename State>
+using TaskPlannerSampling = SimpleSamplerInterface<State, PRNG>;
 
 template<typename State, typename StateAlloc=std::allocator<State>>
 using TaskPlannerSimulator
@@ -252,8 +251,8 @@ public:
 
   virtual Eigen::Matrix<double, 3, Eigen::Dynamic>
   ComputeLinkPointTranslationJacobian(
-    const std::string& link_name,
-    const Eigen::Vector4d& link_relative_point) const
+      const std::string& link_name,
+      const Eigen::Vector4d& link_relative_point) const
   {
     UNUSED(link_name);
     UNUSED(link_relative_point);
@@ -262,8 +261,8 @@ public:
 
   virtual Eigen::Matrix<double, 6, Eigen::Dynamic>
   ComputeLinkPointJacobian(
-    const std::string& link_name,
-    const Eigen::Vector4d& link_relative_point) const
+      const std::string& link_name,
+      const Eigen::Vector4d& link_relative_point) const
   {
     UNUSED(link_name);
     UNUSED(link_relative_point);
@@ -274,7 +273,7 @@ public:
 template<typename State, typename StateSerializer,
          typename StateAlloc=std::allocator<State>>
 class TaskPlannerAdapter: public TaskPlannerClustering<State, StateAlloc>,
-                          public TaskPlannerSampling<State, StateAlloc>,
+                          public TaskPlannerSampling<State>,
                           public TaskPlannerSimulator<State, StateAlloc>
 {
 private:
@@ -300,7 +299,7 @@ private:
             State, StateSerializer, StateAlloc, PRNG> TaskPlanningSpace;
 
   static void
-  DeleteSamplerPtrFn(TaskPlannerSampling<State, StateAlloc>* ptr)
+  DeleteSamplerPtrFn(TaskPlannerSampling<State>* ptr)
   {
     UNUSED(ptr);
   }
@@ -1001,7 +1000,7 @@ public:
       const int64_t prng_seed,
       const int32_t debug_level)
     : TaskPlannerClustering<State, StateAlloc>(),
-      TaskPlannerSampling<State, StateAlloc>(),
+      TaskPlannerSampling<State>(),
       TaskPlannerSimulator<State, StateAlloc>(),
       state_readiness_fn_(state_readiness_fn),
       single_execution_completed_fn_(single_execution_completed_fn),
@@ -1040,7 +1039,7 @@ public:
     std::shared_ptr<TaskStateRobot<State, StateAlloc>> robot_ptr(
           new TaskStateRobot<State, StateAlloc>(start_state,
                                                 compute_readiness_fn));
-    std::shared_ptr<TaskPlannerSampling<State, StateAlloc>> sampling_ptr(
+    std::shared_ptr<TaskPlannerSampling<State>> sampling_ptr(
           this, DeleteSamplerPtrFn);
     std::shared_ptr<TaskPlannerSimulator<State, StateAlloc>> simulator_ptr(
           this, DeleteSimulatorPtrFn);

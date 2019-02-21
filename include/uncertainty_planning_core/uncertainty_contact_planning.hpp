@@ -18,8 +18,7 @@
 #include <common_robotics_utilities/math.hpp>
 #include <common_robotics_utilities/zlib_helpers.hpp>
 #include <common_robotics_utilities/math.hpp>
-#include <common_robotics_utilities/simple_hierarchical_clustering.hpp>
-#include <common_robotics_utilities/simple_hausdorff_distance.hpp>
+#include <common_robotics_utilities/simple_knearest_neighbors.hpp>
 #include <common_robotics_utilities/simple_rrt_planner.hpp>
 #include <common_robotics_utilities/simple_robot_model_interface.hpp>
 #include <uncertainty_planning_core/simple_sampler_interface.hpp>
@@ -281,40 +280,26 @@ namespace uncertainty_planning_core
                                                  const std::function<double(const UncertaintyPlanningState&, const UncertaintyPlanningState&)>& state_distance_fn,
                                                  const std::function<void(const std::string&, const int32_t)>& logging_fn)
         {
-            // Get the nearest neighbor (ignoring the disabled states)
-            std::vector<std::pair<int64_t, double>> per_thread_bests(GetNumOMPThreads(), std::pair<int64_t, double>(-1, INFINITY));
-            #pragma omp parallel for
-            for (size_t idx = 0; idx < planner_nodes.size(); idx++)
+            const std::function<double(
+                const UncertaintyPlanningTreeState&,
+                const UncertaintyPlanningState&)> real_state_distance_fn =
+                    [&] (const UncertaintyPlanningTreeState& tree_state,
+                         const UncertaintyPlanningState& query_state)
             {
-                const UncertaintyPlanningTreeState& current_state = planner_nodes[idx];
-                // Only check against states enabled for NN checks
-                if (current_state.GetValueImmutable().UseForNearestNeighbors())
+                if (tree_state.GetValueImmutable().UseForNearestNeighbors())
                 {
-                    const double state_distance = state_distance_fn(current_state.GetValueImmutable(), random_state);
-#if defined(_OPENMP)
-                    const size_t current_thread_id = (size_t)omp_get_thread_num();
-#else
-                    const size_t current_thread_id = 0;
-#endif
-                    if (state_distance < per_thread_bests[current_thread_id].second)
-                    {
-                        per_thread_bests[current_thread_id].first = (int64_t)idx;
-                        per_thread_bests[current_thread_id].second = state_distance;
-                    }
+                  return state_distance_fn(
+                      tree_state.GetValueImmutable(), query_state);
                 }
-            }
-            int64_t best_index = -1;
-            double best_distance = INFINITY;
-            for (size_t idx = 0; idx < per_thread_bests.size(); idx++)
-            {
-                const double& thread_minimum_distance = per_thread_bests[idx].second;
-                if (thread_minimum_distance < best_distance)
+                else
                 {
-                    best_index = per_thread_bests[idx].first;
-                    best_distance = thread_minimum_distance;
+                  return std::numeric_limits<double>::infinity();
                 }
-            }
-            logging_fn("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear)", 3);
+            };
+            const auto nearests = common_robotics_utilities::simple_knearest_neighbors::GetKNearestNeighborsParallel(planner_nodes, random_state, real_state_distance_fn, 1);
+            const int64_t best_index = nearests.at(0).first;
+            const double best_distance = nearests.at(0).second;
+            logging_fn("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear) with distance " + std::to_string(best_distance), 3);
             return best_index;
         }
 
