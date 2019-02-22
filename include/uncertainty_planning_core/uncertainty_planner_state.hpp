@@ -323,10 +323,11 @@ public:
   }
 
   inline UncertaintyPlannerState(
-      const std::vector<Configuration, ConfigAlloc>& particles)
+      const std::vector<Configuration, ConfigAlloc>& particles,
+      const double step_size)
   {
     state_id_ = 0u;
-    step_size_ = 0.0;
+    step_size_ = step_size;
     particles_ = particles;
     variance_ = 0.0;
     variances_ = Eigen::VectorXd();
