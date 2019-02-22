@@ -299,7 +299,7 @@ namespace uncertainty_planning_core
             const auto nearests = common_robotics_utilities::simple_knearest_neighbors::GetKNearestNeighborsParallel(planner_nodes, random_state, real_state_distance_fn, 1);
             const int64_t best_index = nearests.at(0).first;
             const double best_distance = nearests.at(0).second;
-            logging_fn("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear) with distance " + std::to_string(best_distance), 3);
+            logging_fn("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear) with distance " + std::to_string(best_distance), 1);
             return best_index;
         }
 
