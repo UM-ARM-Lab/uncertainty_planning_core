@@ -297,8 +297,37 @@ public:
     state_id_ = 0u;
     step_size_ = 0.0;
     expectation_ = expectation;
-    particles_.clear();
     particles_.push_back(expectation_);
+    variance_ = 0.0;
+    variances_ = Eigen::VectorXd();
+    space_independent_variance_ = 0.0;
+    space_independent_variances_ = Eigen::VectorXd();
+    attempt_count_ = 1u;
+    reached_count_ = 1u;
+    reverse_attempt_count_ = 1u;
+    reverse_reached_count_ = 1u;
+    parent_motion_Pfeasibility_ = 1.0;
+    raw_edge_Pfeasibility_ = 1.0;
+    effective_edge_Pfeasibility_ = 1.0;
+    reverse_edge_Pfeasibility_ = 1.0;
+    motion_Pfeasibility_ = 1.0;
+    initialized_ = true;
+    has_particles_ = true;
+    use_for_nearest_neighbors_ = true;
+    action_outcome_is_nominally_independent_ = true;
+    command_ = expectation_;
+    split_id_ = 0u;
+    transition_id_ = 0;
+    reverse_transition_id_ = 0;
+    goal_Pfeasibility_ = 0.0;
+  }
+
+  inline UncertaintyPlannerState(
+      const std::vector<Configuration, ConfigAlloc>& particles)
+  {
+    state_id_ = 0u;
+    step_size_ = 0.0;
+    particles_ = particles;
     variance_ = 0.0;
     variances_ = Eigen::VectorXd();
     space_independent_variance_ = 0.0;
@@ -337,7 +366,6 @@ public:
     state_id_ = state_id;
     step_size_ = step_size;
     expectation_ = particle;
-    particles_.clear();
     particles_.push_back(expectation_);
     variance_ = 0.0;
     variances_ = Eigen::VectorXd();

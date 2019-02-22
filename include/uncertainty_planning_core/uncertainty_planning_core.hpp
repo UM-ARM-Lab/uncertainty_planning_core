@@ -34,35 +34,35 @@ namespace uncertainty_planning_core
     struct PLANNING_AND_EXECUTION_OPTIONS
     {
         // Time limits
-        double planner_time_limit;
+        double planner_time_limit = 0.0;
         // P(goal reached) termination threshold
-        double p_goal_reached_termination_threshold;
+        double p_goal_reached_termination_threshold = 0.0;
         // Standard planner control params
-        double goal_bias;
-        double step_size;
-        double goal_probability_threshold;
-        double goal_distance_threshold;
-        double connect_after_first_solution;
+        double goal_bias = 0.0;
+        double step_size = 0.0;
+        double goal_probability_threshold = 0.0;
+        double goal_distance_threshold = 0.0;
+        double connect_after_first_solution = 0.0;
         // Distance function control params/weights
-        double feasibility_alpha;
-        double variance_alpha;
+        double feasibility_alpha = 0.0;
+        double variance_alpha = 0.0;
         // Reverse/repeat params
-        uint32_t edge_attempt_count;
+        uint32_t edge_attempt_count = 0u;
         // Particle/execution limits
-        uint32_t num_particles;
+        uint32_t num_particles = 0u;
         // Execution limits
-        uint32_t num_policy_simulations;
-        uint32_t num_policy_executions;
+        uint32_t num_policy_simulations = 0u;
+        uint32_t num_policy_executions = 0u;
         // How many attempts does a policy action count for?
-        uint32_t policy_action_attempt_count;
+        uint32_t policy_action_attempt_count = 0u;
         // Execution limits
-        uint32_t max_exec_actions;
-        double max_policy_exec_time;
+        uint32_t max_exec_actions = 0u;
+        double max_policy_exec_time = 0.0;
         // Control flags
-        int32_t debug_level;
-        bool use_contact;
-        bool use_reverse;
-        bool use_spur_actions;
+        int32_t debug_level = 0;
+        bool use_contact = false;
+        bool use_reverse = false;
+        bool use_spur_actions = false;
         // Log & data files
         std::string planner_log_file;
         std::string policy_log_file;
