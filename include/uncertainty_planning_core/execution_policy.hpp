@@ -643,46 +643,37 @@ public:
       const std::function<std::vector<std::string>(
           const UncertaintyPlanningState&)>& state_print_fn) const
   {
-    if ((node_index >= 0) && (node_index < planner_tree_.size()))
+    const UncertaintyPlanningTreeState& policy_tree_state
+        = planner_tree_.at(node_index);
+    std::vector<std::string> state_string_rep;
+    state_string_rep.push_back(
+          "<state id=\""
+          + std::to_string(policy_tree_state.GetValueImmutable().GetStateId())
+          + "\">");
+    state_string_rep.push_back("  <value>");
+    const std::vector<std::string> value_string_rep
+        = state_print_fn(policy_tree_state.GetValueImmutable());
+    for (size_t ldx = 0; ldx < value_string_rep.size(); ldx++)
     {
-      const UncertaintyPlanningTreeState& policy_tree_state
-          = planner_tree_[node_index];
-      std::vector<std::string> state_string_rep;
-      state_string_rep.push_back(
-            "<state id=\""
-            + std::to_string(policy_tree_state.GetValueImmutable().GetStateId())
-            + "\">");
-      state_string_rep.push_back("  <value>");
-      const std::vector<std::string> value_string_rep
-          = state_print_fn(policy_tree_state.GetValueImmutable());
-      for (size_t ldx = 0; ldx < value_string_rep.size(); ldx++)
-      {
-          state_string_rep.push_back("    " + value_string_rep[ldx]);
-      }
-      state_string_rep.push_back("  </value>");
-      state_string_rep.push_back("  <children>");
-      const std::vector<int64_t>& child_indices
-          = policy_tree_state.GetChildIndices();
-      for (size_t cdx = 0; cdx < child_indices.size(); cdx++)
-      {
-          const int64_t child_index = child_indices[cdx];
-          const std::vector<std::string> child_string_rep
-              = PrintHumanReadablePolicyTreeNode(child_index, state_print_fn);
-          for (size_t ldx = 0; ldx < child_string_rep.size(); ldx++)
-          {
-              state_string_rep.push_back("    " + child_string_rep[ldx]);
-          }
-      }
-      state_string_rep.push_back("  </children>");
-      state_string_rep.push_back("</state>");
-      return state_string_rep;
+        state_string_rep.push_back("    " + value_string_rep[ldx]);
     }
-    else
+    state_string_rep.push_back("  </value>");
+    state_string_rep.push_back("  <children>");
+    const std::vector<int64_t>& child_indices
+        = policy_tree_state.GetChildIndices();
+    for (size_t cdx = 0; cdx < child_indices.size(); cdx++)
     {
-      throw std::invalid_argument(
-            "Node index cannot be less than zero or greater than the size of"
-            " the policy tree");
+        const int64_t child_index = child_indices[cdx];
+        const std::vector<std::string> child_string_rep
+            = PrintHumanReadablePolicyTreeNode(child_index, state_print_fn);
+        for (size_t ldx = 0; ldx < child_string_rep.size(); ldx++)
+        {
+            state_string_rep.push_back("    " + child_string_rep[ldx]);
+        }
     }
+    state_string_rep.push_back("  </children>");
+    state_string_rep.push_back("</state>");
+    return state_string_rep;
   }
 
   std::string PrintHumanReadablePolicyTree(
