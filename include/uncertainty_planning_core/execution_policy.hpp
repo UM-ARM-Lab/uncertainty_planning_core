@@ -649,6 +649,9 @@ public:
     state_string_rep.push_back(
           "<state id=\""
           + std::to_string(policy_tree_state.GetValueImmutable().GetStateId())
+          + "\" transition_id=\""
+          + std::to_string(
+              policy_tree_state.GetValueImmutable().GetTransitionId())
           + "\">");
     state_string_rep.push_back("  <value>");
     const std::vector<std::string> value_string_rep
