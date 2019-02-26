@@ -647,7 +647,7 @@ public:
         = planner_tree_.at(node_index);
     std::vector<std::string> state_string_rep;
     state_string_rep.push_back(
-          "<state index=\"" + std::to_string(node_index) + "\""
+          "<state index=\"" + std::to_string(node_index)
           + "\" state_id=\""
           + std::to_string(policy_tree_state.GetValueImmutable().GetStateId())
           + "\" transition_id=\""
