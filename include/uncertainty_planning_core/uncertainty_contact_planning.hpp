@@ -177,6 +177,16 @@ namespace uncertainty_planning_core
             nearest_neighbors_storage_.clear();
         }
 
+        const UncertaintyPlanningTree& GetPlanningTreeImmutable() const
+        {
+            return nearest_neighbors_storage_;
+        }
+
+        UncertaintyPlanningTree& GetPlanningTreeMutable()
+        {
+            return nearest_neighbors_storage_;
+        }
+
         /*
          * Test example to show the behavior of the lightweight simulator
          */
