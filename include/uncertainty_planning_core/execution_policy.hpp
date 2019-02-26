@@ -647,7 +647,8 @@ public:
         = planner_tree_.at(node_index);
     std::vector<std::string> state_string_rep;
     state_string_rep.push_back(
-          "<state id=\""
+          "<state index=\"" + std::to_string(node_index) + "\""
+          + "\" state_id=\""
           + std::to_string(policy_tree_state.GetValueImmutable().GetStateId())
           + "\" transition_id=\""
           + std::to_string(
@@ -1056,7 +1057,7 @@ private:
       Log("Selected " + std::to_string(previous_state_index)
           + " as previous state index", 2);
     }
-    else
+    else if (previous_state_index_possibilities.size() == 1)
     {
       Log("Single previous state index possibility "
           + common_robotics_utilities::print::Print(
@@ -1065,12 +1066,17 @@ private:
       Log("Selected " + std::to_string(previous_state_index)
           + " as previous state index", 2);
     }
+    else
+    {
+      throw std::runtime_error(
+          "previous_state_index_possibilities cannot be empty");
+    }
     const std::vector<std::pair<int64_t, bool>>& expected_possible_result_states
         = expected_possibility_result_states[previous_state_index];
     if (expected_possible_result_states.empty())
     {
       throw std::runtime_error(
-            "expected_possible_result_states cannot be empty");
+          "expected_possible_result_states cannot be empty");
     }
     Log("Result state could match "
         + std::to_string(expected_possible_result_states.size())
