@@ -44,6 +44,7 @@ namespace uncertainty_planning_core
         typedef ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningPolicy;
         typedef common_robotics_utilities::simple_rrt_planner::SimpleRRTPlannerState<UncertaintyPlanningState> UncertaintyPlanningTreeState;
         typedef std::vector<UncertaintyPlanningTreeState> UncertaintyPlanningTree;
+        typedef std::shared_ptr<UncertaintyPlanningTree> UncertaintyPlanningTreePtr;
         typedef common_robotics_utilities::simple_graph::Graph<UncertaintyPlanningState> ExecutionPolicyGraph;
 
         size_t num_particles_;
@@ -71,7 +72,7 @@ namespace uncertainty_planning_core
         double time_to_first_solution_;
         double elapsed_clustering_time_;
         double elapsed_simulation_time_;
-        UncertaintyPlanningTree nearest_neighbors_storage_;
+        UncertaintyPlanningTreePtr planning_tree_ptr_;
         std::function<void(const std::string&, const int32_t)> logging_fn_;
 
         inline static size_t GetNumOMPThreads()
@@ -174,17 +175,34 @@ namespace uncertainty_planning_core
             goal_candidates_evaluated_ = 0;
             goal_reaching_performed_ = 0;
             goal_reaching_successful_ = 0;
-            nearest_neighbors_storage_.clear();
+            if (planning_tree_ptr_)
+            {
+                GetPlanningTreeMutable().clear();
+            }
         }
 
         const UncertaintyPlanningTree& GetPlanningTreeImmutable() const
         {
-            return nearest_neighbors_storage_;
+            return *planning_tree_ptr_;
         }
 
         UncertaintyPlanningTree& GetPlanningTreeMutable()
         {
-            return nearest_neighbors_storage_;
+            return *planning_tree_ptr_;
+        }
+
+        void SetPlanningTree(const UncertaintyPlanningTreePtr& tree_ptr)
+        {
+            planning_tree_ptr_ = tree_ptr;
+        }
+
+        void InitializePlanningTreeIfNotReady()
+        {
+            if (!planning_tree_ptr_)
+            {
+                planning_tree_ptr_ =
+                    UncertaintyPlanningTreePtr(new UncertaintyPlanningTree());
+            }
         }
 
         /*
@@ -357,8 +375,9 @@ namespace uncertainty_planning_core
             time_to_first_solution_ = 0.0;
             simulator_ptr_->ResetStatistics();
             clustering_ptr_->ResetStatistics();
-            nearest_neighbors_storage_.emplace_back(UncertaintyPlanningTreeState(start_state));
-            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath(nearest_neighbors_storage_, complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
+            InitializePlanningTreeIfNotReady();
+            GetPlanningTreeMutable().emplace_back(UncertaintyPlanningTreeState(start_state));
+            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath(GetPlanningTreeMutable(), complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
             // It "shouldn't" matter what the goal state actually is, since it's more of a virtual node to tie the policy graph together
             // But it probably needs to be collision-free
             auto valid_goal_sampling_fn = [&] ()
@@ -536,8 +555,9 @@ namespace uncertainty_planning_core
             time_to_first_solution_ = 0.0;
             simulator_ptr_->ResetStatistics();
             clustering_ptr_->ResetStatistics();
-            nearest_neighbors_storage_.emplace_back(UncertaintyPlanningTreeState(start_state));
-            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath(nearest_neighbors_storage_, complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
+            InitializePlanningTreeIfNotReady();
+            GetPlanningTreeMutable().emplace_back(UncertaintyPlanningTreeState(start_state));
+            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath(GetPlanningTreeMutable(), complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
             return ProcessPlanningResults(planning_results, goal, edge_attempt_count, policy_action_attempt_count, include_spur_actions, policy_marker_size, display_fn);
         }
 
@@ -569,7 +589,7 @@ namespace uncertainty_planning_core
             planning_statistics["Goal reaching successful"] = (double)goal_reaching_successful_;
             if (total_goal_reached_probability_ >= goal_probability_threshold_)
             {
-                const UncertaintyPlanningTree postprocessed_tree = PostProcessTree(nearest_neighbors_storage_);
+                const UncertaintyPlanningTree postprocessed_tree = PostProcessTree(GetPlanningTreeImmutable());
                 const UncertaintyPlanningTree pruned_tree = PruneTree(postprocessed_tree, include_spur_actions);
                 // Not sure hwat to do here with goal states
                 const UncertaintyPlanningPolicy policy = ExtractPolicy(pruned_tree, virtual_goal_config, edge_attempt_count, policy_action_attempt_count);
@@ -1860,7 +1880,7 @@ namespace uncertainty_planning_core
             UNUSED(state);
             UNUSED(planner_action_try_attempts);
             UNUSED(allow_contacts);
-            UncertaintyPlanningState& goal_state_candidate = nearest_neighbors_storage_.back().GetValueMutable();
+            UncertaintyPlanningState& goal_state_candidate = GetPlanningTreeMutable().back().GetValueMutable();
             // NOTE - this assumes (safely) that the state passed to this function is the last state added to the tree, which we can safely mutate!
             // We only care about states with control input == goal position (states that are directly trying to go to the goal)
             const double goal_reached_probability = user_goal_check_fn(goal_state_candidate);
@@ -1886,7 +1906,7 @@ namespace uncertainty_planning_core
             UNUSED(state);
             UNUSED(planner_action_try_attempts);
             UNUSED(allow_contacts);
-            UncertaintyPlanningState& goal_state_candidate = nearest_neighbors_storage_.back().GetValueMutable();
+            UncertaintyPlanningState& goal_state_candidate = GetPlanningTreeMutable().back().GetValueMutable();
             // NOTE - this assumes (safely) that the state passed to this function is the last state added to the tree, which we can safely mutate!
             // We only care about states with control input == goal position (states that are directly trying to go to the goal)
             if (robot_ptr_->ComputeConfigurationDistance(goal_state_candidate.GetCommand(), goal_state.GetExpectation()) == 0.0)
@@ -1922,7 +1942,7 @@ namespace uncertainty_planning_core
             while (current_index > 0)
             {
                 // Get the current state that we're looking at
-                UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[(size_t)current_index];
+                UncertaintyPlanningTreeState& current_state = GetPlanningTreeMutable()[(size_t)current_index];
                 // Check if we've reached the root of the goal branch
                 bool is_branch_root = CheckIfGoalBranchRoot(current_state);
                 // If we haven't reached the root of goal branch
@@ -1949,13 +1969,13 @@ namespace uncertainty_planning_core
             while (probability_update_index >= 0)
             {
                 // Get the current state that we're looking at
-                UncertaintyPlanningTreeState& current_state = nearest_neighbors_storage_[(size_t)probability_update_index];
+                UncertaintyPlanningTreeState& current_state = GetPlanningTreeMutable()[(size_t)probability_update_index];
                 // Update the state
                 UpdateNodeGoalReachedProbability(current_state, planner_action_try_attempts);
                 probability_update_index = current_state.GetParentIndex();
             }
             // Get the goal reached probability that we use to decide when we're done
-            total_goal_reached_probability_ = nearest_neighbors_storage_[0].GetValueImmutable().GetGoalPfeasibility();
+            total_goal_reached_probability_ = GetPlanningTreeMutable()[0].GetValueImmutable().GetGoalPfeasibility();
             Log("Updated goal reached probability to " + std::to_string(total_goal_reached_probability_), 2);
         }
 
@@ -1972,7 +1992,7 @@ namespace uncertainty_planning_core
             else
             {
                 // Get the current node
-                auto& current_state = nearest_neighbors_storage_[(size_t)goal_branch_root_index];
+                auto& current_state = GetPlanningTreeMutable()[(size_t)goal_branch_root_index];
                 // Recursively blacklist it
                 current_state.GetValueMutable().DisableForNearestNeighbors();
                 // Blacklist each child
@@ -1998,7 +2018,7 @@ namespace uncertainty_planning_core
             bool is_child_of_unresolved_split = false;
             if (is_child_of_split)
             {
-                const UncertaintyPlanningTreeState& parent_tree_state = nearest_neighbors_storage_[(size_t)state.GetParentIndex()];
+                const UncertaintyPlanningTreeState& parent_tree_state = GetPlanningTreeImmutable()[(size_t)state.GetParentIndex()];
                 const UncertaintyPlanningState& parent_state = parent_tree_state.GetValueImmutable();
                 if (parent_state.GetGoalPfeasibility() >= 1.0)
                 {
@@ -2011,7 +2031,7 @@ namespace uncertainty_planning_core
                     for (size_t idx = 0; idx < other_parent_children.size(); idx++)
                     {
                         const int64_t other_child_index = other_parent_children[idx];
-                        const UncertaintyPlanningTreeState& other_child_tree_state = nearest_neighbors_storage_[(size_t)other_child_index];
+                        const UncertaintyPlanningTreeState& other_child_tree_state = GetPlanningTreeImmutable()[(size_t)other_child_index];
                         const UncertaintyPlanningState& other_child_state = other_child_tree_state.GetValueImmutable();
                         if (other_child_state.GetTransitionId() == state.GetValueImmutable().GetTransitionId() && other_child_state.UseForNearestNeighbors())
                         {
@@ -2059,7 +2079,7 @@ namespace uncertainty_planning_core
             for (size_t idx = 0; idx < current_node.GetChildIndices().size(); idx++)
             {
                 const int64_t& current_child_index = current_node.GetChildIndices()[idx];
-                const uint64_t& child_transition_id = nearest_neighbors_storage_[(size_t)current_child_index].GetValueImmutable().GetTransitionId();
+                const uint64_t& child_transition_id = GetPlanningTreeImmutable()[(size_t)current_child_index].GetValueImmutable().GetTransitionId();
                 effective_child_branches[child_transition_id].push_back(current_child_index);
             }
             // Now that we have the transitions separated out, compute the goal probability of each transition
@@ -2090,7 +2110,7 @@ namespace uncertainty_planning_core
             {
                 // Get the current child
                 const int64_t& current_child_index = child_node_indices[idx];
-                const UncertaintyPlanningState& current_child = nearest_neighbors_storage_[(size_t)current_child_index].GetValueImmutable();
+                const UncertaintyPlanningState& current_child = GetPlanningTreeImmutable()[(size_t)current_child_index].GetValueImmutable();
                 child_states[idx] = current_child;
             }
             return ComputeTransitionGoalProbability(child_states, planner_action_try_attempts);
