@@ -117,14 +117,15 @@ public:
     return bytes_written;
   }
 
-  static std::pair<UncertaintyPlannerState<
-      Configuration, ConfigSerializer, ConfigAlloc>, uint64_t>
+  static common_robotics_utilities::serialization::Deserialized<
+      UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>>
   Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
   {
     UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>
         temp_state;
     const uint64_t bytes_read = temp_state.DeserializeSelf(buffer, current);
-    return std::make_pair(temp_state, bytes_read);
+    return common_robotics_utilities::serialization::MakeDeserialized(
+        temp_state, bytes_read);
   }
 
   uint64_t DeserializeSelf(
@@ -141,22 +142,22 @@ public:
     const uint64_t reference_qualified_type_id_hash
         = std::numeric_limits<uint64_t>::max();
     const std::string reference_configuration_type = GetConfigurationType();
-    const std::pair<uint64_t, uint64_t> deserialized_qualified_type_id_hash
+    const auto deserialized_qualified_type_id_hash
         = DeserializeMemcpyable<uint64_t>(buffer, current_position);
     const uint64_t qualified_type_id_hash
-        = deserialized_qualified_type_id_hash.first;
-    current_position += deserialized_qualified_type_id_hash.second;
+        = deserialized_qualified_type_id_hash.Value();
+    current_position += deserialized_qualified_type_id_hash.BytesRead();
     // Check types
     // If the file used the legacy type ID, we can't safely check it
     // (std::hash is not required to be consistent across program executions!)
     // so we warn the user and continue
     if (qualified_type_id_hash == reference_qualified_type_id_hash)
     {
-      const std::pair<std::string, uint64_t> deserialized_configuration_type
+      const auto deserialized_configuration_type
           = DeserializeString<char>(buffer, current_position);
       const std::string& configuration_type
-          = deserialized_configuration_type.first;
-      current_position += deserialized_configuration_type.second;
+          = deserialized_configuration_type.Value();
+      current_position += deserialized_configuration_type.BytesRead();
       if (configuration_type != reference_configuration_type)
       {
         std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -178,113 +179,110 @@ public:
                 << std::endl;
     }
     // Load fixed size members
-    const std::pair<uint8_t, uint64_t> deserialized_has_particles
+    const auto deserialized_has_particles
         = DeserializeMemcpyable<uint8_t>(buffer, current_position);
-    has_particles_ = (bool)deserialized_has_particles.first;
-    current_position += deserialized_has_particles.second;
-    const std::pair<uint8_t, uint64_t> deserialized_use_for_nearest_neighbors
+    has_particles_ = (bool)deserialized_has_particles.Value();
+    current_position += deserialized_has_particles.BytesRead();
+    const auto deserialized_use_for_nearest_neighbors
         = DeserializeMemcpyable<uint8_t>(buffer, current_position);
     use_for_nearest_neighbors_
-        = (bool)deserialized_use_for_nearest_neighbors.first;
-    current_position += deserialized_use_for_nearest_neighbors.second;
-    const std::pair<uint8_t, uint64_t>
-        deserialized_action_outcome_is_nominally_independent
-            = DeserializeMemcpyable<uint8_t>(buffer, current_position);
+        = (bool)deserialized_use_for_nearest_neighbors.Value();
+    current_position += deserialized_use_for_nearest_neighbors.BytesRead();
+    const auto deserialized_action_outcome_is_nominally_independent
+        = DeserializeMemcpyable<uint8_t>(buffer, current_position);
     action_outcome_is_nominally_independent_
-        = (bool)deserialized_action_outcome_is_nominally_independent.first;
+        = (bool)deserialized_action_outcome_is_nominally_independent.Value();
     current_position
-        += deserialized_action_outcome_is_nominally_independent.second;
-    const std::pair<uint32_t, uint64_t> deserialized_attempt_count
+        += deserialized_action_outcome_is_nominally_independent.BytesRead();
+    const auto deserialized_attempt_count
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
-    attempt_count_ = deserialized_attempt_count.first;
-    current_position += deserialized_attempt_count.second;
-    const std::pair<uint32_t, uint64_t> deserialized_reached_count
+    attempt_count_ = deserialized_attempt_count.Value();
+    current_position += deserialized_attempt_count.BytesRead();
+    const auto deserialized_reached_count
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
-    reached_count_ = deserialized_reached_count.first;
-    current_position += deserialized_reached_count.second;
+    reached_count_ = deserialized_reached_count.Value();
+    current_position += deserialized_reached_count.BytesRead();
     raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
-    const std::pair<uint32_t, uint64_t> deserialized_reverse_attempt_count
+    const auto deserialized_reverse_attempt_count
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
-    reverse_attempt_count_ = deserialized_reverse_attempt_count.first;
-    current_position += deserialized_reverse_attempt_count.second;
-    const std::pair<uint32_t, uint64_t> deserialized_reverse_reached_count
+    reverse_attempt_count_ = deserialized_reverse_attempt_count.Value();
+    current_position += deserialized_reverse_attempt_count.BytesRead();
+    const auto deserialized_reverse_reached_count
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
-    reverse_reached_count_ = deserialized_reverse_reached_count.first;
-    current_position += deserialized_reverse_reached_count.second;
+    reverse_reached_count_ = deserialized_reverse_reached_count.Value();
+    current_position += deserialized_reverse_reached_count.BytesRead();
     reverse_edge_Pfeasibility_
         = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
-    const std::pair<double, uint64_t> deserialized_step_size
+    const auto deserialized_step_size
         = DeserializeMemcpyable<double>(buffer, current_position);
-    step_size_ = deserialized_step_size.first;
-    current_position += deserialized_step_size.second;
-    const std::pair<double, uint64_t> deserialized_parent_motion_Pfeasibility
+    step_size_ = deserialized_step_size.Value();
+    current_position += deserialized_step_size.BytesRead();
+    const auto deserialized_parent_motion_Pfeasibility
         = DeserializeMemcpyable<double>(buffer, current_position);
-    parent_motion_Pfeasibility_ = deserialized_parent_motion_Pfeasibility.first;
-    current_position += deserialized_parent_motion_Pfeasibility.second;
-    const std::pair<double, uint64_t> deserialized_effective_edge_Pfeasibility
+    parent_motion_Pfeasibility_ = deserialized_parent_motion_Pfeasibility.Value();
+    current_position += deserialized_parent_motion_Pfeasibility.BytesRead();
+    const auto deserialized_effective_edge_Pfeasibility
         = DeserializeMemcpyable<double>(buffer, current_position);
     effective_edge_Pfeasibility_
-        = deserialized_effective_edge_Pfeasibility.first;
-    current_position += deserialized_effective_edge_Pfeasibility.second;
-    const std::pair<double, uint64_t> deserialized_motion_Pfeasibility
+        = deserialized_effective_edge_Pfeasibility.Value();
+    current_position += deserialized_effective_edge_Pfeasibility.BytesRead();
+    const auto deserialized_motion_Pfeasibility
         = DeserializeMemcpyable<double>(buffer, current_position);
-    motion_Pfeasibility_ = deserialized_motion_Pfeasibility.first;
-    current_position += deserialized_motion_Pfeasibility.second;
-    const std::pair<double, uint64_t> deserialized_variance
+    motion_Pfeasibility_ = deserialized_motion_Pfeasibility.Value();
+    current_position += deserialized_motion_Pfeasibility.BytesRead();
+    const auto deserialized_variance
         = DeserializeMemcpyable<double>(buffer, current_position);
-    variance_ = deserialized_variance.first;
-    current_position += deserialized_variance.second;
-    const std::pair<double, uint64_t> deserialized_space_independent_variance
+    variance_ = deserialized_variance.Value();
+    current_position += deserialized_variance.BytesRead();
+    const auto deserialized_space_independent_variance
         = DeserializeMemcpyable<double>(buffer, current_position);
-    space_independent_variance_ = deserialized_space_independent_variance.first;
-    current_position += deserialized_space_independent_variance.second;
-    const std::pair<uint64_t, uint64_t> deserialized_state_id
+    space_independent_variance_ = deserialized_space_independent_variance.Value();
+    current_position += deserialized_space_independent_variance.BytesRead();
+    const auto deserialized_state_id
         = DeserializeMemcpyable<uint64_t>(buffer, current_position);
-    state_id_ = deserialized_state_id.first;
-    current_position += deserialized_state_id.second;
-    const std::pair<uint64_t, uint64_t> deserialized_transition_id
+    state_id_ = deserialized_state_id.Value();
+    current_position += deserialized_state_id.BytesRead();
+    const auto deserialized_transition_id
         = DeserializeMemcpyable<uint64_t>(buffer, current_position);
-    transition_id_ = deserialized_transition_id.first;
-    current_position += deserialized_transition_id.second;
-    const std::pair<uint64_t, uint64_t> deserialized_reverse_transition_id
+    transition_id_ = deserialized_transition_id.Value();
+    current_position += deserialized_transition_id.BytesRead();
+    const auto deserialized_reverse_transition_id
         = DeserializeMemcpyable<uint64_t>(buffer, current_position);
-    reverse_transition_id_ = deserialized_reverse_transition_id.first;
-    current_position += deserialized_reverse_transition_id.second;
-    const std::pair<uint64_t, uint64_t> deserialized_split_id
+    reverse_transition_id_ = deserialized_reverse_transition_id.Value();
+    current_position += deserialized_reverse_transition_id.BytesRead();
+    const auto deserialized_split_id
         = DeserializeMemcpyable<uint64_t>(buffer, current_position);
-    split_id_ = deserialized_split_id.first;
-    current_position += deserialized_split_id.second;
-    const std::pair<double, uint64_t> deserialized_goal_Pfeasibility
+    split_id_ = deserialized_split_id.Value();
+    current_position += deserialized_split_id.BytesRead();
+    const auto deserialized_goal_Pfeasibility
         = DeserializeMemcpyable<double>(buffer, current_position);
-    goal_Pfeasibility_ = deserialized_goal_Pfeasibility.first;
-    current_position += deserialized_goal_Pfeasibility.second;
+    goal_Pfeasibility_ = deserialized_goal_Pfeasibility.Value();
+    current_position += deserialized_goal_Pfeasibility.BytesRead();
     // Load the variable-sized components
-    const std::pair<Configuration, uint64_t> deserialized_expectation
+    const auto deserialized_expectation
         = ConfigSerializer::Deserialize(buffer, current_position);
-    expectation_ = deserialized_expectation.first;
-    current_position += deserialized_expectation.second;
-    const std::pair<Configuration, uint64_t> deserialized_command
+    expectation_ = deserialized_expectation.Value();
+    current_position += deserialized_expectation.BytesRead();
+    const auto deserialized_command
         = ConfigSerializer::Deserialize(buffer, current_position);
-    command_ = deserialized_command.first;
-    current_position += deserialized_command.second;
-    const std::pair<Eigen::VectorXd, uint64_t> deserialized_variances
+    command_ = deserialized_command.Value();
+    current_position += deserialized_command.BytesRead();
+    const auto deserialized_variances
         = DeserializeVectorXd(buffer, current_position);
-    variances_ = deserialized_variances.first;
-    current_position += deserialized_variances.second;
-    const std::pair<Eigen::VectorXd, uint64_t>
-        deserialized_space_independent_variances
-            = DeserializeVectorXd(buffer, current_position);
+    variances_ = deserialized_variances.Value();
+    current_position += deserialized_variances.BytesRead();
+    const auto deserialized_space_independent_variances
+        = DeserializeVectorXd(buffer, current_position);
     space_independent_variances_
-        = deserialized_space_independent_variances.first;
-    current_position += deserialized_space_independent_variances.second;
+        = deserialized_space_independent_variances.Value();
+    current_position += deserialized_space_independent_variances.BytesRead();
     // Load the particles
-    const std::pair<std::vector<Configuration, ConfigAlloc>, uint64_t>
-        deserialized_particles
-           = DeserializeVectorLike<Configuration,
-                                   std::vector<Configuration, ConfigAlloc>>(
-               buffer, current_position, &ConfigSerializer::Deserialize);
-    particles_ = deserialized_particles.first;
-    current_position += deserialized_particles.second;
+    const auto deserialized_particles
+        = DeserializeVectorLike<Configuration,
+                                std::vector<Configuration, ConfigAlloc>>(
+            buffer, current_position, &ConfigSerializer::Deserialize);
+    particles_ = deserialized_particles.Value();
+    current_position += deserialized_particles.BytesRead();
     // Initialize the state
     initialized_ = true;
     // Return how many bytes we read from the buffer

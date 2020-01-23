@@ -11,9 +11,11 @@
 #include <queue>
 #include <common_robotics_utilities/openmp_helpers.hpp>
 #include <common_robotics_utilities/print.hpp>
+#include <common_robotics_utilities/serialization.hpp>
 #include <common_robotics_utilities/simple_rrt_planner.hpp>
 #include <common_robotics_utilities/simple_graph.hpp>
 #include <common_robotics_utilities/simple_graph_search.hpp>
+#include <common_robotics_utilities/simple_knearest_neighbors.hpp>
 #include <uncertainty_planning_core/uncertainty_planner_state.hpp>
 
 namespace uncertainty_planning_core
@@ -379,6 +381,9 @@ private:
   typedef PolicyGraphBuilder<Configuration, ConfigSerializer, ConfigAlloc>
       ExecutionPolicyGraphBuilder;
 
+  using ExecutionPolicyType
+      = ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>;
+
   bool initialized_ = false;
   // Raw data used to rebuild the policy graph
   UncertaintyPlanningTree planner_tree_;
@@ -415,21 +420,19 @@ public:
   }
 
   static uint64_t Serialize(
-      const ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>&
-          policy,
-      std::vector<uint8_t>& buffer)
+      const ExecutionPolicyType& policy, std::vector<uint8_t>& buffer)
   {
     return policy.SerializeSelf(buffer);
   }
 
-  static std::pair<ExecutionPolicy<
-                       Configuration, ConfigSerializer, ConfigAlloc>,
-                   uint64_t> Deserialize(
-      const std::vector<uint8_t>& buffer, const uint64_t current)
+  static common_robotics_utilities::serialization
+      ::Deserialized<ExecutionPolicyType> Deserialize(
+          const std::vector<uint8_t>& buffer, const uint64_t current)
   {
-    ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc> temp_policy;
+    ExecutionPolicyType temp_policy;
     const uint64_t bytes_read = temp_policy.DeserializeSelf(buffer, current);
-    return std::make_pair(temp_policy, bytes_read);
+    return common_robotics_utilities::serialization::MakeDeserialized(
+        temp_policy, bytes_read);
   }
 
   ExecutionPolicy(
@@ -541,17 +544,17 @@ public:
 
   uint64_t SerializeSelf(std::vector<uint8_t>& buffer) const
   {
+    using common_robotics_utilities::serialization::Serializer;
     using common_robotics_utilities::serialization::SerializeMemcpyable;
     using common_robotics_utilities::serialization::SerializeVectorLike;
     const uint64_t start_buffer_size = buffer.size();
     // Serialize the initialized
     SerializeMemcpyable<uint8_t>(static_cast<uint8_t>(initialized_), buffer);
     // Serialize the planner tree
-    std::function<uint64_t(
-        const UncertaintyPlanningTreeState&, std::vector<uint8_t>&)>
-            planning_tree_state_serializer_fn
-        = [] (const UncertaintyPlanningTreeState& state,
-              std::vector<uint8_t>& ser_buffer)
+    const Serializer<UncertaintyPlanningTreeState>
+        planning_tree_state_serializer_fn
+            = [] (const UncertaintyPlanningTreeState& state,
+                  std::vector<uint8_t>& ser_buffer)
     {
       return UncertaintyPlanningTreeState::Serialize(
           state, ser_buffer, UncertaintyPlanningState::Serialize);
@@ -577,57 +580,57 @@ public:
   uint64_t DeserializeSelf(
       const std::vector<uint8_t>& buffer, const uint64_t starting_offset)
   {
+    using common_robotics_utilities::serialization::Deserializer;
     using common_robotics_utilities::serialization::DeserializeMemcpyable;
     using common_robotics_utilities::serialization::DeserializeVectorLike;
     uint64_t current_position = starting_offset;
     // Deserialize the initialized
-    const std::pair<uint8_t, uint64_t> initialized_deserialized
+    const auto initialized_deserialized
         = DeserializeMemcpyable<uint8_t>(buffer, current_position);
-    initialized_ = static_cast<bool>(initialized_deserialized.first);
-    current_position += initialized_deserialized.second;
+    initialized_ = static_cast<bool>(initialized_deserialized.Value());
+    current_position += initialized_deserialized.BytesRead();
     // Deserialize the planner tree
-    std::function<std::pair<UncertaintyPlanningTreeState, uint64_t>(
-        const std::vector<uint8_t>&, const uint64_t)>
-            planning_tree_state_deserializer_fn
-        = [] (const std::vector<uint8_t>& deser_buffer,
-              const uint64_t deser_current)
+    const Deserializer<UncertaintyPlanningTreeState>
+        planning_tree_state_deserializer_fn
+            = [] (const std::vector<uint8_t>& deser_buffer,
+                  const uint64_t deser_current)
     {
       return UncertaintyPlanningTreeState::Deserialize(
           deser_buffer, deser_current, UncertaintyPlanningState::Deserialize);
     };
-    const std::pair<UncertaintyPlanningTree, uint64_t> planner_tree_deserialized
+    const auto planner_tree_deserialized
         = DeserializeVectorLike<
             UncertaintyPlanningTreeState, UncertaintyPlanningTree>(
                 buffer, current_position, planning_tree_state_deserializer_fn);
-    planner_tree_ = planner_tree_deserialized.first;
-    current_position += planner_tree_deserialized.second;
+    planner_tree_ = planner_tree_deserialized.Value();
+    current_position += planner_tree_deserialized.BytesRead();
     // Deserialize the goal
-    const std::pair<Configuration, uint64_t> goal_deserialized
+    const auto goal_deserialized
         = ConfigSerializer::Deserialize(buffer, current_position);
-    goal_ = goal_deserialized.first;
-    current_position += goal_deserialized.second;
+    goal_ = goal_deserialized.Value();
+    current_position += goal_deserialized.BytesRead();
     // Deserialize the marginal edge weight
-    const std::pair<double, uint64_t> marginal_edge_weight_deserialized
+    const auto marginal_edge_weight_deserialized
         = DeserializeMemcpyable<double>(buffer, current_position);
-    marginal_edge_weight_ = marginal_edge_weight_deserialized.first;
-    current_position += marginal_edge_weight_deserialized.second;
+    marginal_edge_weight_ = marginal_edge_weight_deserialized.Value();
+    current_position += marginal_edge_weight_deserialized.BytesRead();
     // Deserialize the conformant planning threshold
-    const std::pair<double, uint64_t> conformant_planning_threshold_deserialized
+    const auto conformant_planning_threshold_deserialized
         = DeserializeMemcpyable<double>(buffer, current_position);
     conformant_planning_threshold_
-        = conformant_planning_threshold_deserialized.first;
-    current_position += conformant_planning_threshold_deserialized.second;
+        = conformant_planning_threshold_deserialized.Value();
+    current_position += conformant_planning_threshold_deserialized.BytesRead();
     // Deserialize the edge attempt threshold
-    const std::pair<uint32_t, uint64_t> edge_attempt_threshold_deserialized
+    const auto edge_attempt_threshold_deserialized
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
-    edge_attempt_threshold_ = edge_attempt_threshold_deserialized.first;
-    current_position += edge_attempt_threshold_deserialized.second;
+    edge_attempt_threshold_ = edge_attempt_threshold_deserialized.Value();
+    current_position += edge_attempt_threshold_deserialized.BytesRead();
     // Deserialize the policy action attempt count
-    const std::pair<uint32_t, uint64_t> policy_action_attempt_count_deserialized
+    const auto policy_action_attempt_count_deserialized
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
     policy_action_attempt_count_
-        = policy_action_attempt_count_deserialized.first;
-    current_position += policy_action_attempt_count_deserialized.second;
+        = policy_action_attempt_count_deserialized.Value();
+    current_position += policy_action_attempt_count_deserialized.BytesRead();
     // Rebuild the policy graph
     RebuildPolicyGraph();
     // Figure out how many bytes were read
@@ -912,11 +915,12 @@ private:
           const std::vector<Configuration, ConfigAlloc>&,
           const Configuration&)>& particle_clustering_fn) const
   {
+    using common_robotics_utilities::simple_knearest_neighbors
+        ::IndexAndDistance;
     // Get the starting state - NOTE, we ignore the last node in the policy
     // graph, which is the virtual goal node
-    std::vector<std::pair<int64_t, double>> per_thread_best_node(
-        common_robotics_utilities::openmp_helpers::GetNumOmpThreads(),
-        std::make_pair(-1, std::numeric_limits<double>::infinity()));
+    std::vector<IndexAndDistance> per_thread_best_node(
+        common_robotics_utilities::openmp_helpers::GetNumOmpThreads());
     #pragma omp parallel for
     for (int64_t node_idx = 0;
          node_idx < static_cast<int64_t>(
@@ -940,25 +944,23 @@ private:
                 ::GetContextOmpThreadNum();
         const double expected_cost_to_goal
             = policy_dijkstras_result_.GetNodeDistance(node_idx);
-        if (expected_cost_to_goal < per_thread_best_node.at(thread_id).second)
+        if (expected_cost_to_goal
+            < per_thread_best_node.at(thread_id).Distance())
         {
-          per_thread_best_node.at(thread_id).first = node_idx;
-          per_thread_best_node.at(thread_id).second = expected_cost_to_goal;
+          per_thread_best_node.at(thread_id).SetIndexAndDistance(
+              node_idx, expected_cost_to_goal);
         }
       }
     }
-    int64_t best_node_index = -1;
-    double best_node_expected_cost_to_goal
-        = std::numeric_limits<double>::infinity();
+    IndexAndDistance best_node;
     for (const auto& thread_best : per_thread_best_node)
     {
-      if (thread_best.second < best_node_expected_cost_to_goal)
+      if (thread_best.Distance() < best_node.Distance())
       {
-        best_node_index = thread_best.first;
-        best_node_expected_cost_to_goal = thread_best.second;
+        best_node.SetFromOther(thread_best);
       }
     }
-    return best_node_index;
+    return best_node.Index();
   }
 
   PolicyQueryResult<Configuration> QueryStartBestAction(

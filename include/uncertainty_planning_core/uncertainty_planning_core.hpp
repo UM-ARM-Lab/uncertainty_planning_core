@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
@@ -21,13 +23,6 @@
 #include <uncertainty_planning_core/uncertainty_contact_planning.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
-
-#ifndef UNCERTAINTY_PLANNING_CORE_HPP
-#define UNCERTAINTY_PLANNING_CORE_HPP
-
-#ifndef PRNG_TYPE
-    #define PRNG_TYPE std::mt19937_64
-#endif
 
 namespace uncertainty_planning_core
 {
@@ -101,10 +96,6 @@ namespace uncertainty_planning_core
         return options;
     }
 
-    // Typedefs to make things easier to read
-
-    typedef PRNG_TYPE PRNG;
-
     // VectorXd
 
     class VectorXdConfigSerializer
@@ -121,12 +112,13 @@ namespace uncertainty_planning_core
             return common_robotics_utilities::serialization::SerializeVectorXd(value, buffer);
         }
 
-        static inline std::pair<Eigen::VectorXd, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        static inline common_robotics_utilities::serialization::Deserialized<Eigen::VectorXd> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             return common_robotics_utilities::serialization::DeserializeVectorXd(buffer, current);
         }
     };
 
+    using PRNG = std::mt19937_64;
     using VectorXdConfig = Eigen::VectorXd;
     using VectorXdConfigAlloc = std::allocator<Eigen::VectorXd>;
     using VectorXdPolicy = ExecutionPolicy<VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
@@ -232,7 +224,7 @@ namespace uncertainty_planning_core
                                                                                                          UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize); };
         const std::pair<UncertaintyPlanningTree<Configuration, ConfigSerializer, ConfigAlloc>, uint64_t> deserialized_tree
                 = common_robotics_utilities::serialization::DeserializeVectorLike<UncertaintyPlanningTreeState<Configuration, ConfigSerializer, ConfigAlloc>>(buffer, current, planning_tree_state_deserializer_fn);
-        std::cout << "...planner tree of " << deserialized_tree.first.size() << " states deserialized from " << deserialized_tree.second << " bytes" << std::endl;
+        std::cout << "...planner tree of " << deserialized_tree.Value().size() << " states deserialized from " << deserialized_tree.BytesRead() << " bytes" << std::endl;
         return deserialized_tree;
     }
 
@@ -281,7 +273,7 @@ namespace uncertainty_planning_core
         std::cout << "Decompressing from storage..." << std::endl;
         const std::vector<uint8_t> decompressed_serialized_tree = common_robotics_utilities::zlib_helpers::DecompressBytes(file_buffer);
         std::cout << "Attempting to deserialize tree..." << std::endl;
-        return DeserializePlannerTree<Configuration, ConfigSerializer, ConfigAlloc>(decompressed_serialized_tree, 0u).first;
+        return DeserializePlannerTree<Configuration, ConfigSerializer, ConfigAlloc>(decompressed_serialized_tree, 0u).Value();
     }
 
     template<typename Configuration, typename ConfigSerializer, typename ConfigAlloc>
@@ -329,7 +321,7 @@ namespace uncertainty_planning_core
         std::cout << "Decompressing from storage..." << std::endl;
         const std::vector<uint8_t> decompressed_serialized_policy = common_robotics_utilities::zlib_helpers::DecompressBytes(file_buffer);
         std::cout << "Attempting to deserialize policy..." << std::endl;
-        return UncertaintyPlanningPolicy<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize(decompressed_serialized_policy, 0u).first;
+        return UncertaintyPlanningPolicy<Configuration, ConfigSerializer, ConfigAlloc>::Deserialize(decompressed_serialized_policy, 0u).Value();
     }
 
     // Policy saving and loading concrete implementations
@@ -474,6 +466,4 @@ namespace uncertainty_planning_core
         strm << "\nexecuted_policy_file: " << options.executed_policy_file;
         return strm;
     }
-}
-
-#endif // UNCERTAINTY_PLANNING_CORE_HPP
+}  // namespace uncertainty_planning_core

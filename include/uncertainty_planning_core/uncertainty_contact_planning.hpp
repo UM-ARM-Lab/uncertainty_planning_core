@@ -18,6 +18,7 @@
 #include <common_robotics_utilities/math.hpp>
 #include <common_robotics_utilities/zlib_helpers.hpp>
 #include <common_robotics_utilities/math.hpp>
+#include <common_robotics_utilities/ros_conversions.hpp>
 #include <common_robotics_utilities/simple_knearest_neighbors.hpp>
 #include <common_robotics_utilities/simple_rrt_planner.hpp>
 #include <common_robotics_utilities/simple_robot_model_interface.hpp>
@@ -327,8 +328,8 @@ namespace uncertainty_planning_core
                 }
             };
             const auto nearests = common_robotics_utilities::simple_knearest_neighbors::GetKNearestNeighborsParallel(planner_nodes, random_state, real_state_distance_fn, 1);
-            const int64_t best_index = nearests.at(0).first;
-            const double best_distance = nearests.at(0).second;
+            const int64_t best_index = nearests.at(0).Index();
+            const double best_distance = nearests.at(0).Distance();
             logging_fn("Selected node " + std::to_string(best_index) + " as nearest neighbor (Qnear) with distance " + std::to_string(best_distance), 1);
             return best_index;
         }
@@ -379,7 +380,7 @@ namespace uncertainty_planning_core
             clustering_ptr_->ResetStatistics();
             InitializePlanningTreeIfNotReady();
             GetPlanningTreeMutable().emplace_back(UncertaintyPlanningTreeState(start_state));
-            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath<UncertaintyPlanningState, UncertaintyPlanningState, UncertaintyPlanningStateAllocator>(GetPlanningTreeMutable(), complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
+            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath<UncertaintyPlanningState, UncertaintyPlanningState, UncertaintyPlanningStateVector>(GetPlanningTreeMutable(), complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
             // It "shouldn't" matter what the goal state actually is, since it's more of a virtual node to tie the policy graph together
             // But it probably needs to be collision-free
             auto valid_goal_sampling_fn = [&] ()
@@ -559,7 +560,7 @@ namespace uncertainty_planning_core
             clustering_ptr_->ResetStatistics();
             InitializePlanningTreeIfNotReady();
             GetPlanningTreeMutable().emplace_back(UncertaintyPlanningTreeState(start_state));
-            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath<UncertaintyPlanningState, UncertaintyPlanningState, UncertaintyPlanningStateAllocator>(GetPlanningTreeMutable(), complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
+            auto planning_results = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath<UncertaintyPlanningState, UncertaintyPlanningState, UncertaintyPlanningStateVector>(GetPlanningTreeMutable(), complete_sampling_fn, nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn, goal_reached_callback, termination_check_fn);
             return ProcessPlanningResults(planning_results, goal, edge_attempt_count, policy_action_attempt_count, include_spur_actions, policy_marker_size, display_fn);
         }
 
@@ -1280,7 +1281,7 @@ namespace uncertainty_planning_core
                     edge_marker.scale.x = marker_size;
                     edge_marker.scale.y = marker_size * 2.0;
                     edge_marker.scale.z = marker_size * 2.0;
-                    edge_marker.pose = common_robotics_utilities::conversions::EigenIsometry3dToGeometryPose(Eigen::Isometry3d::Identity());
+                    edge_marker.pose = common_robotics_utilities::ros_conversions::EigenIsometry3dToGeometryPose(Eigen::Isometry3d::Identity());
                     if (current_index < previous_index)
                     {
                         edge_marker.color = forward_color;
@@ -1293,8 +1294,8 @@ namespace uncertainty_planning_core
                     {
                         continue;
                     }
-                    edge_marker.points.push_back(common_robotics_utilities::conversions::EigenVector4dToGeometryPoint(current_config_point));
-                    edge_marker.points.push_back(common_robotics_utilities::conversions::EigenVector4dToGeometryPoint(previous_config_point));
+                    edge_marker.points.push_back(common_robotics_utilities::ros_conversions::EigenVector4dToGeometryPoint(current_config_point));
+                    edge_marker.points.push_back(common_robotics_utilities::ros_conversions::EigenVector4dToGeometryPoint(previous_config_point));
                     policy_markers.markers.push_back(edge_marker);
                 }
             }
@@ -1328,10 +1329,10 @@ namespace uncertainty_planning_core
                 edge_marker.scale.y = marker_size * 2.0;
                 edge_marker.scale.z = marker_size * 2.0;
                 const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
-                edge_marker.pose = common_robotics_utilities::conversions::EigenIsometry3dToGeometryPose(base_transform);
+                edge_marker.pose = common_robotics_utilities::ros_conversions::EigenIsometry3dToGeometryPose(base_transform);
                 edge_marker.color = color;
-                edge_marker.points.push_back(common_robotics_utilities::conversions::EigenVector4dToGeometryPoint(previous_point));
-                edge_marker.points.push_back(common_robotics_utilities::conversions::EigenVector4dToGeometryPoint(current_config_point));
+                edge_marker.points.push_back(common_robotics_utilities::ros_conversions::EigenVector4dToGeometryPoint(previous_point));
+                edge_marker.points.push_back(common_robotics_utilities::ros_conversions::EigenVector4dToGeometryPoint(current_config_point));
                 policy_markers.markers.push_back(edge_marker);
                 previous_index = policy_dijkstras.GetPreviousIndex(current_idx);
                 if (previous_index == current_idx)
