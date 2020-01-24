@@ -20,22 +20,31 @@
 
 namespace uncertainty_planning_core
 {
+using DisplayFunction
+    = std::function<void(const visualization_msgs::MarkerArray&)>;
+using LoggingFunction
+    = std::function<void(const std::string&, const int32_t)>;
+
 template<typename Configuration, typename ConfigSerializer,
          typename ConfigAlloc=std::allocator<Configuration>>
 class PolicyGraphBuilder
 {
 private:
   // Typedef so we don't hate ourselves
-  typedef uncertainty_planning_core::UncertaintyPlannerState<
-      Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningState;
-  typedef common_robotics_utilities::simple_rrt_planner::SimpleRRTPlannerState<
-      UncertaintyPlanningState> UncertaintyPlanningTreeState;
-  typedef common_robotics_utilities::simple_rrt_planner::PlanningTree<
-      UncertaintyPlanningState> UncertaintyPlanningTree;
-  typedef common_robotics_utilities::simple_graph::GraphNode<
-      UncertaintyPlanningState> PolicyGraphNode;
-  typedef common_robotics_utilities::simple_graph::Graph<
-      UncertaintyPlanningState> PolicyGraph;
+  using UncertaintyPlanningState
+      = UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>;
+  using UncertaintyPlanningTreeState
+      = common_robotics_utilities::simple_rrt_planner::SimpleRRTPlannerState<
+          UncertaintyPlanningState>;
+  using UncertaintyPlanningTree
+      = common_robotics_utilities::simple_rrt_planner::PlanningTree<
+          UncertaintyPlanningState>;
+  using PolicyGraphNode
+      = common_robotics_utilities::simple_graph::GraphNode<
+          UncertaintyPlanningState>;
+  using PolicyGraph
+      = common_robotics_utilities::simple_graph::Graph<
+          UncertaintyPlanningState>;
 
   PolicyGraphBuilder() {}
 
@@ -363,24 +372,27 @@ class ExecutionPolicy
 {
 private:
   // Typedef so we don't hate ourselves
-  typedef uncertainty_planning_core::UncertaintyPlannerState<
-      Configuration, ConfigSerializer, ConfigAlloc> UncertaintyPlanningState;
-  typedef Eigen::aligned_allocator<UncertaintyPlanningState>
-      UncertaintyPlanningStateAllocator;
-  typedef std::vector<
-      UncertaintyPlanningState, UncertaintyPlanningStateAllocator>
-          UncertaintyPlanningStateVector;
-  typedef common_robotics_utilities::simple_rrt_planner::SimpleRRTPlannerState<
-      UncertaintyPlanningState> UncertaintyPlanningTreeState;
-  typedef common_robotics_utilities::simple_rrt_planner::PlanningTree<
-      UncertaintyPlanningState> UncertaintyPlanningTree;
-  typedef common_robotics_utilities::simple_graph::GraphNode<
-      UncertaintyPlanningState> PolicyGraphNode;
-  typedef common_robotics_utilities::simple_graph::Graph<
-      UncertaintyPlanningState> PolicyGraph;
-  typedef PolicyGraphBuilder<Configuration, ConfigSerializer, ConfigAlloc>
-      ExecutionPolicyGraphBuilder;
-
+  using UncertaintyPlanningState
+      = UncertaintyPlannerState<Configuration, ConfigSerializer, ConfigAlloc>;
+  using UncertaintyPlanningStateAllocator
+      = Eigen::aligned_allocator<UncertaintyPlanningState>;
+  using UncertaintyPlanningStateVector
+      = std::vector<UncertaintyPlanningState,
+                    UncertaintyPlanningStateAllocator>;
+  using UncertaintyPlanningTreeState
+      = common_robotics_utilities::simple_rrt_planner::SimpleRRTPlannerState<
+          UncertaintyPlanningState>;
+  using UncertaintyPlanningTree
+      = common_robotics_utilities::simple_rrt_planner::PlanningTree<
+          UncertaintyPlanningState>;
+  using PolicyGraphNode
+      = common_robotics_utilities::simple_graph::GraphNode<
+          UncertaintyPlanningState>;
+  using PolicyGraph
+      = common_robotics_utilities::simple_graph::Graph<
+          UncertaintyPlanningState>;
+  using ExecutionPolicyGraphBuilder
+      = PolicyGraphBuilder<Configuration, ConfigSerializer, ConfigAlloc>;
   using ExecutionPolicyType
       = ExecutionPolicy<Configuration, ConfigSerializer, ConfigAlloc>;
 
@@ -397,7 +409,7 @@ private:
   common_robotics_utilities::simple_graph_search::DijkstrasResult
       policy_dijkstras_result_;
   // Logging function
-  std::function<void(const std::string&, const int32_t)> logging_fn_;
+  LoggingFunction logging_fn_;
 
 public:
   static uint32_t AddWithOverflowClamp(
@@ -441,7 +453,7 @@ public:
       const double conformant_planning_threshold,
       const uint32_t edge_attempt_threshold,
       const uint32_t policy_action_attempt_count,
-      const std::function<void(const std::string&, const int32_t)>& logging_fn)
+      const LoggingFunction& logging_fn)
       : initialized_(true), planner_tree_(planner_tree), goal_(goal),
         marginal_edge_weight_(marginal_edge_weight),
         conformant_planning_threshold_(conformant_planning_threshold),
@@ -457,8 +469,7 @@ public:
       logging_fn_([] (const std::string& msg, const int32_t level)
           { std::cout << "Log [" << level << "] : " << msg << std::endl; }) {}
 
-  void RegisterLoggingFunction(
-      const std::function<void(const std::string&, const int32_t)>& logging_fn)
+  void RegisterLoggingFunction(const LoggingFunction& logging_fn)
   {
     logging_fn_ = logging_fn;
   }
@@ -1842,7 +1853,7 @@ public:
   static double ComputeTransitionGoalProbability(
       const UncertaintyPlanningStateVector& child_nodes,
       const uint32_t planner_action_try_attempts,
-      const std::function<void(const std::string&, const int32_t)>& logging_fn)
+      const LoggingFunction& logging_fn)
   {
     // Let's handle the special cases first
     // The most common case - a non-split transition

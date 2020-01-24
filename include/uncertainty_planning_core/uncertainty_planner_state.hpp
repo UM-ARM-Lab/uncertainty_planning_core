@@ -23,8 +23,8 @@ template<typename Configuration, typename ConfigSerializer,
 class UncertaintyPlannerState
 {
 protected:
-  typedef common_robotics_utilities::simple_robot_model_interface
-      ::SimpleRobotModelInterface<Configuration, ConfigAlloc> Robot;
+  using Robot = common_robotics_utilities::simple_robot_model_interface
+      ::SimpleRobotModelInterface<Configuration, ConfigAlloc>;
 
   Configuration expectation_;
   Configuration command_;

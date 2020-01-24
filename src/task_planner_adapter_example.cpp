@@ -455,13 +455,13 @@ int main(int argc, char** argv)
   ros::Publisher display_debug_publisher =
       nh.advertise<visualization_msgs::MarkerArray>(
         "task_planner_debug_display_markers", 1, true);
-  std::function<void(const visualization_msgs::MarkerArray&)> display_fn
+  const DisplayFunction display_fn
       = [&] (const visualization_msgs::MarkerArray& markers)
   {
     display_debug_publisher.publish(markers);
   };
   // Make logging function
-  std::function<void(const std::string&, const int32_t)> logging_fn
+  const LoggingFunction logging_fn
       = [&] (const std::string& msg, const int32_t level)
   {
     ROS_INFO_NAMED(ros::this_node::getName(), "[%d] %s", level, msg.c_str());

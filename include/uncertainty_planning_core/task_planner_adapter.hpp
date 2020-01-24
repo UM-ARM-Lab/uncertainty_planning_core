@@ -16,6 +16,7 @@
 #include <ros/ros.h>
 #include <visualization_msgs/Marker.h>
 #include <common_robotics_utilities/math.hpp>
+#include <common_robotics_utilities/openmp_helpers.hpp>
 #include <common_robotics_utilities/conversions.hpp>
 #include <common_robotics_utilities/print.hpp>
 #include <uncertainty_planning_core/uncertainty_planning_core.hpp>
@@ -25,8 +26,6 @@ namespace uncertainty_planning_core
 {
 namespace task_planner_adapter
 {
-using DisplayFn = std::function<void(const visualization_msgs::MarkerArray&)>;
-
 /// Base type for all action primitives
 template<typename State, typename StateAlloc=std::allocator<State>>
 class ActionPrimitiveInterface
@@ -278,25 +277,18 @@ class TaskPlannerAdapter: public TaskPlannerClustering<State, StateAlloc>,
 {
 private:
 
-  typedef SimpleRobotModelInterface<State, StateAlloc> TaskStateRobotBaseType;
-
-  typedef std::shared_ptr<TaskStateRobotBaseType> TaskStateRobotBasePtr;
-
-  typedef ForwardSimulationStepTrace<State, StateAlloc> StateStepTrace;
-
-  typedef UncertaintyPlannerState<
-            State, StateSerializer, StateAlloc> TaskPlanningState;
-
-  typedef UncertaintyPlanningTree<
-            State, StateSerializer, StateAlloc> TaskPlanningTree;
-
-  typedef ExecutionPolicy<
-            State, StateSerializer, StateAlloc> TaskPlanningPolicy;
-
-  typedef PolicyQueryResult<State> TaskPlanningPolicyQuery;
-
-  typedef UncertaintyPlanningSpace<
-            State, StateSerializer, StateAlloc, PRNG> TaskPlanningSpace;
+  using TaskStateRobotBaseType = SimpleRobotModelInterface<State, StateAlloc>;
+  using TaskStateRobotBasePtr = std::shared_ptr<TaskStateRobotBaseType>;
+  using StateStepTrace = ForwardSimulationStepTrace<State, StateAlloc>;
+  using TaskPlanningState
+      = UncertaintyPlannerState<State, StateSerializer, StateAlloc>;
+  using TaskPlanningTree
+      = UncertaintyPlanningTree<State, StateSerializer, StateAlloc>;
+  using TaskPlanningPolicy
+      = ExecutionPolicy<State, StateSerializer, StateAlloc>;
+  using TaskPlanningPolicyQuery = PolicyQueryResult<State>;
+  using TaskPlanningSpace
+      = UncertaintyPlanningSpace<State, StateSerializer, StateAlloc, PRNG>;
 
   static void
   DeleteSamplerPtrFn(TaskPlannerSampling<State>* ptr)
@@ -322,8 +314,8 @@ private:
   std::function<bool(const State&)> single_execution_completed_fn_;
   std::function<bool(const State&)> task_completed_fn_;
 
-  std::function<void(const std::string&, const int32_t)> logging_fn_;
-  DisplayFn drawing_fn_;
+  LoggingFunction logging_fn_;
+  DisplayFunction drawing_fn_;
   int32_t debug_level_;
 
   uint64_t state_counter_;
@@ -334,20 +326,6 @@ private:
   mutable std::vector<std::uniform_real_distribution<double>>
     unit_real_distributions_;
 
-  static inline size_t GetNumOMPThreads()
-  {
-    #if defined(_OPENMP)
-    size_t num_threads = 0;
-    #pragma omp parallel
-    {
-      num_threads = (size_t)omp_get_num_threads();
-    }
-    return num_threads;
-    #else
-    return 1;
-    #endif
-  }
-
   inline void ResetGenerators(const int64_t prng_seed)
   {
     // Prepare the default RNG
@@ -356,11 +334,12 @@ private:
     std::uniform_int_distribution<int64_t>
         seed_dist(0, std::numeric_limits<int64_t>::max());
     // Get the number of threads we're using
-    const size_t num_threads = GetNumOMPThreads();
+    const int32_t num_threads
+        = common_robotics_utilities::openmp_helpers::GetNumOmpThreads();
     // Prepare a number of PRNGs for each thread
     rngs_.clear();
     unit_real_distributions_.clear();
-    for (size_t tidx = 0; tidx < num_threads; tidx++)
+    for (int32_t tidx = 0; tidx < num_threads; tidx++)
     {
       rngs_.push_back(uncertainty_planning_core::PRNG(seed_dist(prng)));
       unit_real_distributions_.push_back(
@@ -636,8 +615,9 @@ private:
     }
     // Get the nearest neighbor (ignoring the disabled states)
     std::vector<std::pair<int64_t, uint64_t>>
-        per_thread_bests(GetNumOMPThreads(),
-                         std::pair<int64_t, uint64_t>(-1, 0));
+        per_thread_bests(
+            common_robotics_utilities::openmp_helpers::GetNumOmpThreads(),
+            std::pair<int64_t, uint64_t>(-1, 0));
     // Greedy best-first expansion strategy
     #pragma omp parallel for
     for (size_t idx = 1; idx < tree.size(); idx++)
@@ -652,11 +632,9 @@ private:
         const State& representative_particle = particles.Value().at(0);
         const uint64_t state_readiness
             = ComputeStateReadiness(representative_particle);
-  #if defined(_OPENMP)
-        const size_t current_thread_id = (size_t)omp_get_thread_num();
-  #else
-        const size_t current_thread_id = 0;
-  #endif
+        const size_t current_thread_id
+            = static_cast<size_t>(common_robotics_utilities::openmp_helpers
+                ::GetContextOmpThreadNum());
         if (state_readiness > per_thread_bests.at(current_thread_id).second)
         {
           per_thread_bests.at(current_thread_id).first = (int64_t)idx;
@@ -1013,8 +991,8 @@ public:
       const std::function<uint64_t(const State&)>& state_readiness_fn,
       const std::function<bool(const State&)>& single_execution_completed_fn,
       const std::function<bool(const State&)>& task_completed_fn,
-      const std::function<void(const std::string&, const int32_t)>& logging_fn,
-      const DisplayFn& drawing_fn,
+      const LoggingFunction& logging_fn,
+      const DisplayFunction& drawing_fn,
       const int64_t prng_seed,
       const int32_t debug_level)
     : TaskPlannerClustering<State, StateAlloc>(),
@@ -1242,7 +1220,7 @@ public:
         // Identify the "ideal" outcome
         // Because we want purely speculative queries, we make a copy
         auto speculative_policy_copy = working_policy;
-        std::function<void(const std::string&, const int32_t)> null_logger
+        const LoggingFunction null_logger
             = [] (const std::string&, const int32_t) {};
         speculative_policy_copy.RegisterLoggingFunction(null_logger);
         Log("Speculatively querying the policy to identify best outcome of "
@@ -1429,12 +1407,10 @@ public:
 
   virtual uncertainty_planning_core::PRNG& GetRandomGenerator()
   {
-  #if defined(_OPENMP)
-    const size_t thread_id = (size_t)omp_get_thread_num();
-  #else
-    const size_t thread_id = 0;
-  #endif
-    return rngs_.at(thread_id);
+    const size_t thread_index
+        = static_cast<size_t>(common_robotics_utilities::openmp_helpers
+            ::GetContextOmpThreadNum());
+    return rngs_.at(thread_index);
   }
 
   virtual std::map<std::string, double> GetStatistics() const
@@ -1456,7 +1432,7 @@ public:
   virtual std::vector<std::vector<int64_t>> ClusterParticles(
     const TaskStateRobotBasePtr& robot,
     const std::vector<SimulationResult<State>>& particles,
-    const DisplayFn& display_fn)
+    const DisplayFunction& display_fn)
   {
     UNUSED(robot);
     UNUSED(display_fn);
@@ -1467,7 +1443,7 @@ public:
     const TaskStateRobotBasePtr& robot,
     const std::vector<State, StateAlloc>& cluster,
     const std::vector<SimulationResult<State>>& particles,
-    const DisplayFn& display_fn)
+    const DisplayFunction& display_fn)
   {
     UNUSED(robot);
     UNUSED(display_fn);
@@ -1558,7 +1534,7 @@ public:
       const bool allow_contacts,
       StateStepTrace& trace,
       const bool enable_tracing,
-      const DisplayFn& display_fn)
+      const DisplayFunction& display_fn)
   {
     UNUSED(mutable_robot);
     UNUSED(target_position);
@@ -1575,7 +1551,7 @@ public:
       const bool allow_contacts,
       StateStepTrace& trace,
       const bool enable_tracing,
-      const DisplayFn& display_fn)
+      const DisplayFunction& display_fn)
   {
     UNUSED(mutable_robot);
     UNUSED(target_position);
@@ -1593,7 +1569,7 @@ public:
       const bool allow_contacts,
       StateStepTrace& trace,
       const bool enable_tracing,
-      const DisplayFn& display_fn)
+      const DisplayFunction& display_fn)
   {
     UNUSED(immutable_robot);
     UNUSED(start_position);
@@ -1612,7 +1588,7 @@ public:
       const bool allow_contacts,
       StateStepTrace& trace,
       const bool enable_tracing,
-      const DisplayFn& display_fn)
+      const DisplayFunction& display_fn)
   {
     UNUSED(immutable_robot);
     UNUSED(start_position);
@@ -1629,7 +1605,7 @@ public:
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions,
       const bool allow_contacts,
-      const DisplayFn& display_fn)
+      const DisplayFunction& display_fn)
   {
     UNUSED(immutable_robot);
     UNUSED(start_positions);
@@ -1644,7 +1620,7 @@ public:
       const std::vector<State, StateAlloc>& start_positions,
       const std::vector<State, StateAlloc>& target_positions,
       const bool allow_contacts,
-      const DisplayFn& display_fn)
+      const DisplayFunction& display_fn)
   {
     UNUSED(immutable_robot);
     UNUSED(start_positions);
