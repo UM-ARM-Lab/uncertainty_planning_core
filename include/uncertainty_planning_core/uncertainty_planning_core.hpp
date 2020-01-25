@@ -138,65 +138,9 @@ inline PLANNING_AND_EXECUTION_OPTIONS GetOptions(
   return options;
 }
 
-// Typedefs and helpers for a Eigen::VectorXd configuration type.
-
-class VectorXdConfigSerializer
-{
-public:
-  static inline std::string TypeName()
-  {
-    return std::string("EigenVectorXdSerializer");
-  }
-
-  static inline uint64_t Serialize(
-      const Eigen::VectorXd& value, std::vector<uint8_t>& buffer)
-  {
-    return common_robotics_utilities::serialization::SerializeVectorXd(
-        value, buffer);
-  }
-
-  static inline
-  common_robotics_utilities::serialization::Deserialized<Eigen::VectorXd>
-  Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
-  {
-    return common_robotics_utilities::serialization::DeserializeVectorXd(
-        buffer, current);
-  }
-};
+// Policy and tree type definitions
 
 using PRNG = std::mt19937_64;
-using VectorXdConfig = Eigen::VectorXd;
-using VectorXdConfigAlloc = std::allocator<Eigen::VectorXd>;
-using VectorXdConfigVector
-    = std::vector<VectorXdConfig, VectorXdConfigAlloc>;
-using VectorXdPolicy = ExecutionPolicy<
-    VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
-using VectorXdPolicyPlanningResult
-    = UncertaintyPolicyPlanningResult<
-        VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
-using VectorXdPolicyExecutionResult
-    = UncertaintyPolicyExecutionResult<
-        VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
-using VectorXdSampler = SimpleSamplerInterface<VectorXdConfig, PRNG>;
-using VectorXdSamplerPtr = std::shared_ptr<VectorXdSampler>;
-using VectorXdRobot
-    = common_robotics_utilities::simple_robot_model_interface
-        ::SimpleRobotModelInterface<VectorXdConfig, VectorXdConfigAlloc>;
-using VectorXdRobotPtr = std::shared_ptr<VectorXdRobot>;
-using VectorXdSimulator
-    = SimpleSimulatorInterface<VectorXdConfig, PRNG, VectorXdConfigAlloc>;
-using VectorXdSimulatorPtr = std::shared_ptr<VectorXdSimulator>;
-using VectorXdClustering
-    = SimpleOutcomeClusteringInterface<VectorXdConfig, VectorXdConfigAlloc>;
-using VectorXdClusteringPtr = std::shared_ptr<VectorXdClustering>;
-using VectorXdPlanningState = UncertaintyPlanningState<
-    VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
-using VectorXdPlanningSpace = UncertaintyPlanningSpace<
-    VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc, PRNG>;
-using VectorXdPolicyActionExecutionFunction
-    = PolicyActionExecutionFunction<VectorXdConfig, VectorXdConfigAlloc>;
-
-// Policy and tree type definitions
 
 template<typename Configuration, typename ConfigSerializer,
          typename ConfigAlloc>
@@ -233,6 +177,63 @@ template<typename Configuration, typename ConfigSerializer,
 using UncertaintyPlanningTree
     = common_robotics_utilities::simple_rrt_planner::PlanningTree<
         UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>>;
+
+// Typedefs and helpers for a Eigen::VectorXd configuration type.
+
+class VectorXdConfigSerializer
+{
+public:
+  static inline std::string TypeName()
+  {
+    return std::string("EigenVectorXdSerializer");
+  }
+
+  static inline uint64_t Serialize(
+      const Eigen::VectorXd& value, std::vector<uint8_t>& buffer)
+  {
+    return common_robotics_utilities::serialization::SerializeVectorXd(
+        value, buffer);
+  }
+
+  static inline
+  common_robotics_utilities::serialization::Deserialized<Eigen::VectorXd>
+  Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+  {
+    return common_robotics_utilities::serialization::DeserializeVectorXd(
+        buffer, current);
+  }
+};
+
+using VectorXdConfig = Eigen::VectorXd;
+using VectorXdConfigAlloc = std::allocator<Eigen::VectorXd>;
+using VectorXdConfigVector
+    = std::vector<VectorXdConfig, VectorXdConfigAlloc>;
+using VectorXdPolicy = ExecutionPolicy<
+    VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
+using VectorXdPolicyPlanningResult
+    = UncertaintyPolicyPlanningResult<
+        VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
+using VectorXdPolicyExecutionResult
+    = UncertaintyPolicyExecutionResult<
+        VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
+using VectorXdSampler = SimpleSamplerInterface<VectorXdConfig, PRNG>;
+using VectorXdSamplerPtr = std::shared_ptr<VectorXdSampler>;
+using VectorXdRobot
+    = common_robotics_utilities::simple_robot_model_interface
+        ::SimpleRobotModelInterface<VectorXdConfig, VectorXdConfigAlloc>;
+using VectorXdRobotPtr = std::shared_ptr<VectorXdRobot>;
+using VectorXdSimulator
+    = SimpleSimulatorInterface<VectorXdConfig, PRNG, VectorXdConfigAlloc>;
+using VectorXdSimulatorPtr = std::shared_ptr<VectorXdSimulator>;
+using VectorXdClustering
+    = SimpleOutcomeClusteringInterface<VectorXdConfig, VectorXdConfigAlloc>;
+using VectorXdClusteringPtr = std::shared_ptr<VectorXdClustering>;
+using VectorXdPlanningState = UncertaintyPlanningState<
+    VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>;
+using VectorXdPlanningSpace = UncertaintyPlanningSpace<
+    VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc, PRNG>;
+using VectorXdPolicyActionExecutionFunction
+    = PolicyActionExecutionFunction<VectorXdConfig, VectorXdConfigAlloc>;
 
 // Typedefs for user-provided goal check functions
 
@@ -352,7 +353,7 @@ DeserializePlannerTree(
           UncertaintyPlanningTreeState<
               Configuration, ConfigSerializer, ConfigAlloc>,
           UncertaintyPlanningTree<
-              Configuration, ConfigSerialize, ConfigAlloc>>(
+              Configuration, ConfigSerializer, ConfigAlloc>>(
                   buffer, starting_offset, planning_tree_state_deserializer_fn);
   std::cout << "...planner tree of " << deserialized_tree.Value().size()
             << " states deserialized from " << deserialized_tree.BytesRead()
@@ -587,19 +588,19 @@ inline std::ostream& operator<<(
 {
   strm << "OPTIONS:";
   strm << "\nplanner_time_limit: " << options.planner_time_limit;
-  strm << "\np_goal_reached_termination_threshold: "
+  strm << "\np_goal_reached_termination_threshold: ";
   strm << options.p_goal_reached_termination_threshold;
   strm << "\ngoal_bias: " << options.goal_bias;
   strm << "\nstep_size: " << options.step_size;
-  strm << "\ngoal_probability_threshold: "
+  strm << "\ngoal_probability_threshold: ";
   strm << options.goal_probability_threshold;
   strm << "\ngoal_distance_threshold: " << options.goal_distance_threshold;
-  strm << "\nconnect_after_first_solution: "
+  strm << "\nconnect_after_first_solution: ";
   strm << options.connect_after_first_solution;
   strm << "\nfeasibility_alpha: " << options.feasibility_alpha;
   strm << "\nvariance_alpha: " << options.variance_alpha;
   strm << "\nedge_attempt_count: " << options.edge_attempt_count;
-  strm << "\npolicy_action_attempt_count: "
+  strm << "\npolicy_action_attempt_count: ";
   strm << options.policy_action_attempt_count;
   strm << "\nnum_particles: " << options.num_particles;
   strm << "\nnum_policy_simulations: " << options.num_policy_simulations;

@@ -21,9 +21,9 @@
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 
-using namespace uncertainty_planning_core;
-
-bool uncertainty_planning_core::SaveVectorXdPolicy(
+namespace uncertainty_planning_core
+{
+bool SaveVectorXdPolicy(
     const VectorXdPolicy& policy, const std::string& filename)
 {
   return SavePolicy<
@@ -31,14 +31,13 @@ bool uncertainty_planning_core::SaveVectorXdPolicy(
           policy, filename);
 }
 
-VectorXdPolicy uncertainty_planning_core::LoadVectorXdPolicy(
-    const std::string& filename)
+VectorXdPolicy LoadVectorXdPolicy(const std::string& filename)
 {
   return LoadPolicy<
       VectorXdConfig, VectorXdConfigSerializer, VectorXdConfigAlloc>(filename);
 }
 
-inline double uncertainty_planning_core::VectorXdUserGoalCheckWrapperFn(
+inline double VectorXdUserGoalCheckWrapperFn(
     const VectorXdPlanningState& state,
     const VectorXdUserGoalConfigCheckFn& user_goal_config_check_fn)
 {
@@ -49,7 +48,7 @@ inline double uncertainty_planning_core::VectorXdUserGoalCheckWrapperFn(
 
 // VectorXd Interface
 
-VectorXdConfigVector uncertainty_planning_core::DemonstrateVectorXdSimulator(
+VectorXdConfigVector DemonstrateVectorXdSimulator(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -71,7 +70,7 @@ VectorXdConfigVector uncertainty_planning_core::DemonstrateVectorXdSimulator(
   return ExtractTrajectoryFromTrace(trace);
 }
 
-VectorXdPolicyPlanningResult uncertainty_planning_core::PlanVectorXdUncertainty(
+VectorXdPolicyPlanningResult PlanVectorXdUncertainty(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -99,7 +98,7 @@ VectorXdPolicyPlanningResult uncertainty_planning_core::PlanVectorXdUncertainty(
         display_fn);
 }
 
-VectorXdPolicyPlanningResult uncertainty_planning_core::PlanVectorXdUncertainty(
+VectorXdPolicyPlanningResult PlanVectorXdUncertainty(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -127,8 +126,7 @@ VectorXdPolicyPlanningResult uncertainty_planning_core::PlanVectorXdUncertainty(
         display_fn);
 }
 
-VectorXdPolicyExecutionResult
-uncertainty_planning_core::SimulateVectorXdUncertaintyPolicy(
+VectorXdPolicyExecutionResult SimulateVectorXdUncertaintyPolicy(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -159,8 +157,7 @@ uncertainty_planning_core::SimulateVectorXdUncertaintyPolicy(
         policy_marker_size, true, 0.001);
 }
 
-VectorXdPolicyExecutionResult
-uncertainty_planning_core::ExecuteVectorXdUncertaintyPolicy(
+VectorXdPolicyExecutionResult ExecuteVectorXdUncertaintyPolicy(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -192,8 +189,7 @@ uncertainty_planning_core::ExecuteVectorXdUncertaintyPolicy(
         policy_marker_size, false, 0.001);
 }
 
-VectorXdPolicyExecutionResult
-uncertainty_planning_core::SimulateVectorXdUncertaintyPolicy(
+VectorXdPolicyExecutionResult SimulateVectorXdUncertaintyPolicy(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -224,8 +220,7 @@ uncertainty_planning_core::SimulateVectorXdUncertaintyPolicy(
         policy_marker_size, true, 0.001);
 }
 
-VectorXdPolicyExecutionResult
-uncertainty_planning_core::ExecuteVectorXdUncertaintyPolicy(
+VectorXdPolicyExecutionResult ExecuteVectorXdUncertaintyPolicy(
     const PLANNING_AND_EXECUTION_OPTIONS& options,
     const VectorXdRobotPtr& robot,
     const VectorXdSimulatorPtr& simulator,
@@ -257,3 +252,4 @@ uncertainty_planning_core::ExecuteVectorXdUncertaintyPolicy(
         options.max_policy_exec_time, display_fn, policy_marker_size, false,
         0.001);
 }
+}  // namespace uncertainty_planning_core

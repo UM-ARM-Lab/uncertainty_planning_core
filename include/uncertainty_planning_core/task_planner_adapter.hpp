@@ -286,6 +286,8 @@ private:
       = UncertaintyPlanningTree<State, StateSerializer, StateAlloc>;
   using TaskPlanningPolicy
       = ExecutionPolicy<State, StateSerializer, StateAlloc>;
+  using PlanTaskPlanningPolicyResult
+      = UncertaintyPolicyPlanningResult<State, StateSerializer, StateAlloc>;
   using TaskPlanningPolicyQuery = PolicyQueryResult<State>;
   using TaskPlanningSpace
       = UncertaintyPlanningSpace<State, StateSerializer, StateAlloc, PRNG>;
@@ -637,7 +639,8 @@ private:
                 ::GetContextOmpThreadNum());
         if (state_readiness > per_thread_bests.at(current_thread_id).second)
         {
-          per_thread_bests.at(current_thread_id).first = (int64_t)idx;
+          per_thread_bests.at(current_thread_id).first
+              = static_cast<int64_t>(idx);
           per_thread_bests.at(current_thread_id).second = state_readiness;
         }
       }
@@ -786,16 +789,22 @@ private:
         reached_parent++;
       }
     }
-    const uint32_t simulated_particles = (uint32_t)simulation_result.size();
+    const uint32_t simulated_particles
+        = static_cast<uint32_t>(simulation_result.size());
     return std::make_pair(simulated_particles, reached_parent);
   }
 
-  std::vector<std::pair<TaskPlanningState, int64_t>>
-  PerformStatePropagation(const TaskPlanningState& nearest,
-                          const TaskPlanningState& target,
-                          const TaskStateRobotBasePtr& robot_ptr,
-                          const double step_size,
-                          const uint32_t planner_action_try_attempts)
+  using TaskPlanningPropagation
+      = common_robotics_utilities::simple_rrt_planner
+          ::ForwardPropagation<TaskPlanningState>;
+
+  // TODO(calderpg) Fix return type, use implementation in execution_policy.hpp
+  TaskPlanningPropagation PerformStatePropagation(
+      const TaskPlanningState& nearest,
+      const TaskPlanningState& target,
+      const TaskStateRobotBasePtr& robot_ptr,
+      const double step_size,
+      const uint32_t planner_action_try_attempts)
   {
     const uint64_t parent_readiness =
         ComputeStateReadiness(nearest.GetExpectation());
@@ -816,8 +825,7 @@ private:
     }
     // Build the forward-propagated states
     const State control_target = target.GetExpectation();
-    std::vector<std::pair<TaskPlanningState, int64_t>> result_states(
-          particle_clusters.size());
+    TaskPlanningPropagation result_states;
     for (size_t idx = 0; idx < particle_clusters.size(); idx++)
     {
       const std::vector<SimulationResult<State>>& current_cluster
@@ -825,8 +833,10 @@ private:
       if (current_cluster.size() > 0)
       {
         state_counter_++;
-        const uint32_t attempt_count = (uint32_t)propagated_points.size();
-        const uint32_t reached_count = (uint32_t)current_cluster.size();
+        const uint32_t attempt_count
+            = static_cast<uint32_t>(propagated_points.size());
+        const uint32_t reached_count
+            = static_cast<uint32_t>(current_cluster.size());
         std::vector<State, StateAlloc> particle_locations;
         particle_locations.reserve(current_cluster.size());
         bool action_is_nominally_independent = true;
@@ -851,10 +861,12 @@ private:
               + "] must be better than parent readiness ["
               + std::to_string(parent_readiness) + "]");
         }
-        const uint32_t reverse_attempt_count = (uint32_t)current_cluster.size();
+        const uint32_t reverse_attempt_count
+            = static_cast<uint32_t>(current_cluster.size());
         const uint32_t reverse_reached_count = 0u;
         const double effective_edge_feasibility
-            = (double)reached_count / (double)attempt_count;
+            = static_cast<double>(reached_count)
+                / static_cast<double>(attempt_count);
         transition_id_++;
         const uint64_t new_state_reverse_transtion_id = transition_id_;
         TaskPlanningState propagated_state(
@@ -872,8 +884,7 @@ private:
         propagated_state.UpdateReverseAttemptAndReachedCounts(
               reverse_edge_check.first, reverse_edge_check.second);
         // Store the state
-        result_states.at(idx).first = propagated_state;
-        result_states.at(idx).second = -1;
+        result_states.emplace_back(propagated_state, -1);
       }
     }
     Log("Forward simultation produced " + std::to_string(result_states.size())
@@ -881,66 +892,18 @@ private:
     // We only do further processing if a split happened
     if (result_states.size() > 1)
     {
-      // Now that we have the forward-propagated states, we go back and update
-      // their effective edge P(feasibility)
-      for (size_t idx = 0; idx < result_states.size(); idx++)
+      // I don't know why this needs the return type declared, but it does.
+      const std::function<TaskPlanningState&(const int64_t)>
+          get_planning_state_fn
+              = [&] (const int64_t state_index) -> TaskPlanningState&
       {
-        TaskPlanningState& current_state = result_states.at(idx).first;
-        double percent_active = 1.0;
-        double p_reached = 0.0;
-        for (uint32_t try_attempt = 0;
-             try_attempt < planner_action_try_attempts;
-             try_attempt++)
-        {
-          // How many particles got to our state on this attempt?
-          p_reached
-              += (percent_active * current_state.GetRawEdgePfeasibility());
-          // Update the percent of particles that are still usefully active
-          double updated_percent_active = 0.0;
-          for (size_t other_idx = 0;
-               other_idx < result_states.size();
-               other_idx++)
-          {
-            if (other_idx != idx)
-            {
-              const TaskPlanningState& other_state
-                  = result_states.at(other_idx).first;
-              // Only if this state has nominally independent outcomes can we
-              // expect particles that return to the parent to actually reach
-              // a different outcome in future repeats
-              if (other_state.IsActionOutcomeNominallyIndependent())
-              {
-                const double p_reached_other
-                    = percent_active * other_state.GetRawEdgePfeasibility();
-                const double p_returned_to_parent
-                    = p_reached_other
-                      * other_state.GetReverseEdgePfeasibility();
-                updated_percent_active += p_returned_to_parent;
-              }
-            }
-          }
-          percent_active = updated_percent_active;
-        }
-        if ((p_reached >= 0.0) && (p_reached <= 1.0))
-        {
-          current_state.SetEffectiveEdgePfeasibility(p_reached);
-        }
-        else if ((p_reached >= 0.0) && (p_reached <= 1.001))
-        {
-          Log("WARNING - P(reached) = " + std::to_string(p_reached)
-              + " > 1.0 (probably numerical error)", 1);
-          p_reached = 1.0;
-          current_state.SetEffectiveEdgePfeasibility(p_reached);
-        }
-        else
-        {
-          throw std::runtime_error("p_reached out of range [0, 1]");
-        }
-        Log("Computed effective edge P(feasibility) of "
-            + std::to_string(p_reached) + " for "
-            + std::to_string(planner_action_try_attempts)
-            + " try/retry attempts", 1);
-      }
+        return result_states.at(state_index).MutableState();
+      };
+      std::vector<int64_t> state_indices(result_states.size(), 0);
+      std::iota(state_indices.begin(), state_indices.end(), 0);
+      TaskPlanningPolicy::UpdateEstimatedEffectiveProbabilities(
+          get_planning_state_fn, state_indices, planner_action_try_attempts,
+          logging_fn_);
     }
     return result_states;
   }
@@ -1019,13 +982,13 @@ public:
   ///   edge transition probabilities
   /// - Max number of repeats of each action to consider when computing
   ///   expected edge costs in the policy
-  std::pair<TaskPlanningPolicy, std::map<std::string, double>>
-  PlanPolicy(const State& start_state,
-             const double time_limit,
-             const double p_task_done_termination_threshold,
-             const double minimum_goal_candiate_probability,
-             const uint32_t edge_attempt_count,
-             const uint32_t policy_action_attempt_count)
+  PlanTaskPlanningPolicyResult PlanPolicy(
+      const State& start_state,
+      const double time_limit,
+      const double p_task_done_termination_threshold,
+      const double minimum_goal_candiate_probability,
+      const uint32_t edge_attempt_count,
+      const uint32_t policy_action_attempt_count)
   {
     std::function<uint64_t(const State&)> compute_readiness_fn
         = [&] (const State& state)
@@ -1059,7 +1022,7 @@ public:
     {
       return NearestNeighborsFn(tree, sample);
     };
-    const std::function<std::vector<std::pair<TaskPlanningState, int64_t>>(
+    const std::function<TaskPlanningPropagation(
           const TaskPlanningState&,
           const TaskPlanningState&)> forward_propagation_fn
         = [&] (const TaskPlanningState& start, const TaskPlanningState& target)
@@ -1092,6 +1055,33 @@ public:
                                            drawing_fn_);
   }
 
+  class ExecuteTaskPlanningPolicyResult
+  {
+  private:
+    TaskPlanningPolicy policy_;
+    std::map<std::string, double> execution_statistics_;
+
+  public:
+    ExecuteTaskPlanningPolicyResult(
+        const TaskPlanningPolicy& policy,
+        const std::map<std::string, double>& execution_statistics)
+        : policy_(policy), execution_statistics_(execution_statistics) {}
+
+    const TaskPlanningPolicy& Policy() const { return policy_; }
+
+    TaskPlanningPolicy& MutablePolicy() { return policy_; }
+
+    const std::map<std::string, double>& ExecutionStatistics() const
+    {
+      return execution_statistics_;
+    }
+
+    std::map<std::string, double>& MutableExecutionStatistics()
+    {
+      return execution_statistics_;
+    }
+  };
+
   /// Execute a task policy by repeatedly executing the policy until the task
   /// has been completed
   /// Returns the policy with edge transition probabilites updated from the
@@ -1107,18 +1097,18 @@ public:
   /// - Max number of policy executions to perform to complete the task
   /// - Allow transition probability learning accross all policy executions
   ///   or limit learning to a single policy execution at a time
-  std::pair<TaskPlanningPolicy, std::map<std::string, double>>
-  ExecutePolicy(const TaskPlanningPolicy& starting_policy,
-                const std::function<State(void)>& exec_initialization_fn,
-                const std::function<void(const State&, const State&)>&
-                    pre_action_callback_fn,
-                const std::function<void(
-                    const std::vector<State, StateAlloc>&, const int64_t)>&
-                        post_outcome_callback_fn,
-                const int64_t max_policy_exec_steps,
-                const int64_t max_policy_executions,
-                const bool allow_branch_jumping,
-                const bool enable_cumulative_learning)
+  ExecuteTaskPlanningPolicyResult ExecutePolicy(
+      const TaskPlanningPolicy& starting_policy,
+      const std::function<State(void)>& exec_initialization_fn,
+      const std::function<void(const State&, const State&)>&
+          pre_action_callback_fn,
+      const std::function<void(
+          const std::vector<State, StateAlloc>&, const int64_t)>&
+              post_outcome_callback_fn,
+      const int64_t max_policy_exec_steps,
+      const int64_t max_policy_executions,
+      const bool allow_branch_jumping,
+      const bool enable_cumulative_learning)
   {
     TaskPlanningPolicy policy = starting_policy;
     // We don't know what logging function the policy has, but we want it to use
@@ -1312,7 +1302,8 @@ public:
           + std::to_string(successful_executions) + " were successful", 4);
     }
     const double policy_success
-        = (double)successful_executions / (double)num_executions;
+        = static_cast<double>(successful_executions)
+            / static_cast<double>(num_executions);
     std::map<std::string, double> policy_statistics;
     policy_statistics["Execution policy success"] = policy_success;
     policy_statistics["Task execution successful"]
@@ -1321,7 +1312,7 @@ public:
         = static_cast<double>(successful_executions);
     policy_statistics["number of policy executions"]
         = static_cast<double>(num_executions);
-    return std::make_pair(policy, policy_statistics);
+    return ExecuteTaskPlanningPolicyResult(policy, policy_statistics);
   }
 
   /// Add a new primitive
@@ -1416,9 +1407,9 @@ public:
   virtual std::map<std::string, double> GetStatistics() const
   {
     std::map<std::string, double> statistics;
-    statistics["state_counter"] = (double)state_counter_;
-    statistics["transition_id"] = (double)transition_id_;
-    statistics["split_id"] = (double)split_id_;
+    statistics["state_counter"] = static_cast<double>(state_counter_);
+    statistics["transition_id"] = static_cast<double>(transition_id_);
+    statistics["split_id"] = static_cast<double>(split_id_);
     return statistics;
   }
 

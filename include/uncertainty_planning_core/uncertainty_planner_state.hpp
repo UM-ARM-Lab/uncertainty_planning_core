@@ -85,10 +85,12 @@ public:
     // First thing we save is the qualified type id
     SerializeMemcpyable<uint64_t>(std::numeric_limits<uint64_t>::max(), buffer);
     SerializeString<char>(GetConfigurationType(), buffer);
-    SerializeMemcpyable<uint8_t>((uint8_t)has_particles_, buffer);
-    SerializeMemcpyable<uint8_t>((uint8_t)use_for_nearest_neighbors_, buffer);
     SerializeMemcpyable<uint8_t>(
-        (uint8_t)action_outcome_is_nominally_independent_, buffer);
+        static_cast<uint8_t>(has_particles_), buffer);
+    SerializeMemcpyable<uint8_t>(
+        static_cast<uint8_t>(use_for_nearest_neighbors_), buffer);
+    SerializeMemcpyable<uint8_t>(
+        static_cast<uint8_t>(action_outcome_is_nominally_independent_), buffer);
     SerializeMemcpyable<uint32_t>(attempt_count_, buffer);
     SerializeMemcpyable<uint32_t>(reached_count_, buffer);
     SerializeMemcpyable<uint32_t>(reverse_attempt_count_, buffer);
@@ -181,17 +183,18 @@ public:
     // Load fixed size members
     const auto deserialized_has_particles
         = DeserializeMemcpyable<uint8_t>(buffer, current_position);
-    has_particles_ = (bool)deserialized_has_particles.Value();
+    has_particles_ = static_cast<bool>(deserialized_has_particles.Value());
     current_position += deserialized_has_particles.BytesRead();
     const auto deserialized_use_for_nearest_neighbors
         = DeserializeMemcpyable<uint8_t>(buffer, current_position);
     use_for_nearest_neighbors_
-        = (bool)deserialized_use_for_nearest_neighbors.Value();
+        = static_cast<bool>(deserialized_use_for_nearest_neighbors.Value());
     current_position += deserialized_use_for_nearest_neighbors.BytesRead();
     const auto deserialized_action_outcome_is_nominally_independent
         = DeserializeMemcpyable<uint8_t>(buffer, current_position);
     action_outcome_is_nominally_independent_
-        = (bool)deserialized_action_outcome_is_nominally_independent.Value();
+        = static_cast<bool>(
+            deserialized_action_outcome_is_nominally_independent.Value());
     current_position
         += deserialized_action_outcome_is_nominally_independent.BytesRead();
     const auto deserialized_attempt_count
@@ -202,7 +205,9 @@ public:
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
     reached_count_ = deserialized_reached_count.Value();
     current_position += deserialized_reached_count.BytesRead();
-    raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
+    raw_edge_Pfeasibility_
+        = static_cast<double>(reached_count_)
+            / static_cast<double>(attempt_count_);
     const auto deserialized_reverse_attempt_count
         = DeserializeMemcpyable<uint32_t>(buffer, current_position);
     reverse_attempt_count_ = deserialized_reverse_attempt_count.Value();
@@ -212,7 +217,8 @@ public:
     reverse_reached_count_ = deserialized_reverse_reached_count.Value();
     current_position += deserialized_reverse_reached_count.BytesRead();
     reverse_edge_Pfeasibility_
-        = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
+        = static_cast<double>(reverse_reached_count_)
+            / static_cast<double>(reverse_attempt_count_);
     const auto deserialized_step_size
         = DeserializeMemcpyable<double>(buffer, current_position);
     step_size_ = deserialized_step_size.Value();
@@ -375,10 +381,13 @@ public:
     reverse_attempt_count_ = reverse_attempt_count;
     reverse_reached_count_ = reverse_reached_count;
     parent_motion_Pfeasibility_ = parent_motion_Pfeasibility;
-    raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
+    raw_edge_Pfeasibility_
+        = static_cast<double>(reached_count_)
+            / static_cast<double>(attempt_count_);
     effective_edge_Pfeasibility_ = effective_edge_Pfeasibility;
     reverse_edge_Pfeasibility_
-        = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
+        = static_cast<double>(reverse_reached_count_)
+            / static_cast<double>(reverse_attempt_count_);
     motion_Pfeasibility_
         = effective_edge_Pfeasibility_ * parent_motion_Pfeasibility_;
     initialized_ = true;
@@ -413,10 +422,13 @@ public:
       reverse_attempt_count_ = reverse_attempt_count;
       reverse_reached_count_ = reverse_reached_count;
       parent_motion_Pfeasibility_ = parent_motion_Pfeasibility;
-      raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
+      raw_edge_Pfeasibility_
+          = static_cast<double>(reached_count_)
+              / static_cast<double>(attempt_count_);
       effective_edge_Pfeasibility_ = effective_edge_Pfeasibility;
       reverse_edge_Pfeasibility_
-          = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
+          = static_cast<double>(reverse_reached_count_)
+              / static_cast<double>(reverse_attempt_count_);
       motion_Pfeasibility_
           = effective_edge_Pfeasibility_ * parent_motion_Pfeasibility_;
       initialized_ = true;
@@ -519,7 +531,9 @@ public:
   {
     attempt_count_ = attempt_count;
     reached_count_ = reached_count;
-    raw_edge_Pfeasibility_ = (double)reached_count_ / (double)attempt_count_;
+    raw_edge_Pfeasibility_
+        = static_cast<double>(reached_count_)
+            / static_cast<double>(attempt_count_);
   }
 
   void UpdateReverseAttemptAndReachedCounts(
@@ -529,7 +543,8 @@ public:
     reverse_attempt_count_ = reverse_attempt_count;
     reverse_reached_count_ = reverse_reached_count;
     reverse_edge_Pfeasibility_
-        = (double)reverse_reached_count_ / (double)reverse_attempt_count_;
+        = static_cast<double>(reverse_reached_count_)
+            / static_cast<double>(reverse_attempt_count_);
   }
 
   double SetEffectiveEdgePfeasibility(const double effective_edge_Pfeasibility)
@@ -659,7 +674,8 @@ public:
     {
       std::vector<Configuration, ConfigAlloc> resampled_particles(
           num_particles);
-      double particle_probability = 1.0 / (double)particles_.size();
+      double particle_probability
+          = 1.0 / static_cast<double>(particles_.size());
       std::uniform_int_distribution<size_t> resampling_distribution(
           0, particles_.size() - 1);
       std::uniform_real_distribution<double> importance_sampling_distribution(
@@ -726,7 +742,7 @@ public:
     }
     else
     {
-      const double weight = 1.0 / (double)particles_.size();
+      const double weight = 1.0 / static_cast<double>(particles_.size());
       double var_sum = 0.0;
       for (size_t idx = 0; idx < particles_.size(); idx++)
       {
@@ -754,7 +770,7 @@ public:
     }
     else
     {
-      const double weight = 1.0 / (double)particles_.size();
+      const double weight = 1.0 / static_cast<double>(particles_.size());
       double var_sum = 0.0;
       for (size_t idx = 0; idx < particles_.size(); idx++)
       {
@@ -782,7 +798,7 @@ public:
     }
     else
     {
-      const double weight = 1.0 / (double)particles_.size();
+      const double weight = 1.0 / static_cast<double>(particles_.size());
       Eigen::VectorXd variances;
       for (size_t idx = 0; idx < particles_.size(); idx++)
       {
@@ -816,7 +832,7 @@ public:
     }
     else
     {
-      const double weight = 1.0 / (double)particles_.size();
+      const double weight = 1.0 / static_cast<double>(particles_.size());
       Eigen::VectorXd variances;
       for (size_t idx = 0; idx < particles_.size(); idx++)
       {

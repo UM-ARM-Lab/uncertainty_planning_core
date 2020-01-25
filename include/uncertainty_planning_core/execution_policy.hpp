@@ -17,6 +17,7 @@
 #include <common_robotics_utilities/simple_graph_search.hpp>
 #include <common_robotics_utilities/simple_knearest_neighbors.hpp>
 #include <uncertainty_planning_core/uncertainty_planner_state.hpp>
+#include <visualization_msgs/MarkerArray.h>
 
 namespace uncertainty_planning_core
 {
@@ -251,7 +252,8 @@ public:
                 ? 1.0 / current_edge_weight
                 : std::numeric_limits<double>::infinity();
           const double edge_attempt_weight
-              = marginal_edge_weight * (double)estimated_attempt_count;
+              = marginal_edge_weight
+                  * static_cast<double>(estimated_attempt_count);
           const double new_edge_weight
               = edge_probability_weight * edge_attempt_weight;
           current_out_edge.SetWeight(new_edge_weight);
@@ -283,7 +285,8 @@ public:
                 ? 1.0 / current_edge_weight
                 : std::numeric_limits<double>::infinity();
           const double edge_attempt_weight
-              = marginal_edge_weight * (double)estimated_attempt_count;
+              = marginal_edge_weight
+                  * static_cast<double>(estimated_attempt_count);
           const double new_edge_weight
               = edge_probability_weight * edge_attempt_weight;
           current_in_edge.SetWeight(new_edge_weight);
@@ -1019,7 +1022,8 @@ private:
     std::map<int64_t, uint64_t> previous_state_index_possibilities;
     // Go through the entire tree and retrieve all states with matching
     // transition IDs
-    for (int64_t idx = 0; idx < (int64_t)planner_tree_.size(); idx++)
+    for (int64_t idx = 0; idx < static_cast<int64_t>(planner_tree_.size());
+         idx++)
     {
       const UncertaintyPlanningTreeState& candidate_tree_state
           = planner_tree_.at(static_cast<size_t>(idx));
@@ -1683,77 +1687,22 @@ private:
          itr != transition_children_map.end(); ++itr)
     {
       const std::vector<int64_t> transition_child_indices = itr->second;
-      UpdateEstimatedEffectiveProbabilities(transition_child_indices);
+      // I don't know why this needs the return type declared, but it does.
+      const std::function<UncertaintyPlanningState&(const int64_t)>
+          get_planning_state_fn
+              = [&] (const int64_t state_index) -> UncertaintyPlanningState&
+      {
+        return planner_tree_.at(static_cast<size_t>(state_index))
+            .GetValueMutable();
+      };
+      UpdateEstimatedEffectiveProbabilities(
+          get_planning_state_fn, transition_child_indices,
+          edge_attempt_threshold_, logging_fn_);
     }
     // Perform the same update on all of our children
     for (const int64_t child_state_index : child_state_indices)
     {
       UpdateChildTransitionProbabilities(child_state_index);
-    }
-  }
-
-  void UpdateEstimatedEffectiveProbabilities(
-      const std::vector<int64_t>& transition_child_states)
-  {
-    // Now that we have the forward-propagated states, we go back and update
-    // their effective edge P(feasibility)
-    for (size_t idx = 0; idx < transition_child_states.size(); idx++)
-    {
-      const int64_t current_state_index = transition_child_states.at(idx);
-      UncertaintyPlanningTreeState& current_tree_state
-          = planner_tree_.at(static_cast<size_t>(current_state_index));
-      UncertaintyPlanningState& current_state
-          = current_tree_state.GetValueMutable();
-      double percent_active = 1.0;
-      double p_reached = 0.0;
-      for (uint32_t try_attempt = 0; try_attempt < edge_attempt_threshold_;
-           try_attempt++)
-      {
-        // How many particles got to our state on this attempt?
-        p_reached += (percent_active * current_state.GetRawEdgePfeasibility());
-        // Update the percent of particles that are still usefully active
-        double updated_percent_active = 0.0;
-        for (size_t other_idx = 0; other_idx < transition_child_states.size();
-             other_idx++)
-        {
-          if (other_idx != idx)
-          {
-            const int64_t other_state_index
-                = transition_child_states.at(other_idx);
-            const UncertaintyPlanningTreeState& other_tree_state
-                = planner_tree_.at(static_cast<size_t>(other_state_index));
-            const UncertaintyPlanningState& other_state
-                = other_tree_state.GetValueImmutable();
-            // Only if this state has nominally independent outcomes can we
-            // expect particles that return to the parent to actually reach a
-            // different outcome in future repeats
-            if (other_state.IsActionOutcomeNominallyIndependent())
-            {
-              const double p_reached_other
-                  = percent_active * other_state.GetRawEdgePfeasibility();
-              const double p_returned_to_parent
-                  = p_reached_other * other_state.GetReverseEdgePfeasibility();
-              updated_percent_active += p_returned_to_parent;
-            }
-          }
-        }
-        percent_active = updated_percent_active;
-      }
-      if ((p_reached >= 0.0) && (p_reached <= 1.0))
-      {
-        current_state.SetEffectiveEdgePfeasibility(p_reached);
-      }
-      else if ((p_reached >= 0.0) && (p_reached <= 1.001))
-      {
-        Log("WARNING - P(reached) = " + std::to_string(p_reached)
-            + " > 1.0 (probably numerical error)", 1);
-        p_reached = 1.0;
-        current_state.SetEffectiveEdgePfeasibility(p_reached);
-      }
-      else
-      {
-        throw std::runtime_error("p_reached out of range [0, 1]");
-      }
     }
   }
 
@@ -1849,6 +1798,68 @@ private:
   }
 
 public:
+
+  static void UpdateEstimatedEffectiveProbabilities(
+      const std::function<UncertaintyPlanningState&(const int64_t)>&
+          get_planning_state_fn,
+      const std::vector<int64_t>& transition_state_indices,
+      const uint32_t edge_attempt_threshold,
+      const LoggingFunction& logging_fn)
+  {
+    // Now that we have the forward-propagated states, we go back and update
+    // their effective edge P(feasibility)
+    for (const int64_t current_state_index : transition_state_indices)
+    {
+      UncertaintyPlanningState& current_state
+          = get_planning_state_fn(current_state_index);
+      double percent_active = 1.0;
+      double p_reached = 0.0;
+      for (uint32_t try_attempt = 0; try_attempt < edge_attempt_threshold;
+           try_attempt++)
+      {
+        // How many particles got to our state on this attempt?
+        p_reached += (percent_active * current_state.GetRawEdgePfeasibility());
+        // Update the percent of particles that are still usefully active
+        double updated_percent_active = 0.0;
+        for (const int64_t other_state_index : transition_state_indices)
+        {
+          if (other_state_index != current_state_index)
+          {
+            const UncertaintyPlanningState& other_state
+                = get_planning_state_fn(other_state_index);
+            // Only if this state has nominally independent outcomes can we
+            // expect particles that return to the parent to actually reach a
+            // different outcome in future repeats
+            if (other_state.IsActionOutcomeNominallyIndependent())
+            {
+              const double p_reached_other
+                  = percent_active * other_state.GetRawEdgePfeasibility();
+              const double p_returned_to_parent
+                  = p_reached_other * other_state.GetReverseEdgePfeasibility();
+              updated_percent_active += p_returned_to_parent;
+            }
+          }
+        }
+        percent_active = updated_percent_active;
+      }
+      if ((p_reached >= 0.0) && (p_reached <= 1.0))
+      {
+        current_state.SetEffectiveEdgePfeasibility(p_reached);
+      }
+      else if ((p_reached >= 0.0) && (p_reached <= 1.001))
+      {
+        logging_fn(
+            "WARNING - P(reached) = " + std::to_string(p_reached)
+            + " > 1.0 (probably numerical error)", 1);
+        p_reached = 1.0;
+        current_state.SetEffectiveEdgePfeasibility(p_reached);
+      }
+      else
+      {
+        throw std::runtime_error("p_reached out of range [0, 1]");
+      }
+    }
+  }
 
   static double ComputeTransitionGoalProbability(
       const UncertaintyPlanningStateVector& child_nodes,
