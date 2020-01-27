@@ -798,7 +798,6 @@ private:
       = common_robotics_utilities::simple_rrt_planner
           ::ForwardPropagation<TaskPlanningState>;
 
-  // TODO(calderpg) Fix return type, use implementation in execution_policy.hpp
   TaskPlanningPropagation PerformStatePropagation(
       const TaskPlanningState& nearest,
       const TaskPlanningState& target,
