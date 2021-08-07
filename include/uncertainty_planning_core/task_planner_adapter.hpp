@@ -184,14 +184,14 @@ public:
   virtual Eigen::Isometry3d GetLinkTransform(
       const int64_t link_index) const
   {
-    UNUSED(link_index);
+    CRU_UNUSED(link_index);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
   virtual Eigen::Isometry3d GetLinkTransform(
       const std::string& link_name) const
   {
-    UNUSED(link_name);
+    CRU_UNUSED(link_name);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
@@ -234,16 +234,16 @@ public:
       const State& end,
       const double ratio) const
   {
-    UNUSED(start);
-    UNUSED(end);
-    UNUSED(ratio);
+    CRU_UNUSED(start);
+    CRU_UNUSED(end);
+    CRU_UNUSED(ratio);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
   virtual State AverageConfigurations(
   const std::vector<State, StateAlloc>& configurations) const
   {
-    UNUSED(configurations);
+    CRU_UNUSED(configurations);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
@@ -252,8 +252,8 @@ public:
       const std::string& link_name,
       const Eigen::Vector4d& link_relative_point) const
   {
-    UNUSED(link_name);
-    UNUSED(link_relative_point);
+    CRU_UNUSED(link_name);
+    CRU_UNUSED(link_relative_point);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 
@@ -262,8 +262,8 @@ public:
       const std::string& link_name,
       const Eigen::Vector4d& link_relative_point) const
   {
-    UNUSED(link_name);
-    UNUSED(link_relative_point);
+    CRU_UNUSED(link_name);
+    CRU_UNUSED(link_relative_point);
     throw std::runtime_error("Not a valid operation on TaskStateRobot");
   }
 };
@@ -327,19 +327,19 @@ private:
   static void
   DeleteSamplerPtrFn(TaskPlannerSampling<State>* ptr)
   {
-    UNUSED(ptr);
+    CRU_UNUSED(ptr);
   }
 
   static void
   DeleteClusteringPtrFn(TaskPlannerClustering<State, StateAlloc>* ptr)
   {
-    UNUSED(ptr);
+    CRU_UNUSED(ptr);
   }
 
   static void
   DeleteSimulatorPtrFn(TaskPlannerSimulator<State, StateAlloc>* ptr)
   {
-    UNUSED(ptr);
+    CRU_UNUSED(ptr);
   }
 
   std::vector<ActionPrimitivePtr<State, StateAlloc>> primitives_;
@@ -641,7 +641,7 @@ private:
       const TaskPlanningTree& tree,
       const TaskPlanningState& sampled_state) const
   {
-    UNUSED(sampled_state);
+    CRU_UNUSED(sampled_state);
     // We only consider the start state if nothing has been expanded further!
     if (tree.size() == 1)
     {
@@ -1429,8 +1429,8 @@ public:
     const std::vector<SimulationResult<State>>& particles,
     const DisplayFunction& display_fn)
   {
-    UNUSED(robot);
-    UNUSED(display_fn);
+    CRU_UNUSED(robot);
+    CRU_UNUSED(display_fn);
     return ClusterParticlesImpl(particles);
   }
 
@@ -1440,14 +1440,14 @@ public:
     const std::vector<SimulationResult<State>>& particles,
     const DisplayFunction& display_fn)
   {
-    UNUSED(robot);
-    UNUSED(display_fn);
+    CRU_UNUSED(robot);
+    CRU_UNUSED(display_fn);
     return IdentifyClusterMembersImpl(cluster, particles);
   }
 
   virtual State Sample(uncertainty_planning_core::PRNG& prng)
   {
-    UNUSED(prng);
+    CRU_UNUSED(prng);
     return State();
   }
 
@@ -1457,7 +1457,7 @@ public:
 
   virtual State SampleGoal(uncertainty_planning_core::PRNG& prng)
   {
-    UNUSED(prng);
+    CRU_UNUSED(prng);
     return State();
   }
 
@@ -1478,11 +1478,11 @@ public:
       const int32_t starting_index,
       const std::string& config_marker_ns) const
   {
-    UNUSED(immutable_robot);
-    UNUSED(configuration);
-    UNUSED(color);
-    UNUSED(starting_index);
-    UNUSED(config_marker_ns);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(configuration);
+    CRU_UNUSED(color);
+    CRU_UNUSED(starting_index);
+    CRU_UNUSED(config_marker_ns);
     return MarkerArray();
   }
 
@@ -1494,12 +1494,12 @@ public:
       const int32_t starting_index,
       const std::string& control_input_marker_ns) const
   {
-    UNUSED(immutable_robot);
-    UNUSED(configuration);
-    UNUSED(control_input);
-    UNUSED(color);
-    UNUSED(starting_index);
-    UNUSED(control_input_marker_ns);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(configuration);
+    CRU_UNUSED(control_input);
+    CRU_UNUSED(color);
+    CRU_UNUSED(starting_index);
+    CRU_UNUSED(control_input_marker_ns);
     return MarkerArray();
   }
 
@@ -1507,8 +1507,8 @@ public:
       const TaskStateRobotBasePtr& immutable_robot,
       const State& config) const
   {
-    UNUSED(immutable_robot);
-    UNUSED(config);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(config);
     return Eigen::Vector4d(0.0, 0.0, 0.0, 1.0);
   }
 
@@ -1517,9 +1517,9 @@ public:
       const State& config,
       const double inflation_ratio=0.0) const
   {
-    UNUSED(immutable_robot);
-    UNUSED(config);
-    UNUSED(inflation_ratio);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(config);
+    CRU_UNUSED(inflation_ratio);
     return false;
   }
 
@@ -1531,12 +1531,12 @@ public:
       const bool enable_tracing,
       const DisplayFunction& display_fn)
   {
-    UNUSED(mutable_robot);
-    UNUSED(target_position);
-    UNUSED(allow_contacts);
-    UNUSED(trace);
-    UNUSED(enable_tracing);
-    UNUSED(display_fn);
+    CRU_UNUSED(mutable_robot);
+    CRU_UNUSED(target_position);
+    CRU_UNUSED(allow_contacts);
+    CRU_UNUSED(trace);
+    CRU_UNUSED(enable_tracing);
+    CRU_UNUSED(display_fn);
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
@@ -1548,12 +1548,12 @@ public:
       const bool enable_tracing,
       const DisplayFunction& display_fn)
   {
-    UNUSED(mutable_robot);
-    UNUSED(target_position);
-    UNUSED(allow_contacts);
-    UNUSED(trace);
-    UNUSED(enable_tracing);
-    UNUSED(display_fn);
+    CRU_UNUSED(mutable_robot);
+    CRU_UNUSED(target_position);
+    CRU_UNUSED(allow_contacts);
+    CRU_UNUSED(trace);
+    CRU_UNUSED(enable_tracing);
+    CRU_UNUSED(display_fn);
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
@@ -1566,13 +1566,13 @@ public:
       const bool enable_tracing,
       const DisplayFunction& display_fn)
   {
-    UNUSED(immutable_robot);
-    UNUSED(start_position);
-    UNUSED(target_position);
-    UNUSED(allow_contacts);
-    UNUSED(trace);
-    UNUSED(enable_tracing);
-    UNUSED(display_fn);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(start_position);
+    CRU_UNUSED(target_position);
+    CRU_UNUSED(allow_contacts);
+    CRU_UNUSED(trace);
+    CRU_UNUSED(enable_tracing);
+    CRU_UNUSED(display_fn);
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
@@ -1585,13 +1585,13 @@ public:
       const bool enable_tracing,
       const DisplayFunction& display_fn)
   {
-    UNUSED(immutable_robot);
-    UNUSED(start_position);
-    UNUSED(target_position);
-    UNUSED(allow_contacts);
-    UNUSED(trace);
-    UNUSED(enable_tracing);
-    UNUSED(display_fn);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(start_position);
+    CRU_UNUSED(target_position);
+    CRU_UNUSED(allow_contacts);
+    CRU_UNUSED(trace);
+    CRU_UNUSED(enable_tracing);
+    CRU_UNUSED(display_fn);
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
@@ -1602,11 +1602,11 @@ public:
       const bool allow_contacts,
       const DisplayFunction& display_fn)
   {
-    UNUSED(immutable_robot);
-    UNUSED(start_positions);
-    UNUSED(target_positions);
-    UNUSED(allow_contacts);
-    UNUSED(display_fn);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(start_positions);
+    CRU_UNUSED(target_positions);
+    CRU_UNUSED(allow_contacts);
+    CRU_UNUSED(display_fn);
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 
@@ -1617,11 +1617,11 @@ public:
       const bool allow_contacts,
       const DisplayFunction& display_fn)
   {
-    UNUSED(immutable_robot);
-    UNUSED(start_positions);
-    UNUSED(target_positions);
-    UNUSED(allow_contacts);
-    UNUSED(display_fn);
+    CRU_UNUSED(immutable_robot);
+    CRU_UNUSED(start_positions);
+    CRU_UNUSED(target_positions);
+    CRU_UNUSED(allow_contacts);
+    CRU_UNUSED(display_fn);
     throw std::runtime_error("Not a valid operation on TaskPlannerAdapter");
   }
 };

@@ -1538,8 +1538,8 @@ public:
               const Configuration& expected_result,
               const bool is_reverse_motion, const bool is_reset_motion)
       {
-        UNUSED(expected_result);
-        UNUSED(is_reset_motion);
+        CRU_UNUSED(expected_result);
+        CRU_UNUSED(is_reset_motion);
         return SimulatePolicyStep(
             current, action, is_reverse_motion, display_fn);
       };
@@ -2870,9 +2870,9 @@ protected:
     // *** WARNING ***
     // !!! WE IGNORE THE PROVIDED GOAL STATE, AND INSTEAD ACCESS IT VIA
     // NEAREST-NEIGHBORS STORAGE !!!
-    UNUSED(state);
-    UNUSED(planner_action_try_attempts);
-    UNUSED(allow_contacts);
+    CRU_UNUSED(state);
+    CRU_UNUSED(planner_action_try_attempts);
+    CRU_UNUSED(allow_contacts);
     UncertaintyPlanningState& goal_state_candidate
         = GetPlanningTreeMutable().back().GetValueMutable();
     // NOTE - this assumes (safely) that the state passed to this function is
@@ -2909,9 +2909,9 @@ protected:
     // *** WARNING ***
     // !!! WE IGNORE THE PROVIDED GOAL STATE, AND INSTEAD ACCESS IT VIA
     // NEAREST-NEIGHBORS STORAGE !!!
-    UNUSED(state);
-    UNUSED(planner_action_try_attempts);
-    UNUSED(allow_contacts);
+    CRU_UNUSED(state);
+    CRU_UNUSED(planner_action_try_attempts);
+    CRU_UNUSED(allow_contacts);
     UncertaintyPlanningState& goal_state_candidate
         = GetPlanningTreeMutable().back().GetValueMutable();
     // NOTE - this assumes (safely) that the state passed to this function is
