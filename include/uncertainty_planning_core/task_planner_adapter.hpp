@@ -643,7 +643,7 @@ private:
   {
     CRU_UNUSED(sampled_state);
     // We only consider the start state if nothing has been expanded further!
-    if (tree.size() == 1)
+    if (tree.Size() == 1)
     {
       return 0;
     }
@@ -654,9 +654,9 @@ private:
             std::pair<int64_t, uint64_t>(-1, 0));
     // Greedy best-first expansion strategy
     #pragma omp parallel for
-    for (size_t idx = 1; idx < tree.size(); idx++)
+    for (int64_t idx = 1; idx < tree.Size(); idx++)
     {
-      auto& current_state = tree.at(idx);
+      const auto& current_state = tree.GetNodeImmutable(idx);
       // Only check against leaf states enabled for NN checks
       if (current_state.GetChildIndices().empty() &&
           current_state.GetValueImmutable().UseForNearestNeighbors())
@@ -696,7 +696,7 @@ private:
     if (best_index >= 0)
     {
       const TaskPlanningState& best_state
-          = tree.at(best_index).GetValueImmutable();
+          = tree.GetNodeImmutable(best_index).GetValueImmutable();
       Log("Selected node " + std::to_string(best_index)
           + " with state " + common_robotics_utilities::print::Print(best_state)
           + " as best neighbor (Qnear)", 2);

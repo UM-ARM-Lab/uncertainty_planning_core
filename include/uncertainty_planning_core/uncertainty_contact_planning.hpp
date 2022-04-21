@@ -306,7 +306,7 @@ protected:
           ::SimpleRRTPlannerState<UncertaintyPlanningState>;
   using UncertaintyPlanningTree
       = common_robotics_utilities::simple_rrt_planner
-          ::PlanningTree<UncertaintyPlanningState>;
+          ::SimpleRRTPlannerTree<UncertaintyPlanningState>;
   using UncertaintyPlanningTreePtr = std::shared_ptr<UncertaintyPlanningTree>;
   using ExecutionPolicyGraph
       = common_robotics_utilities::simple_graph
@@ -438,42 +438,30 @@ protected:
       const int64_t raw_parent_index, const int64_t pruned_parent_index,
       UncertaintyPlanningTree& pruned_planner_tree)
   {
-    if (!raw_planner_tree.at(
-            static_cast<size_t>(raw_parent_index)).IsInitialized())
+    if (!raw_planner_tree.GetNodeImmutable(raw_parent_index).IsInitialized())
     {
       throw std::invalid_argument("raw_parent_state is uninitialized");
     }
-    if (!pruned_planner_tree.at(
-            static_cast<size_t>(pruned_parent_index)).IsInitialized())
+    if (!pruned_planner_tree.GetNodeImmutable(
+            pruned_parent_index).IsInitialized())
     {
       throw std::invalid_argument("pruned_parent_state is uninitialized");
     }
     // Clear the child indices, so we can update them with new values later
-    pruned_planner_tree.at(
-        static_cast<size_t>(pruned_parent_index)).ClearChildIndicies();
+    pruned_planner_tree.GetNodeMutable(
+        pruned_parent_index).ClearChildIndicies();
     const std::vector<int64_t>& current_child_indices
-        = raw_planner_tree.at(static_cast<size_t>(raw_parent_index))
-            .GetChildIndices();
+        = raw_planner_tree.GetNodeImmutable(raw_parent_index).GetChildIndices();
     for (size_t idx = 0; idx < current_child_indices.size(); idx++)
     {
       const int64_t raw_child_index = current_child_indices[idx];
       const UncertaintyPlanningTreeState& current_child_state
-          = raw_planner_tree.at(static_cast<size_t>(raw_child_index));
+          = raw_planner_tree.GetNodeImmutable(raw_child_index);
       if (current_child_state.GetParentIndex() >= 0)
       {
-        // Get the new child index
-        const int64_t pruned_child_index
-            = static_cast<int64_t>(pruned_planner_tree.size());
-        // Add to the pruned tree
-        pruned_planner_tree.push_back(current_child_state);
-        // Update parent indices
-        pruned_planner_tree.at(
-            static_cast<size_t>(pruned_child_index)).SetParentIndex(
-                pruned_parent_index);
-        // Update the parent
-        pruned_planner_tree.at(
-            static_cast<size_t>(pruned_parent_index)).AddChildIndex(
-                pruned_child_index);
+        const int64_t pruned_child_index =
+            pruned_planner_tree.AddNodeAndConnect(
+                current_child_state.GetValueImmutable(), pruned_parent_index);
         // Recursive call
         ExtractChildStates(raw_planner_tree, raw_child_index,
                            pruned_child_index, pruned_planner_tree);
@@ -535,7 +523,7 @@ public:
     goal_reaching_successful_ = 0;
     if (planning_tree_ptr_)
     {
-      GetPlanningTreeMutable().clear();
+      GetPlanningTreeMutable().Clear();
     }
   }
 
@@ -558,8 +546,7 @@ public:
   {
     if (!planning_tree_ptr_)
     {
-      planning_tree_ptr_ =
-          UncertaintyPlanningTreePtr(new UncertaintyPlanningTree());
+      planning_tree_ptr_ = std::make_shared<UncertaintyPlanningTree>();
     }
   }
 
@@ -738,7 +725,8 @@ public:
     const auto nearests
         = common_robotics_utilities::simple_knearest_neighbors
             ::GetKNearestNeighborsParallel(
-                planner_nodes, random_state, tree_state_distance_fn, 1);
+                planner_nodes.GetNodes(), random_state, tree_state_distance_fn,
+                1);
     const int64_t best_index = nearests.at(0).Index();
     const double best_distance = nearests.at(0).Distance();
     logging_fn(
@@ -809,18 +797,16 @@ public:
           start_time, time_limit, p_goal_termination_threshold);
     };
     // Call the planner
-    // Call the planner
     total_goal_reached_probability_ = 0.0;
     time_to_first_solution_ = 0.0;
     simulator_ptr_->ResetStatistics();
     clustering_ptr_->ResetStatistics();
     InitializePlanningTreeIfNotReady();
-    GetPlanningTreeMutable().emplace_back(
-        UncertaintyPlanningTreeState(start_state));
+    GetPlanningTreeMutable().AddNode(start_state);
     const auto planning_results
         = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath<
-            UncertaintyPlanningState, UncertaintyPlanningState,
-            UncertaintyPlanningStateVector>(
+            UncertaintyPlanningState, UncertaintyPlanningTree,
+            UncertaintyPlanningState, UncertaintyPlanningStateVector>(
                 GetPlanningTreeMutable(), complete_sampling_fn,
                 nearest_neighbor_fn, forward_propagation_fn, {},
                 goal_reached_fn, goal_reached_callback, termination_check_fn);
@@ -1055,12 +1041,11 @@ public:
     simulator_ptr_->ResetStatistics();
     clustering_ptr_->ResetStatistics();
     InitializePlanningTreeIfNotReady();
-    GetPlanningTreeMutable().emplace_back(
-        UncertaintyPlanningTreeState(start_state));
+    GetPlanningTreeMutable().AddNode(start_state);
     auto planning_results
       = common_robotics_utilities::simple_rrt_planner::RRTPlanMultiPath<
-          UncertaintyPlanningState, UncertaintyPlanningState,
-          UncertaintyPlanningStateVector>(
+          UncertaintyPlanningState, UncertaintyPlanningTree,
+          UncertaintyPlanningState, UncertaintyPlanningStateVector>(
               GetPlanningTreeMutable(), complete_sampling_fn,
               nearest_neighbor_fn, forward_propagation_fn, {}, goal_reached_fn,
               goal_reached_callback, termination_check_fn);
@@ -1241,15 +1226,15 @@ protected:
     // to switch to an explicitly branch-based approach.
     // Go through each state in the tree - we skip the initial state, since it
     // has no transition.
-    for (size_t sdx = 1; sdx < postprocessed_planner_tree.size(); sdx++)
+    for (int64_t sdx = 1; sdx < postprocessed_planner_tree.Size(); sdx++)
     {
       // Get the current state
       UncertaintyPlanningTreeState& current_state
-          = postprocessed_planner_tree.at(sdx);
+          = postprocessed_planner_tree.GetNodeMutable(sdx);
       const int64_t parent_index = current_state.GetParentIndex();
       // Get the parent state
       const UncertaintyPlanningTreeState& parent_state
-          = postprocessed_planner_tree.at(static_cast<size_t>(parent_index));
+          = postprocessed_planner_tree.GetNodeImmutable(parent_index);
       // If the current state is on a goal branch
       if (current_state.GetValueImmutable().GetGoalPfeasibility() > 0.0)
       {
@@ -1269,8 +1254,7 @@ protected:
         for (const int64_t other_child_index : parent_state.GetChildIndices())
         {
           const UncertaintyPlanningTreeState& other_child_state
-              = postprocessed_planner_tree.at(
-                  static_cast<size_t>(other_child_index));
+              = postprocessed_planner_tree.GetNodeImmutable(other_child_index);
           const uint64_t other_child_transition_id
               = other_child_state.GetValueImmutable().GetTransitionId();
           const uint64_t other_child_state_id
@@ -1316,15 +1300,9 @@ protected:
       const UncertaintyPlanningTree& planner_tree,
       const bool include_spur_actions) const
   {
-    if (planner_tree.size() <= 1)
+    if (planner_tree.Size() <= 1)
     {
       return planner_tree;
-    }
-    // Test to make sure the tree linkage is intact
-    if (common_robotics_utilities::simple_rrt_planner
-            ::CheckTreeLinkage(planner_tree) == false)
-    {
-      throw std::runtime_error("planner_tree has invalid linkage");
     }
     Log("Pruning planner tree in preparation for policy extraction...", 1);
     const auto start_time = std::chrono::steady_clock::now();
@@ -1332,10 +1310,10 @@ protected:
     // with the original tree, so we copy it
     UncertaintyPlanningTree intermediate_planner_tree = planner_tree;
     // Loop through the tree and prune unproductive nodes+edges
-    for (size_t idx = 0; idx < intermediate_planner_tree.size(); idx++)
+    for (int64_t idx = 0; idx < intermediate_planner_tree.Size(); idx++)
     {
       UncertaintyPlanningTreeState& current_state
-          = intermediate_planner_tree.at(idx);
+          = intermediate_planner_tree.GetNodeMutable(idx);
       if (current_state.IsInitialized() == false)
       {
         throw std::runtime_error("current_state is uninitialized");
@@ -1370,24 +1348,19 @@ protected:
     // Now, extract the pruned tree
     UncertaintyPlanningTree pruned_planner_tree;
     // Add root state
-    const auto& root_state = intermediate_planner_tree.at(0);
+    const auto& root_state = intermediate_planner_tree.GetNodeImmutable(0);
     if (root_state.IsInitialized() == false)
     {
       throw std::runtime_error("root_state is uninitialized");
     }
-    pruned_planner_tree.push_back(root_state);
+    pruned_planner_tree.AddNode(root_state.GetValueImmutable());
     // Recursive call to extract live branches
     ExtractChildStates(intermediate_planner_tree, 0, 0, pruned_planner_tree);
-    // Test to make sure the tree linkage is intact
-    if (common_robotics_utilities::simple_rrt_planner
-            ::CheckTreeLinkage(pruned_planner_tree) == false)
-    {
-      throw std::runtime_error("pruned_planner_tree has invalid linkage");
-    }
+
     const auto end_time = std::chrono::steady_clock::now();
     const std::chrono::duration<double> pruning_time(end_time - start_time);
     Log("...pruning complete, pruned to "
-        + std::to_string(pruned_planner_tree.size()) + " states, took "
+        + std::to_string(pruned_planner_tree.Size()) + " states, took "
         + std::to_string(pruning_time.count()) + " seconds", 1);
     return pruned_planner_tree;
   }
@@ -2868,13 +2841,13 @@ protected:
       const uint32_t planner_action_try_attempts, const bool allow_contacts)
   {
     // *** WARNING ***
-    // !!! WE IGNORE THE PROVIDED GOAL STATE, AND INSTEAD ACCESS IT VIA
-    // NEAREST-NEIGHBORS STORAGE !!!
+    // !!! WE IGNORE THE PROVIDED GOAL STATE, AND INSTEAD ACCESS IT VIA TREE !!!
     CRU_UNUSED(state);
     CRU_UNUSED(planner_action_try_attempts);
     CRU_UNUSED(allow_contacts);
-    UncertaintyPlanningState& goal_state_candidate
-        = GetPlanningTreeMutable().back().GetValueMutable();
+    const int64_t candidate_state_index = GetPlanningTreeImmutable().Size() - 1;
+    UncertaintyPlanningState& goal_state_candidate = GetPlanningTreeMutable()
+        .GetNodeMutable(candidate_state_index).GetValueMutable();
     // NOTE - this assumes (safely) that the state passed to this function is
     // the last state added to the tree, which we can safely mutate!
     const double goal_reached_probability
@@ -2907,13 +2880,13 @@ protected:
       const uint32_t planner_action_try_attempts, const bool allow_contacts)
   {
     // *** WARNING ***
-    // !!! WE IGNORE THE PROVIDED GOAL STATE, AND INSTEAD ACCESS IT VIA
-    // NEAREST-NEIGHBORS STORAGE !!!
+    // !!! WE IGNORE THE PROVIDED GOAL STATE, AND INSTEAD ACCESS IT VIA TREE !!!
     CRU_UNUSED(state);
     CRU_UNUSED(planner_action_try_attempts);
     CRU_UNUSED(allow_contacts);
-    UncertaintyPlanningState& goal_state_candidate
-        = GetPlanningTreeMutable().back().GetValueMutable();
+    const int64_t candidate_state_index = GetPlanningTreeImmutable().Size() - 1;
+    UncertaintyPlanningState& goal_state_candidate = GetPlanningTreeMutable()
+        .GetNodeMutable(candidate_state_index).GetValueMutable();
     // NOTE - this assumes (safely) that the state passed to this function is
     // the last state added to the tree, which we can safely mutate!
     // We only care about states with control input == goal position (states
@@ -2950,13 +2923,13 @@ protected:
       const uint32_t planner_action_try_attempts,
       const std::chrono::time_point<std::chrono::steady_clock>& start_time)
   {
-    UncertaintyPlanningTreeState& new_goal
-        = tree.at(static_cast<size_t>(new_goal_state_idx));
+    UncertaintyPlanningTreeState& new_goal =
+        tree.GetNodeMutable(new_goal_state_idx);
     // Update the time-to-first-solution if need be
     if (time_to_first_solution_ == 0.0)
     {
-      const std::chrono::time_point<std::chrono::steady_clock> current_time
-        = std::chrono::steady_clock::now();
+      const std::chrono::time_point<std::chrono::steady_clock> current_time =
+          std::chrono::steady_clock::now();
       const std::chrono::duration<double> elapsed = current_time - start_time;
       time_to_first_solution_ = elapsed.count();
     }
@@ -2969,8 +2942,8 @@ protected:
     while (current_index > 0)
     {
       // Get the current state that we're looking at
-      UncertaintyPlanningTreeState& current_state
-          = GetPlanningTreeMutable().at(static_cast<size_t>(current_index));
+      UncertaintyPlanningTreeState& current_state =
+          GetPlanningTreeMutable().GetNodeMutable(current_index);
       // Check if we've reached the root of the goal branch
       bool is_branch_root = CheckIfGoalBranchRoot(current_state);
       // If we haven't reached the root of goal branch
@@ -2999,17 +2972,16 @@ protected:
     {
       // Get the current state that we're looking at
       UncertaintyPlanningTreeState& current_state
-          = GetPlanningTreeMutable().at(static_cast<size_t>(
-              probability_update_index));
+          = GetPlanningTreeMutable().GetNodeMutable(probability_update_index);
       // Update the state
       UpdateNodeGoalReachedProbability(
           current_state, planner_action_try_attempts);
       probability_update_index = current_state.GetParentIndex();
     }
     // Get the goal reached probability that we use to decide when we're done
-    total_goal_reached_probability_
-        = GetPlanningTreeMutable().at(0).GetValueImmutable()
-            .GetGoalPfeasibility();
+    total_goal_reached_probability_ =
+        GetPlanningTreeImmutable().GetNodeImmutable(0)
+            .GetValueImmutable().GetGoalPfeasibility();
     Log("Updated goal reached probability to "
         + std::to_string(total_goal_reached_probability_), 2);
   }
@@ -3028,8 +3000,8 @@ protected:
     else
     {
       // Get the current node
-      auto& current_state = GetPlanningTreeMutable().at(static_cast<size_t>(
-          goal_branch_root_index));
+      auto& current_state =
+          GetPlanningTreeMutable().GetNodeMutable(goal_branch_root_index);
       // Recursively blacklist it
       current_state.GetValueMutable().DisableForNearestNeighbors();
       // Blacklist each child
@@ -3062,8 +3034,7 @@ protected:
     if (is_child_of_split)
     {
       const UncertaintyPlanningTreeState& parent_tree_state
-          = GetPlanningTreeImmutable().at(static_cast<size_t>(
-              state.GetParentIndex()));
+          = GetPlanningTreeImmutable().GetNodeImmutable(state.GetParentIndex());
       const UncertaintyPlanningState& parent_state
           = parent_tree_state.GetValueImmutable();
       if (parent_state.GetGoalPfeasibility() >= 1.0)
@@ -3078,8 +3049,7 @@ protected:
         for (const int64_t other_child_index : other_parent_children)
         {
           const UncertaintyPlanningTreeState& other_child_tree_state
-              = GetPlanningTreeImmutable().at(static_cast<size_t>(
-                  other_child_index));
+              = GetPlanningTreeImmutable().GetNodeImmutable(other_child_index);
           const UncertaintyPlanningState& other_child_state
               = other_child_tree_state.GetValueImmutable();
           if (other_child_state.GetTransitionId()
@@ -3138,9 +3108,8 @@ protected:
     for (const int64_t current_child_index : current_node.GetChildIndices())
     {
       const uint64_t& child_transition_id
-          = GetPlanningTreeImmutable()
-              .at(static_cast<size_t>(current_child_index))
-                  .GetValueImmutable().GetTransitionId();
+          = GetPlanningTreeImmutable().GetNodeImmutable(current_child_index)
+              .GetValueImmutable().GetTransitionId();
       effective_child_branches[child_transition_id].push_back(
           current_child_index);
     }
@@ -3185,9 +3154,9 @@ protected:
     {
       // Get the current child
       const int64_t& current_child_index = child_node_indices[idx];
-      const UncertaintyPlanningState& current_child
-          = GetPlanningTreeImmutable()
-              .at(static_cast<size_t>(current_child_index)).GetValueImmutable();
+      const UncertaintyPlanningState& current_child =
+          GetPlanningTreeImmutable().GetNodeImmutable(current_child_index)
+              .GetValueImmutable();
       child_states.at(idx) = current_child;
     }
     return UncertaintyPlanningPolicy::ComputeTransitionGoalProbability(

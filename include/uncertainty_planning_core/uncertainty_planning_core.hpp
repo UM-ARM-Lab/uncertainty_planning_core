@@ -252,7 +252,7 @@ using UncertaintyPlanningTreeStateDeserializer
 template<typename Configuration, typename ConfigSerializer,
          typename ConfigAlloc>
 using UncertaintyPlanningTree
-    = common_robotics_utilities::simple_rrt_planner::PlanningTree<
+    = common_robotics_utilities::simple_rrt_planner::SimpleRRTPlannerTree<
         UncertaintyPlanningState<Configuration, ConfigSerializer, ConfigAlloc>>;
 
 // Typedefs and helpers for a Eigen::VectorXd configuration type.
